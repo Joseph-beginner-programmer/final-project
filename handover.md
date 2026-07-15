@@ -148,16 +148,19 @@ Cancelled reachable from Draft, PendingApproval, or Approved
 ```
 (See ⚠️ OPEN ISSUE above — actual code doesn't yet allow `PendingApproval → Rejected`.)
 
-**Actions identified so far (still just design intent — none of these Action classes are written yet; the enforcement that exists today lives directly on the models, e.g. `PurchaseOrder::transitionTo()`):**
-| Action | Transition | Notes |
-|---|---|---|
-| `CreatePurchaseOrderAction` | → Draft | Clerk starts PO, can be WIP |
-| `UpdatePurchaseOrderAction` | Draft → Draft | Only editable while Draft |
-| `SubmitPurchaseOrderForApprovalAction` | Draft → PendingApproval | Business validation: must have ≥1 line item, all quantities > 0 |
-| `ApprovePurchaseOrderAction` | PendingApproval → Approved | Authorization: Policy, not inline role check |
-| `RejectPurchaseOrderAction` | PendingApproval → Rejected | Blocked by the open enum issue above |
-| `ReceivePurchaseOrderAction` | Approved/PartiallyReceived → PartiallyReceived/FullyReceived | See full step sequence below |
-| `CreateStockMovementAction` | (cross-module, shared) | Centralized, row-locked stock update — NOT YET WRITTEN, only designed conceptually |
+**Actions — status as of 2026-07-15:**
+| Action | Transition | Notes | Status |
+|---|---|---|---|
+| `CreatePurchaseOrderAction` | → Draft | Creates PO shell + optional items in one `DB::transaction()`. See "Purchasing Actions Implemented" below for full design. | **Written** |
+| `UpdatePurchaseOrderAction` | Draft → Draft | Header fields only (supplier_id, order_date, expected_delivery_date). Supplier IS editable while Draft (deliberate decision — nothing depends on it yet). | **Written** |
+| `AddPurchaseOrderItemAction` | (Draft only) | Granular per-item add — chosen over full-replace item sync. | **Written** |
+| `UpdatePurchaseOrderItemAction` | (Draft only) | Edits quantity/unit_price only; `product_id` is immutable on a line item (swap product = remove + add instead). | **Written** |
+| `RemovePurchaseOrderItemAction` | (Draft only) | Deletes one line item. | **Written** |
+| `SubmitPurchaseOrderForApprovalAction` | Draft → PendingApproval | Business validation: must have ≥1 line item, all quantities > 0 | Not written |
+| `ApprovePurchaseOrderAction` | PendingApproval → Approved | Authorization: Policy, not inline role check | Not written |
+| `RejectPurchaseOrderAction` | PendingApproval → Rejected | Blocked by the open enum issue above | Not written |
+| `ReceivePurchaseOrderAction` | Approved/PartiallyReceived → PartiallyReceived/FullyReceived | See full step sequence below. Likely graduates to a **Service** (`ReceivePurchaseOrderService`) rather than staying a plain Action — it's the first workflow that actually composes multiple atomic units (calls `CreateStockMovementAction`, fires an event) instead of just building one aggregate. | Not written |
+| `CreateStockMovementAction` | (cross-module, shared) | Centralized, row-locked stock update — NOT YET WRITTEN, only designed conceptually | Not written |
 
 **`ReceivePurchaseOrderAction` full step sequence (agreed, not yet coded):**
 1. Authorization check (Policy) — is user allowed to receive POs
@@ -171,6 +174,33 @@ Cancelled reachable from Draft, PendingApproval, or Approved
 9. All of steps 2–8 in one `DB::transaction()`
 
 **Not yet answered:** exact PO status logic for "2 of 3 items fully received, 1 has zero receipts" (should be `partially_received`) — conceptually agreed, not yet coded into the recalculation logic.
+
+## Purchasing Actions Implemented (Session 3, 2026-07-14/15)
+
+**`app/Actions/Purchasing/CreatePurchaseOrderAction.php`** — takes `App\DTO\Purchasing\CreatePurchaseOrderData` (note: folder is `DTO`, singular — renamed from an initial `DTOs`). Crosses the project's own "5+ related fields → use a DTO" threshold (supplierId, orderDate, expectedDeliveryDate, createdBy, items[]). Steps, all inside one `DB::transaction()`:
+1. Insert the PO row with fillable fields + a temporary placeholder `po_number` (a UUID) — needed because `po_number` is guarded, unique, and NOT NULL, but its real value depends on the row's own id, which doesn't exist until after the first insert.
+2. Re-save with the real `po_number`, format `PO-{year}-{zero-padded id}` (e.g. `PO-2026-000123`) — decided over a per-year-reset counter to avoid needing a separate counter table.
+3. Items are **optional at creation** (`$data->items = []` default) — matches the existing rule that "≥1 item, qty > 0" is enforced later at `SubmitPurchaseOrderForApprovalAction`, not at Create. Supports both "fill the whole form at once" and "start blank, add items later" flows.
+4. Each item is validated for `$product->type->isPurchasable()` (raw_material only) — throws `NonPurchasableProductException` (new, mirrors `InvalidStatusTransitionException`'s style) if violated.
+5. `$po->recalculateTotal()` at the end.
+- Authorization is deliberately **not** inside the Action — assumes the caller already checked `Gate::authorize('create', PurchaseOrder::class)`. Only `Gate::define('purchasing.create', ...)` has been added so far (`AppServiceProvider::boot()`): Purchasing role or Manager, **not** SystemAdmin (SystemAdmin treated as technical/config-only, not a business actor).
+
+**⚠️ Discovered gap, not yet resolved:** `app/Policies/PurchaseOrderPolicy.php` already exists (pre-dates this session, wasn't in earlier handover drafts) and calls `$user->can('purchasing.view')`, `'purchasing.approve'`, `'warehouse.receive'`, `'purchasing.cancel'`, `'purchasing.close')` — **none of these Gates are registered** except `purchasing.create`. Until they are, every one of those Policy methods denies everyone, silently (no error — `Gate::allows()` just returns `false` for an unregistered ability). Needs the same `Gate::define()` treatment as `purchasing.create` before Approve/Reject/Receive/Cancel/Close Actions can be authorized by anyone.
+
+**`UpdatePurchaseOrderAction`** — header fields only (supplierId, orderDate, expectedDeliveryDate); only 3 fields, stays plain params per the DTO threshold rule (no DTO). Business validation: `$po->ensureIsEditable()` (new model helper, throws `PurchaseOrderNotEditableException` if status isn't Draft). Supplier IS editable while Draft — decided deliberately, nothing depends on supplier before approval/receipts exist.
+
+**Item editing is granular, not full-replace** (deliberate choice over resyncing a whole items array):
+- **`AddPurchaseOrderItemAction`** — same purchasable-product check as Create.
+- **`UpdatePurchaseOrderItemAction`** — quantity/unit_price only; `product_id` is immutable on an existing line (swap product = remove + add).
+- **`RemovePurchaseOrderItemAction`** — deletes the row, recalculates total. No extra "must have zero receipts" guard needed — `ensureIsEditable()` already guarantees status is Draft, and receipts can only exist once status is Approved/PartiallyReceived, so `quantity_received` is guaranteed 0 by the state machine itself.
+
+All three item Actions + `UpdatePurchaseOrderAction` call **`PurchaseOrder::ensureIsEditable()`** (new model helper) instead of repeating the same `if ($this->status !== Draft) throw ...` four times — centralizes the "must still be Draft" check in one place, mirrors the existing `isFullyReceived()`/`isBelowReorderPoint()`-style small model helpers.
+
+**Recurring gotcha reinforced across all of these:** guarded fields (`status`, `total_amount`, `subtotal`, `po_number`) can never go through `update([...])`/mass assignment, even from the model's own methods — guarding blocks *mass assignment specifically*, not direct writes. Every Action sets them via `$model->field = $value; $model->save();` instead. (`PurchaseOrder::transitionTo()` and `recalculateTotal()` were also fixed to this pattern earlier in this session, after discovering the mass-assignment bug live.)
+
+**Tooling fix (unrelated to business logic, but blocking real work):** `phpstan.neon` now has `parameters.parseModelCastsMethod: true`. Root cause of a whole session's worth of confusing phpstan errors (enum comparisons, decimal fields typed as `float` instead of `string`, `->format()` on what should be a `Carbon` instance): Larastan supports the project's method-style `casts()` (vs. the classic `$casts` property) but only if this flag is explicitly turned on — it defaults to `false` and was never set. One-line fix, no model changes needed, fixes every model project-wide.
+
+**Still open / in progress:** relation methods across all 6 Purchasing models (`Product`, `Supplier`, `PurchaseOrder`, `PurchaseOrderItem`, `PurchaseOrderReceipt`) lack PHPDoc generics (`@return BelongsTo<X, $this>` etc.) — attempted once this session but got reverted before landing. Separately, the IDE (PhpStorm/Intelephense) reports property access like `$po->id` as going through `Model::__get(): mixed`, because these models — unlike `User.php` — have no `@property` docblocks. User has started hand-writing these (`PurchaseOrder.php` now has `@property int $id`, more likely to follow) rather than installing `barryvdh/laravel-ide-helper` to auto-generate them. Neither of these is blocking runtime or the currently-passing parts of phpstan — cosmetic/IDE-accuracy only, unless it starts producing real cascading errors like the relation-generics gap already did once (see `RemovePurchaseOrderItemAction`/`UpdatePurchaseOrderItemAction`, which needed `PurchaseOrderItem::purchaseOrder()` to have `@return BelongsTo<PurchaseOrder, $this>` before phpstan would recognize `$item->purchaseOrder->ensureIsEditable()`).
 
 ## Code Implemented So Far (Auth / Role-based Dashboard Routing)
 
@@ -358,6 +388,11 @@ Simple placeholder showing `{{ auth()->user()->role->label() }} Dashboard — Co
 4. **`unsignedDecimal()` doesn't exist in Laravel 13** — along with `unsignedFloat()`/`unsignedDouble()`, this was removed from `Illuminate\Database\Schema\Blueprint`. Only the integer variants (`unsignedInteger`, `unsignedBigInteger`, etc.) still exist as dedicated methods. This silently stopped migration batch 2 after `purchase_orders` — `purchase_order_items` and `purchase_order_receipts` sat `Pending` in `migrate:status`. Fixed by replacing every `$table->unsignedDecimal('col', 12, 2)` with `$table->decimal('col', 12, 2)->unsigned()` (the fluent modifier still works for `decimal`/`float`/`double`). Both migrations now ran successfully.
 5. Also did a redesign pass on `resources/views/pages/auth/login.blade.php` (visual only — split-panel layout, brand panel depth/texture, icon-embedded inputs, password show/hide toggle via Alpine, subtle entrance motion). A follow-up attempt to wire in the existing-but-unused `<x-passkey-verify>` component (real WebAuthn passkey login, routes already registered by the Laravel Passkeys package) was tried and then reverted at the user's request — the login page currently does **not** offer passkey sign-in, even though the component/routes exist and work.
 
+**Session 3 (2026-07-14/15):**
+6. **Guarded fields were being silently dropped via mass assignment from inside the model's own methods** — `PurchaseOrder::transitionTo()` and `recalculateTotal()` originally did `$this->update(['status' => $target])` / `update(['total_amount' => ...])`, but `status` and `total_amount` are both in `#[Guarded([...])]`. Guarding blocks mass assignment (`fill()`/`update()`/constructor array) regardless of *which* code calls it — it doesn't distinguish "internal model code" from "an attacker-controlled request array." Because `Model::preventSilentlyDiscardingAttributes()` is never called anywhere in this app, this failed **silently** (no exception, field just didn't change) rather than throwing. Fixed by setting the attribute directly (`$this->status = $target; $this->save();`) — direct property assignment goes through `setAttribute()`, not the guarded mass-assignment path. Same pattern now used throughout the new Purchasing Actions for every guarded field (`po_number`, `subtotal`).
+7. **Root cause of a whole session's worth of confusing phpstan errors found**: Larastan *does* support this project's method-style `casts()` (instead of the classic `$casts` property) — via a config flag, `parseModelCastsMethod`, that defaults to `false` and was never set in `phpstan.neon`. Every earlier "Cannot call method X() on string" / "expects 0 arguments" style error this session was this one missing config line, not a real bug and not a reason to change the models' cast style. Fixed with one line: `parameters.parseModelCastsMethod: true`.
+8. **Project root had 5 empty/junk files** (`'Test`, `'purchasing'`, `'purchasing@test.com'`, `bcrypt('password')`, `npm`) — accidental artifacts from a shell-quoting mishap (Windows/PowerShell doesn't treat single quotes the way bash does), unrelated to the app. Deleted. Also: git repo was (re)initialized in this session (one `initial commit` now exists), `.gitignore` got `/.claude` added (tool-local config, same treatment as `.idea`/`.vscode`), and `.env`/`node_modules`/`vendor`/`database/database.sqlite` were confirmed already correctly ignored.
+
 ## Concepts Already Taught (don't re-explain unless asked)
 - Input validation vs. business validation vs. authorization (three distinct layers)
 - Services vs. Actions (workflow orchestration vs. atomic operation)
@@ -375,22 +410,27 @@ Simple placeholder showing `{{ auth()->user()->role->label() }} Dashboard — Co
 - FK delete behavior chosen deliberately per relationship (`cascadeOnDelete` vs `restrictOnDelete` vs `nullOnDelete`) rather than one default across the schema
 - Laravel 13 removed `unsignedDecimal`/`unsignedFloat`/`unsignedDouble` from the migration Blueprint — use `->decimal(...)->unsigned()` instead
 - `php artisan migrate --path=...` scopes which files are considered, but only runs ones not already recorded in the `migrations` table — need `migrate:rollback --path=...` first to re-run an already-applied file
+- Guarding (`#[Guarded]`) blocks *mass assignment* specifically (`fill()`/`update()`/constructor array), not direct property writes — a model's own internal methods can and should bypass it via `$this->field = $value; $this->save();` when the field is guarded precisely to keep external callers from setting it directly
+- DTOs are only worth it past ~5 related fields (project's own threshold) — `UpdatePurchaseOrderAction` (3 fields) and the item Actions (2-3 fields) deliberately stayed plain method params instead of getting DTO classes
+- Action vs. Service litmus test: if the method's job needs "...and then it also..." to describe it — i.e. it composes other Actions or crosses module boundaries — it's a Service; if it's producing one aggregate in one sentence, it's an Action
+- Larastan's method-style `casts()` support needs `parseModelCastsMethod: true` in `phpstan.neon` — off by default
 
 ## Immediate Next Steps (pick up here in new session)
-1. **Decide the `Rejected` transition issue** — `PurchaseOrderStatus::canTransitionTo()` currently has no path into `Rejected` from `PendingApproval`, contradicting the documented design and the `RejectPurchaseOrderAction` row in the Actions table. Fix the enum or revise the design.
-2. **Decide the soft-deletes question** — `products`/`suppliers` migrations don't have `softDeletes()` despite earlier draft schema assuming it. Implement, or drop from the plan.
-3. **Finish testing the role-based dashboard/auth flow** (carried over, not yet confirmed done):
+1. **Register the remaining Gate abilities `PurchaseOrderPolicy` already depends on** — `purchasing.view`, `purchasing.approve`, `purchasing.cancel`, `purchasing.close`, `warehouse.receive` are all referenced but undefined (only `purchasing.create` exists so far). Every Policy method using them currently denies everyone silently.
+2. **Write `SubmitPurchaseOrderForApprovalAction` next** (agreed as the next Action to build) — business validation: must have ≥1 line item, all quantities > 0.
+3. **Decide the `Rejected` transition issue** — `PurchaseOrderStatus::canTransitionTo()` currently has no path into `Rejected` from `PendingApproval`, contradicting the documented design and the `RejectPurchaseOrderAction` row in the Actions table. Fix the enum or revise the design.
+4. **Decide the soft-deletes question** — `products`/`suppliers` migrations don't have `softDeletes()` despite earlier draft schema assuming it. Implement, or drop from the plan.
+5. **Finish testing the role-based dashboard/auth flow** (carried over, not yet confirmed done):
    - Login as `manager` → verify can visit ANY dashboard (Gate override works)
    - Login as `purchasing` → verify visiting `/warehouse/dashboard` returns 403
-4. Design `stock_movements` table (cross-module ledger) — agreed necessary, not yet drafted.
-5. Write `CreateStockMovementAction` (centralized, transaction-wrapped, `lockForUpdate()`).
-6. Finalize the PO status recalculation logic for multi-item receiving (`ReceivePurchaseOrderAction` step 6).
-7. Revisit Purchase Order **cancellation** rules — e.g. can a partially-received PO be cancelled? What happens to already-received stock?
-8. Decide over-receipt policy (currently leaning: block receiving more than outstanding quantity — not finalized).
-9. Build out real `Policies/` for Purchase Order actions (approve, reject, receive) — currently only the dashboard Gate exists; PO-specific Policies not yet written.
-10. Continue building out the Purchasing `Actions/` classes in code — the business rules and transition graph exist on the models/enum, but none of `CreatePurchaseOrderAction`, `SubmitPurchaseOrderForApprovalAction`, etc. are written yet as actual classes.
+6. Design `stock_movements` table (cross-module ledger) — agreed necessary, not yet drafted.
+7. Write `CreateStockMovementAction` (centralized, transaction-wrapped, `lockForUpdate()`).
+8. Finalize the PO status recalculation logic for multi-item receiving (`ReceivePurchaseOrderAction` step 6).
+9. Revisit Purchase Order **cancellation** rules — e.g. can a partially-received PO be cancelled? What happens to already-received stock?
+10. Decide over-receipt policy (currently leaning: block receiving more than outstanding quantity — not finalized).
 11. Decide whether the missing `unique(['purchase_order_id', 'product_id'])` constraint on `purchase_order_items` is intentional (same product as two separate line items) or should be added.
 12. Login page: decide if `<x-passkey-verify>` should be (re-)added — it's fully functional (real routes + JS) but currently unused anywhere in the app.
+13. **Unresolved from this session:** whether to (a) re-sweep PHPDoc relation generics (`@return BelongsTo<X, $this>` etc.) across all 6 Purchasing models — attempted once, got reverted before landing — and (b) how to fix the IDE's "`Property $id accessed via magic method Model::__get()`" nag: hand-write `@property` docblocks (started on `PurchaseOrder.php`, only `$id` so far) vs. install `barryvdh/laravel-ide-helper` to auto-generate them. Neither is blocking; both were mid-discussion when this handover was written.
 
 ---
 *Paste this file at the start of a new session to resume with full context.*

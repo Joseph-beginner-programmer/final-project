@@ -36,6 +36,21 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('purchasing.create', function ($user) {
             return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
         });
+        Gate::define('purchasing.view', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+        });
+        Gate::define('purchasing.approve', function ($user) {
+            return in_array($user->role, [UserRole::Manager], true);
+        });
+        Gate::define('purchasing.cancel', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+        });
+        Gate::define('purchasing.close', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+        });
+        Gate::define('warehouse.receive', function ($user) {
+            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
+        });
 
         Blade::anonymousComponentPath(resource_path('views/layouts'), 'layouts');
     }

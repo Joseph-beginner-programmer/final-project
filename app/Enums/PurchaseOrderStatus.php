@@ -11,7 +11,7 @@ enum PurchaseOrderStatus: string
     case PartiallyReceived = 'partially_received';
     case FullyReceived = 'fully_received';
     case Cancelled = 'cancelled';
-    case Closed = 'closed';
+    // case Closed = 'closed';
 
     public function canTransitionTo(self $target): bool
     {
@@ -20,14 +20,14 @@ enum PurchaseOrderStatus: string
             self::PendingApproval => in_array($target, [self::Approved, self::Draft, self::Cancelled], true),
             self::Approved => in_array($target, [self::PartiallyReceived, self::FullyReceived, self::Cancelled], true),
             self::Rejected => $target === self::Draft,
-            self::PartiallyReceived => in_array($target, [self::FullyReceived, self::Closed], true),
-            self::FullyReceived, self::Cancelled, self::Closed => false, 
+            self::PartiallyReceived => in_array($target, [self::FullyReceived], true),
+            self::FullyReceived, self::Cancelled => false, 
         };
     }
 
     public function isTerminal(): bool
     {
-        return in_array($this, [self::FullyReceived, self::Cancelled, self::Closed], true);
+        return in_array($this, [self::FullyReceived, self::Cancelled], true);
     }
 
     public function label(): string
@@ -40,7 +40,6 @@ enum PurchaseOrderStatus: string
             self::PartiallyReceived => 'Partially Received',
             self::FullyReceived => 'Fully Received',
             self::Cancelled => 'Cancelled',
-            self::Closed => 'Closed',
         };
     }
 }

@@ -4,12 +4,19 @@ namespace App\Models;
 
 use App\Enums\PurchaseOrderStatus;
 use App\Exceptions\InvalidStatusTransitionException;
+use App\Exceptions\PurchaseOrderNotEditableException;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Carbon;
 
+/**
+ * @property int $id
+ * @property int $supplier_id
+ * @property Carbon|null $order_date
+ */
 #[Guarded(['id', 'po_number', 'status', 'approved_by', 'approved_at', 'total_amount'])]
 class PurchaseOrder extends Model
 {
@@ -64,5 +71,12 @@ class PurchaseOrder extends Model
     {
         $this->total_amount = $this->items()->sum('subtotal');
         $this->save();
+    }
+
+    public function ensureIsEditable(): void
+    {
+        if ($this->status !== PurchaseOrderStatus::Draft) {
+            throw new PurchaseOrderNotEditableException($this);
+        }
     }
 }

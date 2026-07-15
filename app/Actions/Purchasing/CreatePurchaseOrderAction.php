@@ -21,11 +21,7 @@ class CreatePurchaseOrderAction
                 'order_date' => $data->orderDate,
                 'expected_delivery_date' => $data->expectedDeliveryDate,
             ]);
-
-            // po_number is guarded and derived from the row's own id, so it
-            // can't be known before the first insert. Save once with a
-            // placeholder to satisfy the NOT NULL + unique constraint, then
-            // save again with the real value.
+            
             $po->po_number = (string) Str::uuid();
             $po->save();
 
