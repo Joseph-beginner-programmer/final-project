@@ -25,6 +25,13 @@
                             :current="request()->routeIs($role->dashboardRoute())" wire:navigate>
                             {{ __('Dashboard') }}
                         </flux:sidebar.item>
+
+                        @if ($role === UserRole::Purchasing)
+                            <flux:sidebar.item icon="document-plus" :href="route('purchasing.orders.create')"
+                                :current="request()->routeIs('purchasing.orders.create')" wire:navigate>
+                                {{ __('Create Purchase Order') }}
+                            </flux:sidebar.item>
+                        @endif
                     </flux:sidebar.group>
                 @else
                     <flux:sidebar.group :heading="$role->label()" >
