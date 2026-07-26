@@ -17,6 +17,6 @@ class PurchaseOrderNotEditableException extends RuntimeException
 
     public function userMessage(): string
     {
-        return 'This purchase order can no longer be edited because it is no longer a draft.';
+        return __('This purchase order can no longer be edited because it is no longer a draft.');
     }
 }

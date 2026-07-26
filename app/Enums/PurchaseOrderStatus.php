@@ -17,7 +17,7 @@ enum PurchaseOrderStatus: string
     {
         return match ($this) {
             self::Draft => in_array($target, [self::PendingApproval, self::Cancelled], true),
-            self::PendingApproval => in_array($target, [self::Approved, self::Draft, self::Cancelled], true),
+            self::PendingApproval => in_array($target, [self::Approved, self::Draft, self::Rejected, self::Cancelled], true),
             self::Approved => in_array($target, [self::PartiallyReceived, self::FullyReceived, self::Cancelled], true),
             self::Rejected => $target === self::Draft,
             self::PartiallyReceived => in_array($target, [self::FullyReceived], true),

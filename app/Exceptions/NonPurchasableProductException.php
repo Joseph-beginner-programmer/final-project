@@ -17,6 +17,8 @@ class NonPurchasableProductException extends RuntimeException
 
     public function userMessage(): string
     {
-        return "\"{$this->product->product_name}\" is not a raw material and cannot be added to a purchase order.";
+        return __('":name" is not a raw material and cannot be added to a purchase order.', [
+            'name' => $this->product->product_name,
+        ]);
     }
 }

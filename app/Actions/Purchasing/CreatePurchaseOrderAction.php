@@ -31,7 +31,7 @@ class CreatePurchaseOrderAction
             foreach ($data->items as $item) {
                 $this->addItem($po, $item);
             }
-
+ 
             $po->recalculateTotal();
 
             return $po->load('items');
@@ -43,11 +43,10 @@ class CreatePurchaseOrderAction
      */
     private function addItem(PurchaseOrder $po, array $item): void
     {
-        $product = Product::findOrFail($item['product_id']);
-
+        $product = Product::findOrFail($item['product_id']); 
         if (!$product->type->isPurchasable()) {
             throw new NonPurchasableProductException($product);
-        }
+        } 
 
         $poItem = new PurchaseOrderItem([
             'purchase_order_id' => $po->id,

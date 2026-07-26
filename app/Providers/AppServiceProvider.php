@@ -29,8 +29,8 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::define('view-dashboard', function ($user, UserRole $dashboardRole) {
-        return $user->role === $dashboardRole
-            || in_array($user->role, [UserRole::Manager, UserRole::SystemAdmin], true);
+            return $user->role === $dashboardRole
+                || in_array($user->role, [UserRole::Manager, UserRole::SystemAdmin], true);
         });
 
         Gate::define('purchasing.create', function ($user) {

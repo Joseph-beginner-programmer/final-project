@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 
-Route::view('/', 'welcome')->name('home');
+Route::view('/', 'welcome')->name('home'); 
 
 Route::middleware(['auth', 'verified'])->group(function () {
     Route::view('dashboard', 'dashboard')->name('dashboard');
@@ -36,6 +36,11 @@ Route::middleware(['auth'])->group(function () {
     Route::view('/executive/dashboard', 'dashboards.placeholder')
         ->name('executive.dashboard')
         ->middleware('dashboard.access:manager');
+});
+
+Route::middleware(['auth'])->group(function () {
+    Route::livewire('/purchasing/orders/create', 'pages::purchasing.orders.create')
+        ->name('purchasing.orders.create');
 });
 
 require __DIR__.'/settings.php';

@@ -37,4 +37,16 @@ enum UserRole: string
             self::Manager => 'executive.dashboard',
         };
     }
+
+    public static function operational(): array
+    {
+        return [
+            self::Purchasing,
+            self::Sales,
+            self::Accounting,
+            self::Production,
+            self::Warehouse
+        ];
+    }
+
 }

@@ -45,7 +45,7 @@
                 <div class="w-10 h-0.5 mt-3 rounded-full" style="background: linear-gradient(to right, transparent, var(--color-brass), transparent);"></div>
 
                 <p class="mt-5 text-sm text-white/70 max-w-xs leading-relaxed">
-                    Tracking every product from raw materials to finished goods
+                    {{ __('Tracking every product from raw materials to finished goods') }}
                 </p>
 
                 <div class="mt-8 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-3 py-1 backdrop-blur-sm">
@@ -53,12 +53,12 @@
                         <path d="M10 2.5 4.5 4.8v3.9c0 3.4 2.3 6.5 5.5 7.3 3.2-.8 5.5-3.9 5.5-7.3V4.8L10 2.5Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
                         <path d="M7.5 10 9.2 11.7 12.5 8.3" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
                     </svg>
-                    <span class="text-[10px] tracking-widest uppercase text-white/50">Secure System</span>
+                    <span class="text-[10px] tracking-widest uppercase text-white/50">{{ __('Secure System') }}</span>
                 </div>
             </div>
 
             <p class="absolute bottom-8 left-8 text-[10px] tracking-widest uppercase text-white/40">
-                PT SAI &copy; {{ date('Y') }} &middot; Internal Use Only
+                PT SAI &copy; {{ date('Y') }} &middot; {{ __('Internal Use Only') }}
             </p>
         </div>
 
@@ -77,8 +77,8 @@
             <div class="w-full max-w-sm mx-auto">
 
                 <div class="mb-7 motion-safe:animate-fade-slide-up">
-                    <h2 class="font-display text-lg font-bold uppercase tracking-wide text-zinc-900">System Login</h2>
-                    <p class="text-sm text-zinc-500 mt-1">Sign in to access the management information system</p>
+                    <h2 class="font-display text-lg font-bold uppercase tracking-wide text-zinc-900">{{ __('System Login') }}</h2>
+                    <p class="text-sm text-zinc-500 mt-1">{{ __('Sign in to access the management information system') }}</p>
                 </div>
 
                 @if (session('status'))
@@ -96,7 +96,7 @@
 
                     <div>
                         <label for="email" class="block text-[11px] font-medium tracking-widest uppercase text-zinc-500 mb-1.5">
-                            Email
+                            {{ __('Email') }}
                         </label>
                         <div class="relative">
                             <svg viewBox="0 0 20 20" class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -119,11 +119,11 @@
                     <div x-data="{ show: false }">
                         <div class="flex items-center justify-between mb-1.5">
                             <label for="password" class="block text-[11px] font-medium tracking-widest uppercase text-zinc-500">
-                                Password
+                                {{ __('Password') }}
                             </label>
                             @if (Route::has('password.request'))
                                 <a href="{{ route('password.request') }}" class="text-xs text-zinc-500 hover:text-accent transition-colors">
-                                    Forgot password?
+                                    {{ __('Forgot password?') }}
                                 </a>
                             @endif
                         </div>
@@ -144,7 +144,7 @@
                                 type="button"
                                 @click="show = !show"
                                 class="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-zinc-400 hover:text-zinc-600 transition-colors cursor-pointer"
-                                :aria-label="show ? 'Hide password' : 'Show password'"
+                                :aria-label="show ? '{{ __('Hide password') }}' : '{{ __('Show password') }}'"
                             >
                                 <svg x-show="!show" viewBox="0 0 20 20" class="w-4 h-4" fill="none" xmlns="http://www.w3.org/2000/svg">
                                     <path d="M1.5 10S4.5 4.5 10 4.5 18.5 10 18.5 10 15.5 15.5 10 15.5 1.5 10 1.5 10Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
@@ -164,7 +164,7 @@
                     <label class="flex items-center gap-2 cursor-pointer select-none">
                         <input type="checkbox" name="remember"
                                class="h-4 w-4 rounded bg-white border-zinc-300 text-accent focus:ring-accent focus:ring-offset-0 transition-colors" />
-                        <span class="text-sm text-zinc-600">Remember this device</span>
+                        <span class="text-sm text-zinc-600">{{ __('Remember this device') }}</span>
                     </label>
 
                     <button type="submit"
@@ -172,7 +172,7 @@
                                    text-white text-sm font-medium uppercase tracking-wide py-2.5 shadow-sm shadow-accent/20
                                    transition-all duration-150 hover:shadow-md hover:shadow-accent/25 hover:-translate-y-0.5 active:translate-y-0
                                    focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-white cursor-pointer">
-                        Sign in
+                        {{ __('Sign in') }}
                         <svg viewBox="0 0 20 20" class="w-4 h-4 transition-transform duration-150 group-hover:translate-x-0.5" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M4 10h12M12 6l4 4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
                         </svg>
@@ -180,7 +180,7 @@
                 </form>
 
                 <p class="mt-5 text-center text-xs text-zinc-400 motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
-                    Need help? Contact your system administrator.
+                    {{ __('Need help? Contact your system administrator.') }}
                 </p>
             </div>
         </div>
