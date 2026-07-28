@@ -25,6 +25,12 @@ class PurchaseOrderPolicy
             && $po->status === PurchaseOrderStatus::Draft;
     }
 
+    public function update(User $user, PurchaseOrder $po): bool
+    {
+        return $user->can('purchasing.create')
+            && $po->status === PurchaseOrderStatus::Draft;
+    }
+
     public function approve(User $user, PurchaseOrder $po): bool
     {
         return $user->can('purchasing.approve')

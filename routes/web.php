@@ -41,6 +41,12 @@ Route::middleware(['auth'])->group(function () {
 Route::middleware(['auth'])->group(function () {
     Route::livewire('/purchasing/orders/create', 'pages::purchasing.orders.create')
         ->name('purchasing.orders.create');
+
+    Route::livewire('/purchasing/orders', 'pages::purchasing.orders.list')
+        ->name('purchasing.orders.list');
+
+    Route::livewire('/purchasing/orders/{purchaseOrder}', 'pages::purchasing.orders.show')
+        ->name('purchasing.orders.show');
 });
 
 require __DIR__.'/settings.php';

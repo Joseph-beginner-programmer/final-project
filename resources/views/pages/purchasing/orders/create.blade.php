@@ -163,7 +163,7 @@ new #[Title('Create Purchase Order')] class extends Component {
 
         Flux::toast(variant: 'success', text: __('Purchase order created.'));
 
-        $this->redirect(route('purchasing.dashboard'), navigate: true);
+        $this->redirect(route('purchasing.orders.list'), navigate: true);
     }
 }; ?>
 
@@ -320,6 +320,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                                         <?php $product = $this->availableProducts->firstWhere('id', (int) ($item['product_id'] ?? 0)); ?>
                                         <tr wire:key="item-row-{{ $index }}" class="border-b border-zinc-100 dark:border-white/5 last:border-0 hover:bg-zinc-50/70 dark:hover:bg-white/3 transition-colors align-top">
                                             <td class="py-2 px-3 min-w-48">
+                                                {{-- TODO --}}
                                                 <flux:select size="sm" wire:model.live="items.{{ $index }}.product_id" :placeholder="__('Select product...')">
                                                     @foreach ($this->availableProducts as $option)
                                                         <option value="{{ $option->id }}">{{ $option->product_code }} — {{ $option->product_name }}</option>
@@ -349,6 +350,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                                                 <flux:error class="mt-1">{{ $message }}</flux:error> 
                                                 @enderror
                                             </td>
+                                            {{-- TODO --}}
                                             <td class="py-2 px-3 w-60">
                                                 <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-mono tabular-nums" wire:model.live="items.{{ $index }}.unit_price" :loading="false" />
                                                 @error("items.$index.unit_price") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror

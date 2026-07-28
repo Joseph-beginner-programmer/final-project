@@ -31,6 +31,10 @@
                                 :current="request()->routeIs('purchasing.orders.create')" wire:navigate>
                                 {{ __('Create Purchase Order') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="queue-list" :href="route('purchasing.orders.list')"
+                                :current="request()->routeIs('purchasing.orders.list')" wire:navigate>
+                                {{ __('Purchase Order List') }}
+                            </flux:sidebar.item>
                         @endif
                     </flux:sidebar.group>
                 @else
