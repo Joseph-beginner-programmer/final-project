@@ -45,6 +45,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('purchasing.cancel', function ($user) {
             return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
         });
+        Gate::define('purchasing.open', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+        });
         Gate::define('purchasing.close', function ($user) {
             return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
         });

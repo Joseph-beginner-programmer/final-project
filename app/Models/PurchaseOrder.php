@@ -17,7 +17,7 @@ use Illuminate\Support\Carbon;
  * @property int $supplier_id
  * @property Carbon|null $order_date
  */
-#[Guarded(['id', 'po_number', 'status', 'approved_by', 'approved_at', 'total_amount'])]
+#[Guarded(['id', 'po_number', 'status', 'approved_by', 'approved_at', 'total_amount', 'rejected_by', 'rejected_at', 'rejection_reason'])]
 class PurchaseOrder extends Model
 {
     use HasFactory;
@@ -29,6 +29,7 @@ class PurchaseOrder extends Model
             'order_date' => 'date',
             'expected_delivery_date' => 'date',
             'approved_at' => 'datetime',
+            'rejected_at' => 'datetime',
             'total_amount' => 'decimal:2',
         ];
     }
@@ -46,6 +47,11 @@ class PurchaseOrder extends Model
     public function approvedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'approved_by');
+    }
+
+    public function rejectedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'rejected_by');
     }
 
     public function items(): HasMany

@@ -4,6 +4,9 @@ use App\Actions\Purchasing\AddPurchaseOrderItemAction;
 use App\Actions\Purchasing\RemovePurchaseOrderItemAction;
 use App\Actions\Purchasing\SubmitPurchaseOrderForApprovalAction;
 use App\Actions\Purchasing\UpdatePurchaseOrderItemAction;
+use App\Actions\Purchasing\ApprovePurchaseOrderAction;
+use App\Actions\Purchasing\RejectPurchaseOrderAction;
+use App\Actions\Purchasing\ReopenPurchaseOrderAction;
 use App\Enums\PurchaseOrderStatus;
 use App\Exceptions\NonPurchasableProductException;
 use App\Exceptions\PurchaseOrderHaveNoItemException;
@@ -16,6 +19,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
+use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
 new #[Title('Purchase Order Details')] class extends Component {
@@ -28,6 +32,8 @@ new #[Title('Purchase Order Details')] class extends Component {
         'quantity_ordered' => '',
         'unit_price' => '',
     ];
+
+    public string $rejectionReason = '';
 
     public function mount(PurchaseOrder $purchaseOrder): void
     {
@@ -163,6 +169,42 @@ new #[Title('Purchase Order Details')] class extends Component {
         $this->redirect(route('purchasing.orders.list'), navigate: true);
     }
 
+    public function approve(): void
+    {
+        Gate::authorize('approve', $this->purchaseOrder);
+        app(ApprovePurchaseOrderAction::class)->handle($this->purchaseOrder, Auth::id());
+        $this->purchaseOrder->refresh();
+
+        Flux::toast(variant: 'success', text: __('Purchase order approved.'));
+    }
+    public function reject(): void
+    {
+        Gate::authorize('reject', $this->purchaseOrder);
+
+        $this->validate([
+            'rejectionReason' => ['required', 'string', 'max:1000'],
+        ]);
+
+        app(RejectPurchaseOrderAction::class)->handle($this->purchaseOrder, Auth::id(), $this->rejectionReason);
+
+        $this->purchaseOrder->refresh();
+        $this->rejectionReason = '';
+        $this->modal('reject-po')->close();
+
+        Flux::toast(variant: 'success', text: __('Purchase order rejected.'));
+    }
+
+    public function reopen(): void
+    {
+        Gate::authorize('open', $this->purchaseOrder);
+
+        app(ReopenPurchaseOrderAction::class)->handle($this->purchaseOrder);
+
+        $this->purchaseOrder->refresh();
+
+        Flux::toast(variant: 'success', text: __('Purchase order moved back to Draft.'));
+    }
+
     public function formatRupiah(string $amount): string
     {
         return 'Rp '.number_format((float) $amount, 0, ',', '.');
@@ -203,12 +245,63 @@ new #[Title('Purchase Order Details')] class extends Component {
             <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">{{ $purchaseOrder->supplier->supplier_name }}</p>
         </div>
 
-        @can('submit', $purchaseOrder)
-            <flux:button variant="primary" icon="paper-airplane" wire:click="submit" wire:loading.attr="disabled" wire:target="submit">
-                {{ __('Submit for Approval') }}
-            </flux:button>
-        @endcan
+        <div class="flex items-center gap-2">
+            @can('reject', $purchaseOrder)
+                <flux:modal.trigger name="reject-po">
+                    <flux:button
+                        variant="ghost"
+                        icon="x-mark"
+                        class="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                    >
+                        {{ __('Reject') }}
+                    </flux:button>
+                </flux:modal.trigger>
+            @endcan
+
+            @can('open', $purchaseOrder)
+                <flux:button variant="filled" icon="arrow-uturn-left" wire:click="reopen" wire:loading.attr="disabled" wire:target="reopen">
+                    {{ __('Move to Draft') }}
+                </flux:button>
+            @endcan
+
+            @can('approve', $purchaseOrder)
+                <flux:button variant="primary" icon="check" wire:click="approve" wire:loading.attr="disabled" wire:target="approve">
+                    {{ __('Approve') }}
+                </flux:button>
+            @endcan
+
+            @can('submit', $purchaseOrder)
+                <flux:button variant="primary" icon="paper-airplane" wire:click="submit" wire:loading.attr="disabled" wire:target="submit">
+                    {{ __('Submit for Approval') }}
+                </flux:button>
+            @endcan
+        </div>
     </div>
+
+    @can('reject', $purchaseOrder)
+        <flux:modal name="reject-po" :show="$errors->has('rejectionReason')" focusable class="max-w-lg">
+            <form wire:submit="reject" class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Reject this purchase order?') }}</flux:heading>
+                    <flux:subheading>
+                        {{ __('It will need to be resubmitted from Draft before it can be approved again. Please explain why it\'s being rejected.') }}
+                    </flux:subheading>
+                </div>
+
+                <flux:textarea wire:model="rejectionReason" :label="__('Rejection reason')" rows="4" />
+
+                <div class="flex justify-end gap-2">
+                    <flux:modal.close>
+                        <flux:button variant="filled">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button variant="danger" type="submit" wire:loading.attr="disabled" wire:target="reject">
+                        {{ __('Reject Purchase Order') }}
+                    </flux:button>
+                </div>
+            </form>
+        </flux:modal>
+    @endcan
 
     @error('items') <flux:error class="mt-3">{{ $message }}</flux:error> @enderror
     @error('newItem') <flux:error class="mt-3">{{ $message }}</flux:error> @enderror
@@ -296,6 +389,14 @@ new #[Title('Purchase Order Details')] class extends Component {
                             <td class="py-2.5 px-3">
                                 <p class="font-mono text-xs text-accent">{{ $item->product->product_code }}</p>
                                 <p class="text-zinc-700 dark:text-zinc-300">{{ $item->product->product_name }}</p>
+                                @if ($item->product->isBelowReorderPoint())
+                                    <span class="inline-flex items-center mt-1 gap-1 rounded-full border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-1.5 py-0.5 font-mono tabular-nums text-[11px] text-red-700 dark:text-red-400">
+                                        <flux:icon.exclamation-triangle variant="micro" class="size-3" />
+                                        {{ __('Low') }} {{ $item->product->current_stock }}
+                                    </span>
+                                @else
+                                    <span class="mt-1 block font-mono tabular-nums text-xs text-zinc-500 dark:text-zinc-400">{{ __('Stock') }} {{ $item->product->current_stock }}</span>
+                                @endif
                             </td>
                             <td class="py-2.5 px-3 w-32">
                                 @can('update', $purchaseOrder)
@@ -345,6 +446,23 @@ new #[Title('Purchase Order Details')] class extends Component {
                                         <option value="{{ $option->id }}">{{ $option->product_code }} — {{ $option->product_name }}</option>
                                     @endforeach
                                 </flux:select>
+                                @php $newItemProduct = $this->availableProducts->firstWhere('id', (int) ($newItem['product_id'] ?? 0)); @endphp
+                                @if ($newItemProduct)
+                                    <p class="mt-1 pl-0.5 flex items-center justify-between gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+                                        <span>
+                                            <span class="font-mono text-accent">{{ $newItemProduct->product_code }} {{ $newItemProduct->unit_of_measure }}</span>
+                                        </span>
+
+                                        @if ($newItemProduct->isBelowReorderPoint())
+                                            <span class="inline-flex items-center mt-1 gap-1 rounded-full border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-1.5 py-0.5 font-mono tabular-nums text-red-700 dark:text-red-400">
+                                                <flux:icon.exclamation-triangle variant="micro" class="size-3" />
+                                                {{ __('Low') }} {{ $newItemProduct->current_stock }}
+                                            </span>
+                                        @else
+                                            <span class="font-mono tabular-nums">{{ __('Stock') }} {{ $newItemProduct->current_stock }}</span>
+                                        @endif
+                                    </p>
+                                @endif
                                 @error('newItem.product_id') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
                             </td>
                             <td class="py-2.5 px-3 w-32 align-top">

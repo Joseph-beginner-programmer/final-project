@@ -64,6 +64,12 @@ class PurchaseOrderPolicy
             ], true);
     }
 
+    public function open(User $user, PurchaseOrder $po): bool 
+    {
+        return $user->can('purchasing.open')
+            && $po->status === PurchaseOrderStatus::Rejected;   
+    }
+
     public function close(User $user, PurchaseOrder $po): bool
     {
         return $user->can('purchasing.close')
