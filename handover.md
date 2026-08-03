@@ -11,7 +11,7 @@
 - **Coding mode**: keep it tight — code + brief rationale, skip deep explanations
 Default to teaching mode unless user says "coding mode."
 
-**Current focus (as of 2026-07-29, see Session 6 below for latest): Purchase Order List + View pages built; back on the Approve/Reject backend track.** Create PO is feature-complete and polished. List PO and View PO pages are both built and working. `ApprovePurchaseOrderAction` is written and reviewed-correct as of end of session; `RejectPurchaseOrderAction` and wiring an Approve button into View PO are the immediate next steps. For backend Actions, user writes the code themselves (assistant gives a guide/rundown only, no code, per established preference) — this session, the assistant reviewed the user's own draft of `ApprovePurchaseOrderAction` twice and found real bugs (class/filename mismatch, missing `save()`) before it was correct. For UI/design work, user has explicitly delegated implementation to the assistant — assistant writes the actual Blade/Livewire code, user reviews and course-corrects. **New nuance this session:** some "UI" work turned out to be genuine full-stack debugging (a dark-mode-on-every-reload bug traced to a duplicate Alpine.js instance, an `x-mask` money-formatting bug with three separate root causes) — assistant diagnosed these directly rather than treating them as pure Blade/CSS work, since the root causes lived in `app.js`/vendor JS internals, not styling.
+**Current focus (as of 2026-08-01/02, see Session 7 below for latest): `stock_movements` ledger scaffolding underway on branch `stock_movement`.** Table migrated, `StockMovement` model + `Direction`/`StockMovementType` enums written, morph relation wired to `PurchaseOrderReceipt`, `CreateStockMovementData` DTO written — but `CreateStockMovementAction::handle()` itself is still an **empty stub**, not yet implemented. This is handover item #5/#6 from the previous session's Immediate Next Steps, picked up ahead of `RejectPurchaseOrderAction`/wiring the Approve button (those are still pending, unchanged from Session 6). For backend Actions, user writes the code themselves (assistant gives a guide/rundown only, no code, per established preference). For UI/design work, user has explicitly delegated implementation to the assistant — assistant writes the actual Blade/Livewire code, user reviews and course-corrects.
 
 ---
 
@@ -122,7 +122,25 @@ Table purchase_order_receipts {
 }
 ```
 
-**NOT YET DESIGNED:** `stock_movements` (cross-module unified inventory ledger — agreed as necessary, schema not drafted yet).
+**✅ DESIGNED AND MIGRATED (Session 7, 2026-08-01):**
+
+```dbml
+Table stock_movements {
+  id bigint [pk]
+  product_id bigint [ref: > products.id, note: 'restrictOnDelete']
+  reference_id bigint [nullable, note: 'polymorphic — via nullableMorphs("reference")']
+  reference_type string [nullable, note: 'stores the morph MAP KEY (e.g. "purchase_order_receipt"), not the FQCN — see morphMap() below']
+  direction string [note: 'indexed; cast to App\Enums\Direction — in|out']
+  type string [note: 'indexed; cast to App\Enums\StockMovementType — 7 cases, see below']
+  amount decimal(12,2) [unsigned]
+  created_by bigint [ref: > users.id, note: 'restrictOnDelete']
+  created_at timestamp
+  // No updated_at — a stock movement is an immutable ledger entry, never edited after creation.
+  // Model enforces this via `const UPDATED_AT = null`, not just omitting the column.
+}
+```
+
+Cross-module unified inventory ledger — every stock change (purchase receipt, sales shipment, production consumption/output, manual adjustment, etc.) writes one row here, direction-tagged `in`/`out`. `products.current_stock` stays the cached/derived total (per architectural decision #2); this table is the source of truth it's derived from.
 
 ## Purchasing Domain Models — Implemented (Eloquent)
 
@@ -140,6 +158,22 @@ All 6 models exist under `app/Models/` with real business logic already written 
 **✅ RESOLVED (Session 4, 2026-07-18/19):** `PendingApproval` now includes `Rejected` in its allowed-target list (`self::PendingApproval => in_array($target, [self::Approved, self::Draft, self::Rejected, self::Cancelled], true)`), fixed by the user directly. `Rejected → Draft` (resubmit path) was already correct. The state machine now matches the originally documented design. `RejectPurchaseOrderAction` itself is still not written (see Actions table).
 
 **Still open:** `Closed` remains a commented-out enum case (`// case Closed = 'closed';`) — the soft-deletes-style "decide or drop" question from earlier still applies here. `PartiallyReceived → Closed` and `PurchaseOrder::close()` Gate/Policy already exist and expect a `Closed` status, but the enum case itself isn't live yet.
+
+## Inventory Domain Models — Implemented (Session 7, 2026-08-01)
+
+New module, separate from Purchasing — `app/Actions/Inventory/` and `app/DTO/Inventory/` (mirrors the existing `Purchasing` folder split).
+
+- **`StockMovement`** (`app/Models/StockMovement.php`) — `#[Guarded(['id'])]`. `const UPDATED_AT = null` (immutable ledger row, no updated_at column at all). Casts `direction`→`Direction`, `type`→`StockMovementType`, `created_at`→`datetime`, `amount`→`decimal:2`. Relations: `createdBy(): BelongsTo` (→ `User`), `product(): BelongsTo`, `reference(): MorphTo` (polymorphic — points at whatever domain event caused the movement, e.g. a `PurchaseOrderReceipt`).
+- **`Direction`** enum (`app/Enums/Direction.php`) — 2 cases: `In = 'in'`, `Out = 'out'`. No `label()` yet (not wired into any UI so far).
+- **`StockMovementType`** enum (`app/Enums/StockMovementType.php`) — 7 cases: `PurchaseReceived`, `PurchaseReturn`, `SalesShipment`, `SalesReturn`, `ProductionOutput`, `ProductionInput`, `StockAdjustment`. Covers all planned modules (Purchasing/Sales/Production) up front, even though only the Purchasing side has a real code path today — same "design the ledger once" reasoning as the `stock_movements` table itself.
+- **`CreateStockMovementData`** DTO (`app/DTO/Inventory/CreateStockMovementData.php`) — `productId`, `direction` (`Direction`), `type` (`StockMovementType`), `amount` (**`string`**, not float/decimal — keeps bcmath discipline all the way from caller input through to the Action), `createdBy`, plus optional `referenceId`/`referenceType` for the polymorphic link. Crosses the project's own 5+-field DTO threshold.
+- **`CreateStockMovementAction`** (`app/Actions/Inventory/CreateStockMovementAction.php`) — **scaffolded only, `handle(): StockMovement` body is empty.** This is the centralized, row-locked stock-update Action referenced throughout earlier sessions (Actions table, Immediate Next Steps #6) — not yet implemented. Still needs: `DB::transaction()` + `Product::lockForUpdate()`, `bcadd`/`bcsub` the movement onto `current_stock` depending on `direction`, insert the `StockMovement` row itself, and decide how `referenceId`/`referenceType` map onto `nullableMorphs()` (likely via the new `morphMap()`, see below) vs. being passed as a already-resolved model.
+
+**Relations wired into existing models to support the ledger:**
+- `Product::stockMovement(): HasMany` (`app/Models/Product.php`) — **note the singular method name despite returning multiple rows** (`hasMany`); every other `HasMany` in this codebase is named as a plural (`items()`, `purchaseOrderItems()`). Flagged, not yet fixed — worth renaming to `stockMovements()` for consistency before other code starts depending on the current name.
+- `PurchaseOrderReceipt::stockMovements(): MorphMany` (`app/Models/PurchaseOrderReceipt.php`) — the inverse side of `StockMovement::reference()`; correctly plural. This is the first real polymorphic relation in the codebase.
+
+**Morph map registered** in `AppServiceProvider::boot()`: `Relation::morphMap(['purchase_order_receipt' => PurchaseOrderReceipt::class])`. Deliberate choice over Laravel's default (storing the fully-qualified class name in `reference_type`) — decouples the DB column from the PHP namespace, so a future `App\Models\...` rename/refactor doesn't silently orphan existing ledger rows. Only one entry exists so far; every future `reference_type` source (sales shipments, production consumption, etc.) will need its own map entry added here as those modules get built.
 
 ## Purchasing Module — Business Rules Established
 
@@ -164,7 +198,7 @@ Cancelled reachable from Draft, PendingApproval, or Approved
 | `ApprovePurchaseOrderAction` | PendingApproval → Approved | Authorization: Policy, not inline role check. Sets two guarded fields (`approved_by`, `approved_at`) alongside the status transition — deliberately two separate `save()` calls (one inside `transitionTo()`, one explicit) wrapped in `DB::transaction()`, rather than bypassing `transitionTo()` to combine into one write, to preserve "transitionTo() is the only method allowed to change status." | **Written** (Session 6, reviewed twice — first draft had wrong class name colliding with `CreatePurchaseOrderAction`, and set `approved_by`/`approved_at` without ever calling `save()`) |
 | `RejectPurchaseOrderAction` | PendingApproval → Rejected | Enum transition gap from Session 4 is fixed, so this is now unblocked. Near-mirror of `ApprovePurchaseOrderAction` minus the `approved_by`/`approved_at` writes. | Not written |
 | `ReceivePurchaseOrderAction` | Approved/PartiallyReceived → PartiallyReceived/FullyReceived | See full step sequence below. Likely graduates to a **Service** (`ReceivePurchaseOrderService`) rather than staying a plain Action — it's the first workflow that actually composes multiple atomic units (calls `CreateStockMovementAction`, fires an event) instead of just building one aggregate. | Not written |
-| `CreateStockMovementAction` | (cross-module, shared) | Centralized, row-locked stock update — NOT YET WRITTEN, only designed conceptually | Not written |
+| `CreateStockMovementAction` | (cross-module, shared) | Centralized, row-locked stock update. `stock_movements` table + `Direction`/`StockMovementType` enums + `CreateStockMovementData` DTO all exist (Session 7) — `handle()` body itself is still empty. | **Scaffolded, not implemented** |
 
 **`ReceivePurchaseOrderAction` full step sequence (agreed, not yet coded):**
 1. Authorization check (Policy) — is user allowed to receive POs
@@ -489,6 +523,20 @@ Also: caught the user leaving a debugging `dd()` inside the `updated()` hook aft
 ### `ApprovePurchaseOrderAction` — backend track resumes
 Guided design (no code from assistant, per standing preference): needs `(PurchaseOrder $po, int $approvedBy)`, no authorization inside the Action (Policy's job), `transitionTo(PurchaseOrderStatus::Approved)` for the status write (never bypass it, even to save a query), then guarded fields `approved_by`/`approved_at` set via direct assignment + explicit `save()`, both wrapped in `DB::transaction()`. First draft reviewed had two real bugs: the class was literally named `CreatePurchaseOrderAction` (filename/class mismatch — would have fatally collided with the real `CreatePurchaseOrderAction` class in the same namespace) and set `approved_by`/`approved_at` without ever calling `save()` (silent no-op — values set in memory, never persisted). Second draft, after fixes, reviewed correct. Not yet wired into the View PO page's UI (no Approve button yet) and `RejectPurchaseOrderAction` not yet started.
 
+## Session 7 (2026-08-01/02) — `stock_movements` ledger scaffolding begins
+
+New branch, `stock_movement`. Picked up handover items #5 (design `stock_movements`) and #6 (write `CreateStockMovementAction`) ahead of `RejectPurchaseOrderAction`/the Approve button wiring, which remain untouched from Session 6.
+
+**Built this session** (see "Inventory Domain Models" and the schema block above for full detail):
+- `stock_movements` migration — `product_id` (FK, restrict), `nullableMorphs('reference')`, `direction`/`type` (indexed strings), `amount` (unsigned decimal 12,2), `created_by` (FK, restrict), `created_at` only (no `updated_at` — immutable ledger row).
+- `Direction` enum (`in`/`out`) and `StockMovementType` enum (7 cases spanning Purchasing/Sales/Production, most without a real code path yet).
+- `StockMovement` model — `#[Guarded(['id'])]`, `const UPDATED_AT = null`, `product()`/`createdBy()`/`reference()` (MorphTo) relations.
+- `CreateStockMovementData` DTO — crosses the 5-field DTO threshold, `amount` deliberately typed `string` to preserve bcmath discipline through the whole call chain.
+- `CreateStockMovementAction` — file + class + `handle(): StockMovement` signature exist; **body is empty**, not yet implemented.
+- Supporting relation wiring: `Product::stockMovement()` (singular name — flagged, likely needs renaming to `stockMovements()` for consistency with the rest of the codebase), `PurchaseOrderReceipt::stockMovements()` (`MorphMany`, correctly plural), and a `Relation::morphMap()` registration in `AppServiceProvider::boot()` mapping `'purchase_order_receipt' => PurchaseOrderReceipt::class` so `reference_type` stores a stable string key instead of the FQCN.
+
+**Not yet done:** the actual `CreateStockMovementAction::handle()` logic (transaction + `lockForUpdate()` + `bcadd`/`bcsub` onto `Product::current_stock` + insert the ledger row), any caller of the Action (its first real consumer is still the unwritten `ReceivePurchaseOrderAction`), and the `Product::stockMovement()` naming fix.
+
 ## Concepts Already Taught (don't re-explain unless asked)
 - Input validation vs. business validation vs. authorization (three distinct layers)
 - Services vs. Actions (workflow orchestration vs. atomic operation)
@@ -530,8 +578,8 @@ Guided design (no code from assistant, per standing preference): needs `(Purchas
 2. **Wire an Approve button into the View PO page** (`show.blade.php`) — same shape as the existing `submit()` method/button: an `approve()` method calling `Gate::authorize('approve', $purchaseOrder)` then `app(ApprovePurchaseOrderAction::class)->handle(...)`, a button gated `@can('approve', $purchaseOrder)`. Do the same for Reject once that Action exists.
 3. Decide the `Closed` status question — enum case is still commented out; `purchasing.close` Gate and `PurchaseOrderPolicy::close()` already assume it exists.
 4. Decide the soft-deletes question — `products`/`suppliers` migrations don't have `softDeletes()` despite earlier draft schema assuming it. Implement, or drop from the plan.
-5. Design `stock_movements` table (cross-module ledger) — agreed necessary, not yet drafted. Note from Session 6: this also blocks the low-stock notification idea (see below), not just receiving.
-6. Write `CreateStockMovementAction` (centralized, transaction-wrapped, `lockForUpdate()`) — the first real consumer of it would be `ReceivePurchaseOrderAction` (increases stock); a *decrease*-direction consumer (Production/Sales module) doesn't exist yet and isn't in scope soon.
+5. ~~Design `stock_movements` table~~ **Done (Session 7)** — migrated, see schema block above. Still blocks the low-stock notification idea (see below) until receiving actually writes movements.
+6. **Finish `CreateStockMovementAction::handle()`** (Session 7 left it scaffolded, body empty) — needs `DB::transaction()` + `Product::lockForUpdate()`, `bcadd`/`bcsub` onto `current_stock` based on `direction`, then insert the `StockMovement` row. Also fix `Product::stockMovement()` → `stockMovements()` naming while touching this area. First real consumer is still the unwritten `ReceivePurchaseOrderAction` (increases stock); a *decrease*-direction consumer (Production/Sales module) doesn't exist yet.
 7. Write `ReceivePurchaseOrderAction` (full step sequence already documented above) — needed before View PO can show a real "Receive" action.
 8. Finalize the PO status recalculation logic for multi-item receiving (`ReceivePurchaseOrderAction` step 6).
 9. Revisit Purchase Order **cancellation** rules — e.g. can a partially-received PO be cancelled? What happens to already-received stock? (`CancelPurchaseOrderAction` itself isn't written yet either — only the Gate/Policy method exist.)

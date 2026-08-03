@@ -6,6 +6,8 @@ use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 use App\Http\Responses\LoginResponse;
 use Carbon\CarbonImmutable;
 use App\Enums\UserRole;
+use App\Models\PurchaseOrderReceipt;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Date;
@@ -56,6 +58,11 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Blade::anonymousComponentPath(resource_path('views/layouts'), 'layouts');
+
+        //Morph
+        Relation::morphMap([
+            'purchase_order_receipt' => PurchaseOrderReceipt::class,
+        ]);
     }
 
     /**

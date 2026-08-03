@@ -133,5 +133,6 @@
     "Each item quantity must be greater than 0.": "Jumlah setiap item harus lebih dari 0.",
     "This purchase order can no longer be edited because it is no longer a draft.": "Pesanan pembelian ini tidak dapat lagi diedit karena statusnya bukan lagi draf.",
     "\":name\" is not a raw material and cannot be added to a purchase order.": "\":name\" bukan bahan baku dan tidak dapat ditambahkan ke pesanan pembelian.",
-    "This purchase order was updated by someone else. Please refresh the page and try again.": "Pesanan pembelian ini telah diperbarui oleh orang lain. Silakan muat ulang halaman dan coba lagi."
+    "This purchase order was updated by someone else. Please refresh the page and try again.": "Pesanan pembelian ini telah diperbarui oleh orang lain. Silakan muat ulang halaman dan coba lagi.",
+    "\":name\" does not have enough stock for this action (requested :requested, available :available).": "stok \":name\" tidak cukup untuk aksi ini (diminta :requested, tersedia :available)."
 }
