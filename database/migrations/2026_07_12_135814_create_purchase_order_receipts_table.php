@@ -16,7 +16,6 @@ return new class extends Migration
             $table->foreignId('received_by')->constrained('users')->restrictOnDelete();
             $table->text('notes')->nullable();
             $table->timestamps();
-            $table->index('purchase_order_item_id');
         });
     }
 

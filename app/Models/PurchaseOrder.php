@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\PurchaseOrderStatus;
 use App\Exceptions\InvalidStatusTransitionException;
 use App\Exceptions\PurchaseOrderNotEditableException;
+use App\Exceptions\PurchaseOrderNotReceivableExcepiton;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -83,6 +84,13 @@ class PurchaseOrder extends Model
     {
         if ($this->status !== PurchaseOrderStatus::Draft) {
             throw new PurchaseOrderNotEditableException($this);
+        }
+    }
+
+    public function ensureCanReceive(): void
+    {
+        if(!\in_array($this->status, [PurchaseOrderStatus::Approved, PurchaseOrderStatus::PartiallyReceived])) {
+            throw new PurchaseOrderNotReceivableExcepiton($this);
         }
     }
 }

@@ -57,12 +57,16 @@ class AppServiceProvider extends ServiceProvider
             return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
         });
 
+        //layouts
         Blade::anonymousComponentPath(resource_path('views/layouts'), 'layouts');
 
-        //Morph
+        //morph
         Relation::morphMap([
             'purchase_order_receipt' => PurchaseOrderReceipt::class,
         ]);
+
+        //migrations
+        $this->loadMigrationsFrom(database_path('migrations/purchase'));
     }
 
     /**

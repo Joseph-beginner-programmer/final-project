@@ -43,6 +43,10 @@ class PurchaseOrderItem extends Model
         $this->subtotal = bcmul((string) $this->quantity_ordered, (string) $this->unit_price, 2);
     }
 
+    public function syncQuantityReceived(): void
+    {
+        $this->quantity_received = $this->receipts()->sum('quantity_received');
+    }
     public function remainingQuantity(): string
     {
         return bcsub((string) $this->quantity_ordered, (string) $this->quantity_received, 2);

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PurchaseOrderItemReceiptCondition;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -18,6 +19,7 @@ class PurchaseOrderReceipt extends Model
         return [
             'quantity_received' => 'decimal:2',
             'received_at' => 'datetime',
+            'receipt_condition' => PurchaseOrderItemReceiptCondition::class
         ];
     }
 
