@@ -111,6 +111,15 @@ new #[Title('Create Purchase Order')] class extends Component {
         return 'Rp '.number_format((float) $amount, 0, ',', '.');
     }
 
+    public function formatQuantity(string $quantity): string
+    {
+        if (! str_contains($quantity, '.')) {
+            return $quantity;
+        }
+
+        return rtrim(rtrim($quantity, '0'), '.');
+    }
+
     protected function rules(): array
     {
         return [
@@ -173,25 +182,26 @@ new #[Title('Create Purchase Order')] class extends Component {
         <flux:breadcrumbs.item>{{ __('Create Purchase Order') }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>
 
-    <div class="mt-3 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-md shadow-zinc-900/4 dark:shadow-none p-6 sm:p-8 lg:p-10">
-
-        <div class="flex flex-wrap items-start justify-between gap-4 pb-6 mb-8 border-b border-zinc-200 dark:border-white/10">
-            <div>
-                <p class="font-mono text-[11px] font-semibold tracking-[0.2em] uppercase text-accent mb-2">
-                    {{ __('Purchasing') }} &middot; {{ __('Order Draft') }}
-                </p>
-                <h1 class="font-display text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">
-                    {{ __('New Purchase Order') }}
-                </h1>
-                <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">
-                    {{ __('Opened') }} {{ now()->format('d M Y') }}
-                </p>
-            </div>
-
-            <flux:button variant="primary" wire:click="create" wire:loading.attr="disabled" wire:target="create">
-                {{ __('Save Purchase Order') }}
-            </flux:button>
+    <div class="mt-3 flex flex-wrap items-start justify-between gap-4">
+        <div>
+            <p class="font-mono text-[11px] font-semibold tracking-[0.2em] uppercase text-accent mb-2">
+                {{ __('Purchasing') }} &middot; {{ __('Order Draft') }}
+            </p>
+            <h1 class="font-display text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">
+                {{ __('New Purchase Order') }}
+            </h1>
+            <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
+            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">
+                {{ __('Opened') }} {{ now()->format('d M Y') }}
+            </p>
         </div>
+
+        <flux:button variant="primary" wire:click="create" wire:loading.attr="disabled" wire:target="create">
+            {{ __('Save Purchase Order') }}
+        </flux:button>
+    </div>
+
+    <div class="mt-6 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-md shadow-zinc-900/4 dark:shadow-none p-6 sm:p-8 lg:p-10">
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-x-10 gap-y-10">
             {{-- Main column --}}
@@ -327,27 +337,24 @@ new #[Title('Create Purchase Order')] class extends Component {
                                                     @endforeach
                                                 </flux:select>
                                                 @if ($product)
-                                                    <p class="mt-1 pl-0.5 flex items-center justify-between gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-                                                        <span>
-                                                            <span class="font-mono text-accent">{{ $product->product_code }} {{ $product->unit_of_measure }}</span>
-                                                        </span>
-
-                                                        @if ($product->isBelowReorderPoint())
-                                                            <span class="inline-flex items-center mt-1 gap-1 rounded-full border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-1.5 py-0.5 font-mono tabular-nums text-red-700 dark:text-red-400">
-                                                                <flux:icon.exclamation-triangle variant="micro" class="size-3" />
-                                                                {{ __('Low') }} {{ $product->current_stock }}
-                                                            </span>
-                                                        @else
-                                                            <span class="font-mono tabular-nums">{{ __('Stock') }} {{ $product->current_stock }}</span>
-                                                        @endif
+                                                    <p class="mt-1 pl-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                                                        <span class="font-mono text-accent">{{ $product->product_code }}</span>
                                                     </p>
                                                 @endif
                                                 @error("items.$index.product_id") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
                                             </td>
                                             <td class="py-2 px-3 w-40">
-                                                <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-mono tabular-nums" wire:model.live="items.{{ $index }}.quantity_ordered" :loading="false" />
-                                                @error("items.$index.quantity_ordered") 
-                                                <flux:error class="mt-1">{{ $message }}</flux:error> 
+                                                <div class="flex items-center gap-1.5">
+                                                    <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-mono tabular-nums" wire:model.live="items.{{ $index }}.quantity_ordered" :loading="false" class="flex-1" />
+                                                    @if ($product)
+                                                        <span class="inline-flex items-center gap-1 shrink-0" title="{{ $product->isBelowReorderPoint() ? __('Low stock') : __('Stock available') }}: {{ $product->current_stock }}">
+                                                            <span class="font-mono text-xs text-zinc-500 dark:text-zinc-400">{{ $product->unit_of_measure }}</span>
+                                                            <span class="size-1.5 rounded-full {{ $product->isBelowReorderPoint() ? 'bg-red-500' : 'bg-green-500' }}"></span>
+                                                        </span>
+                                                    @endif
+                                                </div>
+                                                @error("items.$index.quantity_ordered")
+                                                <flux:error class="mt-1">{{ $message }}</flux:error>
                                                 @enderror
                                             </td>
                                             {{-- TODO --}}
@@ -359,7 +366,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                                                 <span
                                                     wire:loading.remove
                                                     wire:target="items.{{ $index }}.quantity_ordered,items.{{ $index }}.unit_price"
-                                                    class="inline-flex items-center justify-end w-full whitespace-nowrap font-mono text-xs font-semibold text-zinc-800 dark:text-zinc-200 tabular-nums"
+                                                    class="inline-flex items-center justify-end w-full whitespace-nowrap font-mono text-xs font-medium text-zinc-900 dark:text-white tabular-nums"
                                                 >
                                                     {{ $this->formatRupiah($this->rowSubtotal($item)) }}
                                                 </span>
@@ -401,13 +408,13 @@ new #[Title('Create Purchase Order')] class extends Component {
                             </div>
                             <div class="flex items-center justify-between px-4 py-2.5">
                                 <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Total Qty') }}</dt>
-                                <dd class="font-mono tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->totalQuantity }}</dd>
+                                <dd class="font-mono tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->formatQuantity($this->totalQuantity) }}</dd>
                             </div>
                         </dl>
 
                         <div class="px-4 py-4 bg-accent">
                             <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Est. Total') }}</p>
-                            <p class="font-mono text-lg font-bold tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah($this->estimatedTotal) }}</p>
+                            <p class="font-mono text-xl font-medium tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah($this->estimatedTotal) }}</p>
                         </div>
                     </div>
 

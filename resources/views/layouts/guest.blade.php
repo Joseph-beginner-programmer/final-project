@@ -12,10 +12,10 @@
          to manage appearance manually — see fluxui.dev/docs/dark-mode --}}
     @fluxAppearance
 
-    {{-- Space Grotesk (display) — Instrument Sans is assumed to already be
-         loaded app-wide; this adds only the extra display face. --}}
+    {{-- Space Grotesk (display) + Fira Code (tabular data) — Instrument Sans
+         is assumed to already be loaded app-wide. See design-system/mims/MASTER.md. --}}
     <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=space-grotesk:500,600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.bunny.net/css?family=space-grotesk:500,600|fira-code:400,500&display=swap" rel="stylesheet" />
 
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
