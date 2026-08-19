@@ -18,9 +18,8 @@
 
         <flux:sidebar.nav>
             @foreach (UserRole::operational() as $role)
-                <?php $unlocked = Gate::allows('view-dashboard', $role)?>
-                @if ($unlocked)
-                    <flux:sidebar.group :heading="$role->label()" :expandable="$unlocked" class="grid">
+                @can('view-dashboard', $role)
+                    <flux:sidebar.group :heading="$role->label()" expandable class="grid">
                         <flux:sidebar.item icon="home" :href="route($role->dashboardRoute())"
                             :current="request()->routeIs($role->dashboardRoute())" wire:navigate>
                             {{ __('Dashboard') }}
@@ -37,30 +36,11 @@
                             </flux:sidebar.item>
                         @endif
                     </flux:sidebar.group>
-                @else
-                    <flux:sidebar.group :heading="$role->label()" >
-                        <flux:sidebar.item icon="lock-closed" class="opacity-50 cursor-not-allowed disabled" disabled>
-                            {{ __('Locked') }}
-                        </flux:sidebar.item>
-                    </flux:sidebar.group>
-                @endif
-
+                @endcan
             @endforeach
         </flux:sidebar.nav>
 
         <flux:spacer />
-
-        <flux:sidebar.nav>
-            <flux:sidebar.item icon="folder-git-2" href="https://github.com/laravel/livewire-starter-kit"
-                target="_blank">
-                {{ __('Repository') }}
-            </flux:sidebar.item>
-
-            <flux:sidebar.item icon="book-open-text" href="https://laravel.com/docs/starter-kits#livewire"
-                target="_blank">
-                {{ __('Documentation') }}
-            </flux:sidebar.item>
-        </flux:sidebar.nav>
 
         <x-desktop-user-menu class="hidden lg:block" :name="auth()->user()->name" />
     </flux:sidebar>

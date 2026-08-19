@@ -11,7 +11,7 @@
 - **Coding mode**: keep it tight — code + brief rationale, skip deep explanations
 Default to teaching mode unless user says "coding mode."
 
-**Current focus (as of 2026-08-01/02, see Session 7 below for latest): `stock_movements` ledger scaffolding underway on branch `stock_movement`.** Table migrated, `StockMovement` model + `Direction`/`StockMovementType` enums written, morph relation wired to `PurchaseOrderReceipt`, `CreateStockMovementData` DTO written — but `CreateStockMovementAction::handle()` itself is still an **empty stub**, not yet implemented. This is handover item #5/#6 from the previous session's Immediate Next Steps, picked up ahead of `RejectPurchaseOrderAction`/wiring the Approve button (those are still pending, unchanged from Session 6). For backend Actions, user writes the code themselves (assistant gives a guide/rundown only, no code, per established preference). For UI/design work, user has explicitly delegated implementation to the assistant — assistant writes the actual Blade/Livewire code, user reviews and course-corrects.
+**Current focus (as of 2026-08-18/19, see Session 8 below for latest): a project-wide design system was authored (`design-system/mims/MASTER.md`) and partially rolled out** — new accent/primary color tokens, a Fira Code data-font token, and font-loading/sidebar/login/Create-PO updates are all **uncommitted on branch `redesign`** as of this writing. Backend track (`stock_movements` ledger, Session 7) is unchanged/paused — `CreateStockMovementAction::handle()` is still an empty stub. For backend Actions, user writes the code themselves (assistant gives a guide/rundown only, no code, per established preference). For UI/design work, user has explicitly delegated implementation to the assistant — assistant writes the actual Blade/Livewire code, user reviews and course-corrects.
 
 ---
 
@@ -537,6 +537,44 @@ New branch, `stock_movement`. Picked up handover items #5 (design `stock_movemen
 
 **Not yet done:** the actual `CreateStockMovementAction::handle()` logic (transaction + `lockForUpdate()` + `bcadd`/`bcsub` onto `Product::current_stock` + insert the ledger row), any caller of the Action (its first real consumer is still the unwritten `ReceivePurchaseOrderAction`), and the `Product::stockMovement()` naming fix.
 
+## Session 8 (2026-08-18/19) — Project-wide design system authored + partially rolled out
+
+New branch, `redesign`. All work below is **uncommitted** in the working tree (verified via `git status`/`git diff` at the start of the next session, since this session ended before it got written up here).
+
+### `design-system/mims/MASTER.md` — new file, untracked
+Authored via `/ui-ux-pro-max` brainstorm, dated 2026-08-18. Establishes one deliberate system instead of the per-page one-off polish every earlier session did (Login, Create PO, List PO, View PO, sidebar were each styled in isolation and never shared tokens — `app.css` had a "Vacuum Copper" navy+copper theme defined but only ever actually applied to the Login page's brand panel). Covers: color palette (see below), typography (Space Grotesk/Instrument Sans/Fira Code), an 8/10 "dense/dashboard" spacing scale, component rules (Flux-first, no raw custom CSS), a project-specific anti-patterns list grounded in things already rejected in earlier sessions (KPI stat-card trios, icon-badge clichés, opacity-tint surfaces tuned against only one color scheme, amber-alone warning indicators), and a pre-delivery checklist. Has its own per-page override mechanism (`design-system/mims/pages/[page-name].md`, none written yet) — check there first before falling back to MASTER's rules.
+
+**Logic** > When building a specific page, first check `design-system/mims/pages/[page-name].md`. If that file exists, its rules override this Master file.
+
+### Color token rework — `resources/css/app.css`
+- **Retired** the old navy "Vacuum Copper" accent (`#2C4A6E`/`#5B87B5`) and the Login-page-only `--color-brass` (`#B8763E`) one-off token entirely.
+- **New accent** (single interactive color, drives Flux's own accent slot — buttons, links, checked inputs, focus rings app-wide): `#C2540C` light / `#DB7C3D` dark (burnt orange/copper family, name kept the "copper" spirit but replaced the actual hue).
+- **New `--color-accent-foreground`**: white light / **near-black (`#18181B`) dark** — added because white-on-`#DB7C3D` fails 4.5:1 contrast, black-on-`#DB7C3D` passes ~7:1. Not present in the old theme at all.
+- **New structural token, `--color-primary`** (`#475569` light / `#94A3B8` dark) + `--color-primary-foreground` — non-interactive brand chrome (sidebar markers, secondary button borders), deliberately *not* a Flux-recognized slot, consumed via plain `bg-primary`/`text-primary`/`border-primary` utilities. Declared inside a `@theme static { ... }` block specifically — Tailwind v4 tree-shakes unused `@theme` variables, and `static` forces these to always compile in even before any Blade template adopts them, so the `.dark` override isn't pointing at an undefined light default.
+- **New `--font-data: 'Fira Code'`** token — for money/quantity/code columns, pairs with `tabular-nums` (continues the monospace-for-money convention already established on Create PO, now formalized as a named token instead of an ad hoc `font-mono`).
+- Semantic/status colors (success/destructive/warning) deliberately **not** turned into custom tokens — MASTER.md keeps Tailwind's native `red-*`/`green-*`/`amber-*` scales, already the existing 14-file convention.
+
+### Dead file removed — `resources/css/theme.css` deleted
+Confirmed genuinely unused: an old shadcn-style HSL custom-properties file, self-marked `// TODO: Might Be Useless` at the top, never imported/referenced anywhere. Deleted rather than left to rot.
+
+### Font loading gap fixed
+MASTER.md flagged that Space Grotesk was only `<link>`-loaded in `layouts/guest.blade.php` (Login), never in `partials/head.blade.php` (the authenticated app shell) — any authenticated page using `font-display` was silently falling back to Instrument Sans. Fixed: `partials/head.blade.php` now loads the same bunny-fonts link as guest layout, and both were updated to also pull in Fira Code (`space-grotesk:500,600|fira-code:400,500`), which neither file requested before.
+
+### Pages re-skinned to the new tokens
+- **`layouts/app/sidebar.blade.php`** — two changes bundled in with the token migration: (1) replaced the manual `<?php $unlocked = Gate::allows(...) ?> @if/@else` block with a plain `@can(...)/@endcan`, and **removed the "Locked" placeholder groups entirely** — roles the user can't access no longer render a disabled lock-icon row at all, they just don't appear, a stricter version of the "grow as built" philosophy from Session 4. (2) Removed the leftover starter-kit "Repository"/"Documentation" external-link nav items (pointed at the generic `laravel/livewire-starter-kit` GitHub repo — never made sense for this app, just never cleaned up until now).
+- **`pages/auth/login.blade.php`** — every `var(--color-brass)` reference swapped to `var(--color-accent)` (brass retired), and the second background glow blob switched from the old accent fallback to `var(--color-primary)` — the two brand tokens now visually distinct on the same page instead of both being shades of one color.
+- **`pages/purchasing/orders/create.blade.php`** — several small changes, not just recoloring:
+  - Page header (title + "Save Purchase Order" button) moved **out of** the white bordered card into its own row above it — was previously the first thing inside the card's padding, now sits in the page's own flow, card starts fresh below it.
+  - Added an accent-colored underline bar under the `<h1>`, echoing the same motif already used on the Login page's brand panel — a small deliberate cross-page consistency touch, not independently reinvented per page.
+  - Added `formatQuantity(string $quantity): string` helper — strips trailing zeros and a trailing decimal point (e.g. `"5.00"` → `"5"`) for display only; storage/calculation still stays on the existing bcmath string values, this only touches the rendered `Total Qty` figure.
+  - **Per-row stock indicator redesigned again** (third design for this element — see Session 6 for the prior version): the bordered "Low · N" chip + plain "Stock N" text (with `exclamation-triangle` icon) was removed from the meta line under the product `<flux:select>` entirely, replaced with a compact colored dot (red/green) + unit-of-measure text sitting inline next to the Qty input, with the actual stock number moved into a `title="..."` hover tooltip instead of always-visible text. **⚠️ Flag for next session:** this appears to contradict MASTER.md's own documented rule one section above it ("warning indicators must always pair color with an icon + text label — never rely on the amber/color hue alone," explicitly citing the old chip as the pattern to *keep*) — the new dot-only version has no visible text or icon in the default state, only in a hover tooltip that isn't keyboard/touch accessible. Worth deciding: was this an intentional supersession of MASTER.md's rule (in which case MASTER.md needs updating to match), or a regression that should get the chip pattern back?
+
+### Loose end noticed, not resolved
+`.gitignore` gained one line: `# /design-system/` — **commented out**, so it has no actual effect (the folder is untracked but not ignored; `git status` still shows `?? design-system/`). Ambiguous whether this was a deliberate "decided against ignoring it, left the line as a note" or a leftover half-edit. Needs a decision: commit `design-system/` as real project documentation (recommended — it's meant to be the durable source of truth per its own opening paragraph), or actually ignore it if it's meant to stay a local-only scratch reference.
+
+### Not yet done
+Nothing in this session's diff has been **committed** — everything above is still sitting as uncommitted changes + one untracked folder on branch `redesign` (confirmed via `git status` at the start of the next session). No other pages (List PO, View PO, dashboards) have been touched yet — they still carry whatever styling they had at the end of Session 6/7, not yet migrated to the new accent/primary tokens or checked against MASTER.md's checklist.
+
 ## Concepts Already Taught (don't re-explain unless asked)
 - Input validation vs. business validation vs. authorization (three distinct layers)
 - Services vs. Actions (workflow orchestration vs. atomic operation)
@@ -586,7 +624,9 @@ New branch, `stock_movement`. Picked up handover items #5 (design `stock_movemen
 10. Decide over-receipt policy (currently leaning: block receiving more than outstanding quantity — not finalized).
 11. Decide whether the missing `unique(['purchase_order_id', 'product_id'])` constraint on `purchase_order_items` is intentional (same product as two separate line items) or should be added.
 
-**UI/design track (paused, not abandoned):**
+**UI/design track (active as of Session 8, branch `redesign`):**
+0. **Decide + commit (or discard) Session 8's uncommitted design-system work** — `design-system/mims/MASTER.md` + token/sidebar/login/Create-PO changes are sitting uncommitted on `redesign` (see Session 8 above). Also resolve the commented-out `# /design-system/` `.gitignore` line, and the Create PO stock-indicator-vs-MASTER.md-rule conflict flagged in that session.
+1. **Roll the new design tokens out to the pages Session 8 didn't touch** — List PO, View PO, and the dashboard placeholders still use whatever styling they had at end of Session 6/7, not yet checked against `design-system/mims/MASTER.md`'s palette/type/checklist.
 12. **Verify Gates/Policies actually behave as intended, in the browser** — still not exercised end-to-end: login as `purchasing` and confirm they *cannot* approve a PO (Manager-only rule) but *can* edit/cancel one; login as `manager` and confirm dashboard-override + approval both work. Now more testable than before since View PO's inline editing exists.
 13. Translate the List PO and View PO pages' new strings into `lang/id.json` — built this session, not yet localized (same deferred-content-only gap as the 2FA/passkey pages from Session 4).
 14. Consider whether `pdo_sqlite` should be installed so automated Feature/Pest tests can actually run in this environment (currently blocked — see Session 4 notes).

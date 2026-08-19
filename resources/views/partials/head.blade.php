@@ -11,5 +11,10 @@
 
 @fonts
 
+{{-- Space Grotesk (display) + Fira Code (tabular data) — Instrument Sans is
+     already loaded above via @fonts. See design-system/mims/MASTER.md. --}}
+<link rel="preconnect" href="https://fonts.bunny.net">
+<link href="https://fonts.bunny.net/css?family=space-grotesk:500,600|fira-code:400,500&display=swap" rel="stylesheet" />
+
 @vite(['resources/css/app.css', 'resources/js/app.js'])
 @fluxAppearance

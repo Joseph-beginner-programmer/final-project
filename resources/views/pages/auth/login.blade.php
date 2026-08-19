@@ -20,8 +20,8 @@
 
             {{-- Layered depth: base gradient + soft glows + fine grid texture --}}
             <div class="absolute inset-0 bg-linear-to-br from-zinc-900 via-zinc-900 to-black"></div>
-            <div class="absolute -top-24 -left-16 w-72 h-72 rounded-full opacity-20 blur-3xl" style="background-color: var(--color-brass);"></div>
-            <div class="absolute -bottom-32 -right-16 w-80 h-80 rounded-full opacity-[0.15] blur-3xl" style="background-color: var(--color-accent, #2C4A6E);"></div>
+            <div class="absolute -top-24 -left-16 w-72 h-72 rounded-full opacity-20 blur-3xl" style="background-color: var(--color-accent);"></div>
+            <div class="absolute -bottom-32 -right-16 w-80 h-80 rounded-full opacity-[0.15] blur-3xl" style="background-color: var(--color-primary);"></div>
             <div class="absolute inset-0 opacity-[0.05]"
                  style="background-image: linear-gradient(to right, white 1px, transparent 1px), linear-gradient(to bottom, white 1px, transparent 1px); background-size: 40px 40px;"></div>
             <div class="absolute inset-0 bg-linear-to-t from-black/40 via-transparent to-transparent"></div>
@@ -30,19 +30,19 @@
 
                 {{-- Glass badge icon with soft glow ring --}}
                 <div class="relative">
-                    <div class="absolute inset-0 rounded-2xl blur-xl opacity-30" style="background-color: var(--color-brass);"></div>
+                    <div class="absolute inset-0 rounded-2xl blur-xl opacity-30" style="background-color: var(--color-accent);"></div>
                     <div class="relative w-16 h-16 rounded-2xl border flex items-center justify-center bg-white/5 backdrop-blur-sm shadow-lg"
-                         style="border-color: color-mix(in srgb, var(--color-brass) 50%, transparent);">
+                         style="border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);">
                         <svg viewBox="0 0 24 24" class="w-8 h-8" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M9 3h6v3.2c0 .6.3 1.1.8 1.5l1.4 1c.5.4.8.9.8 1.5V19a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V10.2c0-.6.3-1.1.8-1.5l1.4-1c.5-.4.8-.9.8-1.5V3Z"
-                                  stroke="var(--color-brass)" stroke-width="1.5" />
-                            <path d="M8 13h8" stroke="var(--color-brass)" stroke-width="1.5" stroke-dasharray="2 2.5" opacity="0.7" />
+                                  stroke="var(--color-accent)" stroke-width="1.5" />
+                            <path d="M8 13h8" stroke="var(--color-accent)" stroke-width="1.5" stroke-dasharray="2 2.5" opacity="0.7" />
                         </svg>
                     </div>
                 </div>
 
                 <h1 class="mt-6 font-display text-2xl font-bold tracking-wide text-white uppercase">PT SAI</h1>
-                <div class="w-10 h-0.5 mt-3 rounded-full" style="background: linear-gradient(to right, transparent, var(--color-brass), transparent);"></div>
+                <div class="w-10 h-0.5 mt-3 rounded-full" style="background: linear-gradient(to right, transparent, var(--color-accent), transparent);"></div>
 
                 <p class="mt-5 text-sm text-white/70 max-w-xs leading-relaxed">
                     {{ __('Tracking every product from raw materials to finished goods') }}
@@ -63,10 +63,10 @@
         </div>
 
         {{-- Mobile brand strip --}}
-        <div class="lg:hidden absolute top-0 left-0 right-0 bg-linear-to-r from-zinc-900 to-zinc-800 px-6 py-4 z-10 flex items-center gap-3 border-b" style="border-color: color-mix(in srgb, var(--color-brass) 25%, transparent);">
-            <div class="w-8 h-8 rounded-lg border flex items-center justify-center bg-white/5" style="border-color: var(--color-brass);">
+        <div class="lg:hidden absolute top-0 left-0 right-0 bg-linear-to-r from-zinc-900 to-zinc-800 px-6 py-4 z-10 flex items-center gap-3 border-b" style="border-color: color-mix(in srgb, var(--color-accent) 25%, transparent);">
+            <div class="w-8 h-8 rounded-lg border flex items-center justify-center bg-white/5" style="border-color: var(--color-accent);">
                 <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M9 3h6v3.2c0 .6.3 1.1.8 1.5l1.4 1c.5.4.8.9.8 1.5V19a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V10.2c0-.6.3-1.1.8-1.5l1.4-1c.5-.4.8-.9.8-1.5V3Z" stroke="var(--color-brass)" stroke-width="1.5" />
+                    <path d="M9 3h6v3.2c0 .6.3 1.1.8 1.5l1.4 1c.5.4.8.9.8 1.5V19a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V10.2c0-.6.3-1.1.8-1.5l1.4-1c.5-.4.8-.9.8-1.5V3Z" stroke="var(--color-accent)" stroke-width="1.5" />
                 </svg>
             </div>
             <span class="font-display text-sm font-bold tracking-wide text-white uppercase">PT SAI</span>
