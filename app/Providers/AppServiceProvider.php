@@ -8,7 +8,6 @@ use Carbon\CarbonImmutable;
 use App\Enums\UserRole;
 use App\Models\PurchaseOrderReceipt;
 use Illuminate\Database\Eloquent\Relations\Relation;
-use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -56,9 +55,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('warehouse.receive', function ($user) {
             return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
         });
-
-        //layouts
-        Blade::anonymousComponentPath(resource_path('views/layouts'), 'layouts');
 
         //morph
         Relation::morphMap([

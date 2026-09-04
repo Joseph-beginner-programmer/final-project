@@ -129,6 +129,10 @@
     "No items on this purchase order yet.": "Belum ada item pada pesanan pembelian ini.",
     "Add": "Tambah",
 
+    "Warehouse": "Gudang",
+    "Purchase Order Receipt": "Penerimaan Pembelian",
+    "Purchase Order Receipt List": "Daftar Penerimaan Pembelian",
+
     "This purchase order has no items. Please select an item.": "Pesanan pembelian ini belum memiliki item. Silakan pilih item.",
     "Each item quantity must be greater than 0.": "Jumlah setiap item harus lebih dari 0.",
     "This purchase order can no longer be edited because it is no longer a draft.": "Pesanan pembelian ini tidak dapat lagi diedit karena statusnya bukan lagi draf.",
@@ -143,4 +147,5 @@
     "Order Detail": "Detail Pesanan",
     "Add Item": "Tambah Item",
     "Save changes": "Simpan perubahan"
+
 }

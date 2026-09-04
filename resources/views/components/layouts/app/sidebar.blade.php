@@ -35,6 +35,13 @@
                                 {{ __('Purchase Order List') }}
                             </flux:sidebar.item>
                         @endif
+
+                        @if ($role === UserRole::Warehouse)
+                            <flux:sidebar.item icon="inbox-arrow-down" :href="route('warehouse.inbound.purchasing.list')" 
+                            :current="request()->routeIs('warehouse.inbound.purchasing.list')" wire:navigate>
+                                {{ __('Purchase Order Receipt') }}
+                            </flux:sidebar.item>
+                        @endif
                     </flux:sidebar.group>
                 @endcan
             @endforeach

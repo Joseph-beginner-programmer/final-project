@@ -165,9 +165,7 @@ new #[Title('Purchase Orders')] class extends Component {
         @endcan
     </div>
 
-    {{-- Status tabs — the domain's central axis, so it gets first-class filter UI
-         instead of living inside a generic dropdown. Counts scoped to the active
-         search term only, so every tab reflects what it would show if selected. --}}
+    {{-- Status tabs --}}
     <div class="mt-6 flex items-center gap-1.5 overflow-x-auto pb-1">
         <button type="button" wire:click="$set('status', '')" wire:loading.attr="disabled"
             class="shrink-0 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer transition-colors duration-150
@@ -287,7 +285,7 @@ new #[Title('Purchase Orders')] class extends Component {
             @forelse ($this->orders as $order)
                 @php($isLate = $order->expected_delivery_date?->isPast() && !$order->status->isTerminal())
                 <a wire:key="po-card-{{ $order->id }}" href="{{ route('purchasing.orders.show', $order) }}" wire:navigate
-                   class="block px-4 py-3 hover:bg-zinc-50 dark:hover:bg-white/[0.03] transition-colors">
+                   class="block px-4 py-3 hover:bg-zinc-50 dark:hover:bg-white/3 transition-colors">
                     <div class="flex items-center justify-between gap-2">
                         <span class="font-data font-medium text-accent">{{ $order->po_number }}</span>
                         <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap {{ $this->statusBadgeClasses($order->status) }}">

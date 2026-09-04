@@ -1,4 +1,4 @@
-<x-layouts::guest>
+<x-layouts.guest>
 
     <style>
         @keyframes fade-slide-up {
@@ -187,4 +187,4 @@
 
     </div>
 
-</x-layouts::guest>
+</x-layouts.guest>

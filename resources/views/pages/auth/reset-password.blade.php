@@ -1,4 +1,4 @@
-<x-layouts::auth :title="__('Reset password')">
+<x-layouts.auth :title="__('Reset password')">
     <div class="flex flex-col gap-6">
         <x-auth-header :title="__('Reset password')" :description="__('Please enter your new password below')" />
 
@@ -51,4 +51,4 @@
             </div>
         </form>
     </div>
-</x-layouts::auth>
+</x-layouts.auth>

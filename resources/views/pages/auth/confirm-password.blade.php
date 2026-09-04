@@ -1,4 +1,4 @@
-<x-layouts::auth :title="__('Confirm password')">
+<x-layouts.auth :title="__('Confirm password')">
     <div class="flex flex-col gap-6">
         <x-auth-header
             :title="__('Confirm password')"
@@ -33,4 +33,4 @@
             </flux:button>
         </form>
     </div>
-</x-layouts::auth>
+</x-layouts.auth>
