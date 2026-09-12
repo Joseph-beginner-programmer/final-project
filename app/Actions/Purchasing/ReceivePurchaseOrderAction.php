@@ -26,7 +26,6 @@ class ReceivePurchaseOrderAction
             $receipt = PurchaseOrderReceipt::create([
                 'purchase_order_item_id' => $data->purchaseOrderItemId,
                 'quantity_received' => $data->quantityReceived,
-                'received_by' => $data->receivedBy,
                 'received_at' => now(),
                 'receipt_condition' => $data->receiptCondition
             ]);

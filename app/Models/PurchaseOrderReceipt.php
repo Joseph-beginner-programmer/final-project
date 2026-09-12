@@ -18,7 +18,6 @@ class PurchaseOrderReceipt extends Model
     {
         return [
             'quantity_received' => 'decimal:2',
-            'received_at' => 'datetime',
             'receipt_condition' => PurchaseOrderItemReceiptCondition::class
         ];
     }
@@ -28,9 +27,9 @@ class PurchaseOrderReceipt extends Model
         return $this->belongsTo(PurchaseOrderItem::class);
     }
 
-    public function receivedBy(): BelongsTo
+    public function purchaseOrderReceiptBatch(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'received_by');
+        return $this->belongsTo(PurchaseOrderReceiptBatch::class);
     }
 
     public function stockMovements(): MorphMany

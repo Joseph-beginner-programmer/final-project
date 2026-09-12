@@ -10,7 +10,8 @@ class ReceivePurchaseOrderData
         public readonly int $purchaseOrderItemId,
         public readonly string $quantityReceived,
         public readonly int $receivedBy,
-        public readonly PurchaseOrderItemReceiptCondition $receiptCondition
+        public readonly PurchaseOrderItemReceiptCondition $receiptCondition,
+        public readonly ?int $purchaseOrderReceiptBatchId
     ) {
         
     }
