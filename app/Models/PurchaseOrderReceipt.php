@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 #[Guarded(['id'])]
@@ -30,6 +31,11 @@ class PurchaseOrderReceipt extends Model
     public function purchaseOrderReceiptBatch(): BelongsTo
     {
         return $this->belongsTo(PurchaseOrderReceiptBatch::class);
+    }
+
+    public function rawMaterialLot(): HasOne 
+    {
+        return $this->hasOne(RawMaterialLot::class);
     }
 
     public function stockMovements(): MorphMany

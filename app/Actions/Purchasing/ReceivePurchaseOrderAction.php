@@ -11,6 +11,7 @@ use App\Enums\StockMovementType;
 use App\Exceptions\InvalidReceiptQuantityException;
 use App\Models\PurchaseOrderItem;
 use App\Models\PurchaseOrderReceipt;
+use App\Models\RawMaterialLot;
 use Illuminate\Support\Facades\DB;
 
 class ReceivePurchaseOrderAction
@@ -26,8 +27,14 @@ class ReceivePurchaseOrderAction
             $receipt = PurchaseOrderReceipt::create([
                 'purchase_order_item_id' => $data->purchaseOrderItemId,
                 'quantity_received' => $data->quantityReceived,
-                'received_at' => now(),
-                'receipt_condition' => $data->receiptCondition
+                'receipt_condition' => $data->receiptCondition,
+                'purchase_order_receipt_batch_id' => $data->purchaseOrderReceiptBatchId
+            ]);
+
+            RawMaterialLot::create([
+                'product_id' => $poItem->product->id,
+                'purchase_order_receipt_id' => $receipt->id,
+                'remaining_stock' => $data->quantityReceived,
             ]);
 
             $poItem->syncQuantityReceived();
@@ -50,8 +57,5 @@ class ReceivePurchaseOrderAction
 
             return $receipt;
         });
-        
-        
-
     }
 }

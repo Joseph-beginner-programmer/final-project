@@ -5,7 +5,7 @@ namespace App\Models;
 use App\Enums\PurchaseOrderStatus;
 use App\Exceptions\InvalidStatusTransitionException;
 use App\Exceptions\PurchaseOrderNotEditableException;
-use App\Exceptions\PurchaseOrderNotReceivableExcepiton;
+use App\Exceptions\PurchaseOrderNotReceivableException;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -60,6 +60,11 @@ class PurchaseOrder extends Model
         return $this->hasMany(PurchaseOrderItem::class);
     }
 
+    public function purchaseOrderReceiptBatches(): HasMany
+    {   
+        return $this->hasMany(PurchaseOrderReceiptBatch::class);
+    }
+
     public function transitionTo(PurchaseOrderStatus $target): void
     {
         if (!$this->status->canTransitionTo($target)) {
@@ -90,7 +95,7 @@ class PurchaseOrder extends Model
     public function ensureCanReceive(): void
     {
         if(!\in_array($this->status, [PurchaseOrderStatus::Approved, PurchaseOrderStatus::PartiallyReceived])) {
-            throw new PurchaseOrderNotReceivableExcepiton($this);
+            throw new PurchaseOrderNotReceivableException($this);
         }
     }
 }

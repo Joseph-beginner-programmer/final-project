@@ -6,14 +6,53 @@ use Livewire\Attributes\Computed;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseOrderItemReceiptCondition;
 use App\Models\PurchaseOrder;
+use App\DTO\Purchasing\ReceivePurchaseOrderBatchData;
+use App\Services\Purchasing\ReceivePurchaseOrderBatchService;
+use App\Exceptions\PurchaseOrderReceiptBatchRequiresItemsException;
+use App\Exceptions\PurchaseOrderReceiptBatchRequiresAttachmentException;
+use App\Exceptions\PurchaseOrderNotReceivableException;
 use Illuminate\Support\Collection;
+use Livewire\WithFileUploads;
+use Illuminate\Validation\Rule;
+use Flux\Flux;
 
 new #[Title('Purchase Order Receipt Detail')] class extends Component
 {
+    use WithFileUploads;
+
     public PurchaseOrder $purchaseOrder;
 
+    public array $items = [];
+
+    /** @var \Livewire\Features\SupportFileUploads\TemporaryUploadedFile[] */
+    public array $attachments = [];
+
     public function mount(PurchaseOrder $purchaseOrder): void {
+        Gate::authorize('receive', $purchaseOrder);
         $this->purchaseOrder = $purchaseOrder->load(['supplier', 'createdBy', 'items.product']);
+        $this->syncItemsFromModel();
+    }
+
+    protected function syncItemsFromModel(): void
+    {
+        $this->items = [];
+
+        foreach ($this->purchaseOrder->items as $item) {
+            if ($item->isFullyReceived()) {
+                continue;
+            }
+
+            $this->items[$item->id] = [
+                'quantity' => '',
+                'receipt_condition' => '',
+            ];
+        }
+    }
+
+    public function removeAttachment(int $index): void
+    {
+        unset($this->attachments[$index]);
+        $this->attachments = array_values($this->attachments);
     }
 
     #[Computed]
@@ -92,6 +131,71 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
             PurchaseOrderStatus::Cancelled => 'bg-zinc-100 text-zinc-500 border-zinc-200 line-through dark:bg-white/5 dark:text-zinc-500 dark:border-white/10',
         };
     }
+
+    public function submit(): void
+    {
+        Gate::authorize('receive', $this->purchaseOrder);
+
+        $itemsToSubmit = collect($this->items)->filter(
+            fn ($item) => $item['quantity'] !== '' && bccomp($item['quantity'], '0', 2) > 0
+        );
+
+        if ($itemsToSubmit->isEmpty()) {
+            $message = __('At least one item must have a quantity greater than 0.');
+            $this->addError('items', $message);
+            Flux::toast(variant: 'danger', text: $message);
+            return;
+        }
+
+        try {
+            $this->validate([
+                'attachments' => ['required', 'array', 'min:1'],
+                'attachments.*' => ['file', 'max:10240', 'mimes:pdf,png,jpg,jpeg'],
+            ]);
+
+            foreach ($itemsToSubmit->keys() as $itemId) {
+                $this->validate(
+                    ["items.{$itemId}.receipt_condition" => ['required', Rule::enum(PurchaseOrderItemReceiptCondition::class)]],
+                    ["items.{$itemId}.receipt_condition.required" => __('Please select a receipt condition for this item.')],
+                );
+            }
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Flux::toast(variant: 'danger', text: __('Please fix the highlighted fields before submitting.'));
+            throw $e;
+        }
+
+        $storedAttachments = collect($this->attachments)->map(function ($file) {
+            return [
+                'disk' => 'local',
+                'originalFilename' => $file->getClientOriginalName(),
+                'mimeType' => $file->getMimeType(),
+                'size' => $file->getSize(),
+                'path' => $file->store('purchase-order-receipts', 'local'),
+            ];
+        })->all();
+
+        $data = new ReceivePurchaseOrderBatchData(
+            purchaseOrderId: $this->purchaseOrder->id,
+            receivedBy: Auth::id(),
+            items: $itemsToSubmit->map(fn ($item, $itemId) => [
+                'purchaseOrderItemId' => (int) $itemId,
+                'quantityReceived' => $item['quantity'],
+                'receiptCondition' => PurchaseOrderItemReceiptCondition::from($item['receipt_condition']),
+            ])->values()->all(),
+            attachments: $storedAttachments,
+        );
+
+        try {
+            app(ReceivePurchaseOrderBatchService::class)->handle($data);
+        } catch (PurchaseOrderReceiptBatchRequiresItemsException|PurchaseOrderReceiptBatchRequiresAttachmentException|PurchaseOrderNotReceivableException $e) {
+            $this->addError('items', $e->userMessage());
+            return;
+        }
+
+        Flux::toast(variant: 'success', text: __('Receipt submitted.'));
+
+        $this->redirect(route('warehouse.inbound.purchasing.list'), navigate: true);
+    }
 };
 ?>
 
@@ -119,29 +223,17 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
     @php($isLate = $purchaseOrder->expected_delivery_date?->isPast() && !$purchaseOrder->status->isTerminal())
 
     {{-- Header --}}
-    <div class="mt-3 flex flex-wrap items-start justify-between gap-4 motion-safe:animate-fade-slide-up">
-        <div>
-            <p class="font-data text-[11px] font-semibold tracking-[0.2em] uppercase text-accent mb-2">
-                {{ __('Warehouse') }} &middot; {{ __('Purchase Order Receipt') }}
-            </p>
-            <div class="flex flex-wrap items-center gap-3">
-                <h1 class="font-data text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">
-                    {{ $purchaseOrder->po_number }}
-                </h1>
-                <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium {{ $this->statusBadgeClasses($purchaseOrder->status) }}">
-                    {{ $purchaseOrder->status->label() }}
-                </span>
-            </div>
-            <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
-            <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">{{ $purchaseOrder->supplier->supplier_name }}</p>
+    <div class="mt-3 motion-safe:animate-fade-slide-up">
+        <div class="flex flex-wrap items-center gap-3">
+            <h1 class="font-data text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">
+                {{ $purchaseOrder->po_number }}
+            </h1>
+            <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium {{ $this->statusBadgeClasses($purchaseOrder->status) }}">
+                {{ $purchaseOrder->status->label() }}
+            </span>
         </div>
-
-        <div class="text-right">
-            <p class="text-[10px] font-semibold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Total') }}</p>
-            <p class="font-data text-xl font-medium tabular-nums text-zinc-900 dark:text-white mt-0.5">
-                {{ $this->formatRupiah((string) $purchaseOrder->total_amount) }}
-            </p>
-        </div>
+        <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
+        <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">{{ $purchaseOrder->supplier->supplier_name }}</p>
     </div>
 
     {{-- PO Info --}}
@@ -178,7 +270,7 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
     {{-- Summary --}}
     @php($progress = $this->receivingProgress())
     @php($breakdown = $this->itemStatusBreakdown())
-    <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 items-stretch">
+    <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
         <div class="rounded-md border border-zinc-200 dark:border-white/10 border-s-[3px] border-s-accent bg-white dark:bg-zinc-900 shadow-sm shadow-zinc-900/5 dark:shadow-none overflow-hidden flex flex-col motion-safe:animate-fade-slide-up" style="animation-delay: 60ms;">
             <div class="p-4 flex-1">
                 <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
@@ -221,7 +313,7 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
             </div>
         </div>
 
-        <div class="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-sm shadow-zinc-900/5 dark:shadow-none overflow-hidden flex flex-col motion-safe:animate-fade-slide-up" style="animation-delay: 90ms;">
+        <div class="rounded-md border border-zinc-200 dark:border-white/10 border-s-[3px] border-s-accent bg-white dark:bg-zinc-900 shadow-sm shadow-zinc-900/5 dark:shadow-none overflow-hidden flex flex-col motion-safe:animate-fade-slide-up" style="animation-delay: 90ms;">
             <div class="p-4 flex-1">
                 <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
                     {{ __('Item Breakdown') }}
@@ -260,13 +352,36 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
                 </div>
             </div>
         </div>
+
+        <div class="rounded-md border border-zinc-200 dark:border-white/10 border-s-[3px] border-s-accent bg-white dark:bg-zinc-900 shadow-sm shadow-zinc-900/5 dark:shadow-none overflow-hidden flex flex-col motion-safe:animate-fade-slide-up" style="animation-delay: 120ms;">
+            <div class="p-4 flex-1">
+                <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
+                    {{ __('Order Value') }}
+                </p>
+                <dl class="space-y-1.5 text-xs">
+                    <div class="flex justify-between gap-2">
+                        <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Line Items') }}</dt>
+                        <dd class="font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ str_pad((string) $purchaseOrder->items->count(), 2, '0', STR_PAD_LEFT) }}</dd>
+                    </div>
+                </dl>
+            </div>
+            <div class="px-4 py-3.5 bg-accent mt-auto">
+                <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Total') }}</p>
+                <p class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">
+                    {{ $this->formatRupiah((string) $purchaseOrder->total_amount) }}
+                </p>
+            </div>
+        </div>
     </div>
     {{-- Items to Receive --}}
-    <div class="mt-6 motion-safe:animate-fade-slide-up" style="animation-delay: 120ms;">
+    <div class="mt-6 motion-safe:animate-fade-slide-up" style="animation-delay: 150ms;">
         <h2 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">
             <flux:icon.clipboard-document-list variant="micro" class="size-3.5 text-zinc-400 dark:text-zinc-500" />
             {{ __('Items List') }}
         </h2>
+        @error('items')
+            <p class="mb-3 text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
+        @enderror
 
         {{-- Desktop/tablet table --}}
         <div class="hidden lg:block overflow-x-auto rounded-md border border-zinc-200 dark:border-white/10 shadow-sm shadow-zinc-900/5 dark:shadow-none">
@@ -285,8 +400,8 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
                     @forelse ($purchaseOrder->items as $item)
                         <tr
                             wire:key="receive-item-{{ $item->id }}"
-                            x-data="{ qty: '' }"
-                            :class="qty ? 'bg-accent/5 dark:bg-accent/10' : ''"
+                            x-data
+                            :class="$wire.items['{{ $item->id }}']?.quantity ? 'bg-accent/5 dark:bg-accent/10' : ''"
                             class="border-b border-zinc-100 dark:border-white/5 last:border-0 hover:bg-zinc-50/70 dark:hover:bg-white/3 transition-colors duration-200"
                         >
                             <td class="py-2.5 px-3">
@@ -309,7 +424,7 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
                                     <div class="space-y-1.5">
                                         <flux:input.group>
                                             <flux:input
-                                                x-model="qty"
+                                                wire:model="items.{{ $item->id }}.quantity"
                                                 size="sm"
                                                 type="text"
                                                 inputmode="decimal"
@@ -321,13 +436,18 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
                                             <flux:input.group.suffix>{{ $item->product->unit_of_measure }}</flux:input.group.suffix>
                                         </flux:input.group>
                                         <flux:select
+                                            wire:model="items.{{ $item->id }}.receipt_condition"
                                             size="sm"
                                             aria-label="{{ __('Receipt condition for :product', ['product' => $item->product->product_name]) }}"
                                         >
+                                            <option value="" disabled>{{ __('Select condition') }}</option>
                                             @foreach (PurchaseOrderItemReceiptCondition::cases() as $condition)
                                                 <option value="{{ $condition->value }}">{{ __($condition->label()) }}</option>
                                             @endforeach
                                         </flux:select>
+                                        @error("items.{$item->id}.receipt_condition")
+                                            <p class="text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
+                                        @enderror
                                     </div>
                                 @endif
                             </td>
@@ -336,10 +456,6 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
                                     <span class="size-1.5 rounded-full transition-colors duration-200 {{ $item->isFullyReceived() ? 'bg-green-500' : ((float) $item->quantity_received > 0 ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-600') }}"></span>
                                     <span class="text-zinc-600 dark:text-zinc-400">
                                         {{ $item->isFullyReceived() ? __('Received') : ((float) $item->quantity_received > 0 ? __('Partial') : __('Pending')) }}
-                                    </span>
-                                    <span x-show="qty" x-cloak x-transition:enter="transition ease-out duration-150" x-transition:enter-start="opacity-0 -translate-x-1" x-transition:enter-end="opacity-100 translate-x-0" class="inline-flex items-center gap-1 rounded-full bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent">
-                                        <flux:icon.pencil variant="micro" class="size-2.5" />
-                                        {{ __('Editing') }}
                                     </span>
                                 </span>
                             </td>
@@ -360,8 +476,8 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
             @forelse ($purchaseOrder->items as $item)
                 <div
                     wire:key="receive-item-mobile-{{ $item->id }}"
-                    x-data="{ qty: '' }"
-                    :class="qty ? 'border-accent/40 bg-accent/5 dark:bg-accent/10' : 'border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900'"
+                    x-data
+                    :class="$wire.items['{{ $item->id }}']?.quantity ? 'border-accent/40 bg-accent/5 dark:bg-accent/10' : 'border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900'"
                     class="rounded-md border p-3 shadow-sm shadow-zinc-900/5 dark:shadow-none transition-colors duration-200"
                 >
                     <div class="flex items-start justify-between gap-3">
@@ -399,8 +515,7 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
                                 </label>
                                 <flux:input.group>
                                     <flux:input
-                                        x-model="qty"
-                                        @input="qty = qty.replace(/[^0-9.]/g, '')"
+                                        wire:model="items.{{ $item->id }}.quantity"
                                         size="sm"
                                         type="text"
                                         inputmode="decimal"
@@ -416,14 +531,19 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
                                 <label class="block text-[10px] font-medium tracking-widest uppercase text-zinc-500 dark:text-zinc-400 mb-1">
                                     {{ __('Condition') }}
                                 </label>
-                                <flux:select
+                               <flux:select
+                                    wire:model="items.{{ $item->id }}.receipt_condition"
                                     size="sm"
                                     aria-label="{{ __('Receipt condition for :product', ['product' => $item->product->product_name]) }}"
                                 >
+                                    <option value="" disabled>{{ __('Select condition') }}</option>
                                     @foreach (PurchaseOrderItemReceiptCondition::cases() as $condition)
                                         <option value="{{ $condition->value }}">{{ __($condition->label()) }}</option>
                                     @endforeach
                                 </flux:select>
+                                @error("items.{$item->id}.receipt_condition")
+                                    <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
+                                @enderror
                             </div>
                         </div>
                     @endunless
@@ -437,61 +557,62 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
     </div>
 
     {{-- Attachments --}}
-    <div class="mt-6 motion-safe:animate-fade-slide-up" style="animation-delay: 180ms;" x-data="{ files: [] }">
+    <div class="mt-6 motion-safe:animate-fade-slide-up" style="animation-delay: 180ms;">
         <h2 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">
             <flux:icon.paper-clip variant="micro" class="size-3.5 text-zinc-400 dark:text-zinc-500" />
             {{ __('Attachments') }}
         </h2>
 
         <div
-            x-on:dragover.prevent="$el.classList.add('border-accent', 'bg-accent/5', 'scale-[1.01]')"
-            x-on:dragleave.prevent="$el.classList.remove('border-accent', 'bg-accent/5', 'scale-[1.01]')"
+            x-data="{ dragging: false }"
+            x-on:dragover.prevent="dragging = true"
+            x-on:dragleave.prevent="dragging = false"
             x-on:drop.prevent="
-                $el.classList.remove('border-accent', 'bg-accent/5', 'scale-[1.01]');
-                files = [...files, ...Array.from($event.dataTransfer.files)];
+                dragging = false;
+                const dt = new DataTransfer();
+                Array.from($refs.fileInput.files).forEach(f => dt.items.add(f));
+                Array.from($event.dataTransfer.files).forEach(f => dt.items.add(f));
+                $refs.fileInput.files = dt.files;
+                $refs.fileInput.dispatchEvent(new Event('change'));
             "
-            class="relative rounded-md border-2 border-dashed border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 bg-zinc-50/50 dark:bg-white/[0.02] px-4 py-8 text-center transition-all duration-150"
+            :class="dragging ? 'border-accent bg-accent/5 scale-[1.01]' : ''"
+            class="relative rounded-md border-2 border-dashed border-zinc-200 dark:border-zinc-700 hover:border-zinc-300 dark:hover:border-zinc-600 bg-zinc-50/50 dark:bg-white/2 px-4 py-8 text-center transition-all duration-150"
         >
             <input
                 type="file"
                 multiple
+                x-ref="fileInput"
+                wire:model="attachments"
                 accept="image/*,.pdf"
-                x-on:change="files = [...files, ...Array.from($event.target.files)]; $event.target.value = null"
                 class="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                 aria-label="{{ __('Upload attachment') }}"
             />
-            <flux:icon.arrow-up-tray class="mx-auto size-6 text-zinc-400 dark:text-zinc-500" />
-            <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-                <span class="font-medium text-accent">{{ __('Click to upload') }}</span> {{ __('or drag and drop') }}
-            </p>
-            <p class="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">{{ __('Delivery notes, photos — PDF, PNG, JPG up to 10MB') }}</p>
+            <flux:icon.arrow-up-tray class="mx-auto size-6 text-zinc-400 dark:text-zinc-500" wire:loading.class="animate-pulse" wire:target="attachments" />
+                <p class="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
+                    <span class="font-medium text-accent">{{ __('Click to upload') }}</span> {{ __('or drag and drop') }}
+                </p>
+                <p class="mt-1 text-[11px] text-zinc-400 dark:text-zinc-500">{{ __('Delivery notes, photos — PDF, PNG, JPG up to 10MB') }}</p>
         </div>
+        @error('attachments') <p class="mt-1.5 text-xs text-red-600 dark:text-red-400">{{ $message }}</p> @enderror
 
-        <ul x-show="files.length > 0" x-cloak class="mt-3 space-y-2">
-            <template x-for="(file, index) in files" :key="index">
-                <li
-                    x-transition:enter="transition ease-out duration-200"
-                    x-transition:enter-start="opacity-0 -translate-y-1"
-                    x-transition:enter-end="opacity-100 translate-y-0"
-                    x-transition:leave="transition ease-in duration-150"
-                    x-transition:leave-start="opacity-100 translate-x-0"
-                    x-transition:leave-end="opacity-0 translate-x-2"
-                    class="flex items-center justify-between gap-3 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 px-3 py-2 text-xs">
-                    <div class="flex items-center gap-2 min-w-0">
-                        <flux:icon.paper-clip class="size-4 shrink-0 text-zinc-400 dark:text-zinc-500" />
-                        <span class="truncate text-zinc-700 dark:text-zinc-300" x-text="file.name"></span>
-                        <span class="shrink-0 text-zinc-400 dark:text-zinc-500" x-text="'(' + (file.size / 1024).toFixed(0) + ' KB)'"></span>
-                    </div>
-                    <button
-                        type="button"
-                        x-on:click="files.splice(index, 1)"
-                        class="shrink-0 p-1.5 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
-                        :aria-label="'{{ __('Remove') }} ' + file.name"
-                    >
-                        <flux:icon.x-mark class="size-3.5" />
-                    </button>
-                </li>
-            </template>
+        <ul @if(empty($attachments)) style="display:none" @endif class="mt-3 space-y-2">
+            @foreach ($attachments as $index => $file)
+            <li wire:key="attachment-{{ $index }}" class="flex items-center justify-between gap-3 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 px-3 py-2 text-xs">
+                <div class="flex items-center gap-2 min-w-0">
+                    <flux:icon.paper-clip class="size-4 shrink-0 text-zinc-400 dark:text-zinc-500" />
+                    <span class="truncate text-zinc-700 dark:text-zinc-300">{{ $file->getClientOriginalName() }}</span>
+                    <span class="shrink-0 text-zinc-400 dark:text-zinc-500">({{ number_format($file->getSize() / 1024, 0) }} KB)</span>
+                </div>
+                <button
+                    type="button"
+                    wire:click="removeAttachment({{ $index }})"
+                    class="shrink-0 p-1.5 text-zinc-400 hover:text-red-600 dark:hover:text-red-400 transition-colors cursor-pointer"
+                    aria-label="{{ __('Remove') }} {{ $file->getClientOriginalName() }}"
+                >
+                    <flux:icon.x-mark class="size-3.5" />
+                </button>
+            </li>
+            @endforeach
         </ul>
     </div>
 
@@ -500,8 +621,17 @@ new #[Title('Purchase Order Receipt Detail')] class extends Component
         <flux:button variant="filled" :href="route('warehouse.inbound.purchasing.list')" wire:navigate class="w-full sm:w-auto">
             {{ __('Cancel') }}
         </flux:button>
-        <flux:button variant="primary" icon="check" type="button" class="w-full sm:w-auto">
-            {{ __('Submit Receipt') }}
+        <flux:button
+            variant="primary"
+            icon="check"
+            type="button"
+            wire:click="submit"
+            wire:loading.attr="disabled"
+            wire:target="submit"
+            class="w-full sm:w-auto"
+        >
+            <span wire:loading.remove wire:target="submit">{{ __('Submit Receipt') }}</span>
+            <span wire:loading wire:target="submit">{{ __('Submitting...') }}</span>
         </flux:button>
     </div>
 </section>

@@ -60,9 +60,6 @@ class AppServiceProvider extends ServiceProvider
         Relation::morphMap([
             'purchase_order_receipt' => PurchaseOrderReceipt::class,
         ]);
-
-        //migrations
-        $this->loadMigrationsFrom(database_path('migrations/purchase'));
     }
 
     /**
