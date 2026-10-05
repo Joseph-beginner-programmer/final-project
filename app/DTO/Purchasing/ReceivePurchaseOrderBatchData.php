@@ -8,6 +8,6 @@ class ReceivePurchaseOrderBatchData
         public readonly int $purchaseOrderId,
         public readonly int $receivedBy,
         public readonly array $items,
-        public readonly array $attachments,
+        public readonly ?string $attachmentPath,
     ) {}
 }

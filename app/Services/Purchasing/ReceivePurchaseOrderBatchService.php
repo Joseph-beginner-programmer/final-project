@@ -7,7 +7,6 @@ use App\DTO\Purchasing\ReceivePurchaseOrderBatchData;
 use App\DTO\Purchasing\ReceivePurchaseOrderData;
 use App\Exceptions\PurchaseOrderReceiptBatchRequiresItemsException;
 use App\Exceptions\PurchaseOrderReceiptBatchRequiresAttachmentException;
-use App\Models\PurchaseOrderReceiptAttachment;
 use App\Models\PurchaseOrderReceiptBatch;
 use Illuminate\Support\Facades\DB;
 
@@ -24,7 +23,7 @@ class ReceivePurchaseOrderBatchService
                 throw new PurchaseOrderReceiptBatchRequiresItemsException();
             }
 
-            if (empty($data->attachments)) {
+            if (blank($data->attachmentPath)) {
                 throw new PurchaseOrderReceiptBatchRequiresAttachmentException();
             }
 
@@ -32,18 +31,8 @@ class ReceivePurchaseOrderBatchService
                 'purchase_order_id' => $data->purchaseOrderId,
                 'received_by' => $data->receivedBy,
                 'received_at' => now(),
+                'attachment_path' => $data->attachmentPath,
             ]);
-
-            foreach ($data->attachments as $attachment) {
-                PurchaseOrderReceiptAttachment::create([
-                    'purchase_order_receipt_batch_id' => $batch->id,
-                    'disk' => $attachment['disk'],
-                    'path' => $attachment['path'],
-                    'original_filename' => $attachment['originalFilename'],
-                    'mime_type' => $attachment['mimeType'],
-                    'size' => $attachment['size'],
-                ]);
-            }
 
             foreach ($itemsToReceive as $item) {
                 app(ReceivePurchaseOrderAction::class)->handle(new ReceivePurchaseOrderData(

@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use App\Models\PurchaseOrder;
 use App\Enums\PurchaseOrderStatus;
 
-new #[Title('Purchase Order Receipt')] class extends Component
+new #[Title('Item Receipt')] class extends Component
 {
     use WithPagination;
 
@@ -64,6 +64,7 @@ new #[Title('Purchase Order Receipt')] class extends Component
             PurchaseOrderStatus::PartiallyReceived => 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20',
             PurchaseOrderStatus::FullyReceived => 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20',
             PurchaseOrderStatus::Cancelled => 'bg-zinc-100 text-zinc-500 border-zinc-200 line-through dark:bg-white/5 dark:text-zinc-500 dark:border-white/10',
+            PurchaseOrderStatus::Closed => 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-500/10 dark:text-slate-400 dark:border-slate-500/20',
         };
     }
 };
@@ -86,17 +87,21 @@ new #[Title('Purchase Order Receipt')] class extends Component
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
         <flux:breadcrumbs.item :href="route('warehouse.dashboard')" wire:navigate>{{ __('Warehouse') }}</flux:breadcrumbs.item>
-        <flux:breadcrumbs.item>{{ __('Purchase Order Receipt') }}</flux:breadcrumbs.item>
+        <flux:breadcrumbs.item>{{ __('Item Receipt') }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>
 
     {{-- Header --}}
     <div class="mt-3 flex flex-wrap items-start justify-between gap-4 motion-safe:animate-fade-slide-up">
         <div>
             <h1 class="font-display text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">
-                {{ __('Purchase Order Receipt List') }}
+                {{ __('Item Receipt List') }}
             </h1>
             <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
         </div>
+
+        <flux:button variant="primary" icon="plus" :href="route('warehouse.inbound.item-receipts.create')" wire:navigate class="active:scale-[0.95]">
+            {{ __('Create Item Receipt') }}
+        </flux:button>
     </div>
 
     {{-- Status Tabs — Flux's segmented radio group ships a built-in animated sliding indicator,
@@ -143,7 +148,7 @@ new #[Title('Purchase Order Receipt')] class extends Component
                     >
                         <td class="py-4 px-4 whitespace-nowrap">
                             <span class="font-data font-medium text-accent">
-                                <a href="{{ route('warehouse.inbound.purchase.detail', $order) }}" class="transition-colors duration-150 hover:underline underline-offset-2">{{ $order->po_number }}</a>
+                                <a href="{{ route('warehouse.inbound.item-receipts.detail', $order) }}" wire:navigate class="transition-colors duration-150 hover:underline underline-offset-2">{{ $order->po_number }}</a>
                             </span>
                         </td>
                         <td class="py-4 px-4 text-zinc-700 dark:text-zinc-300">{{ $order->supplier->supplier_name }}</td>
@@ -181,7 +186,7 @@ new #[Title('Purchase Order Receipt')] class extends Component
                 wire:key="po-card-{{ $order->id }}"
                 class="block px-4 py-3.5 hover:bg-accent/5 dark:hover:bg-accent/10 active:scale-[0.98] transition-all duration-150 cursor-pointer motion-safe:animate-fade-slide-up"
                 style="animation-delay: {{ min($loop->index, 8) * 35 }}ms;"
-                href="{{ route('warehouse.inbound.purchase.detail', $order) }}"
+                href="{{ route('warehouse.inbound.item-receipts.detail', $order) }}"
                 wire:navigate
             >
                 <div class="flex items-center justify-between gap-2">

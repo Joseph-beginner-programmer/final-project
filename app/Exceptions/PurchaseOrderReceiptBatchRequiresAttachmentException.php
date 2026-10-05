@@ -9,12 +9,12 @@ class PurchaseOrderReceiptBatchRequiresAttachmentException extends RuntimeExcept
         public readonly ?int $purchaseOrderId = null,
     ) {
         parent::__construct(
-            "Purchase Order #{$purchaseOrderId} receipt batch has no attachments"
+            "Purchase Order #{$purchaseOrderId} receipt batch has no attachment"
         );
     }
 
     public function userMessage(): string
     {
-        return __('At least one attachment (delivery note, photo, etc.) is required to submit this receipt.');
+        return __('An attachment (delivery note, photo, etc.) is required to submit this receipt.');
     }
 }

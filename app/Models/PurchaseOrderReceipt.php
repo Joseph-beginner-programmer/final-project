@@ -7,8 +7,8 @@ use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 
 #[Guarded(['id'])]
 class PurchaseOrderReceipt extends Model
@@ -33,9 +33,9 @@ class PurchaseOrderReceipt extends Model
         return $this->belongsTo(PurchaseOrderReceiptBatch::class);
     }
 
-    public function rawMaterialLot(): HasOne 
+    public function inventoryLot(): MorphOne
     {
-        return $this->hasOne(RawMaterialLot::class);
+        return $this->morphOne(InventoryLot::class, 'source');
     }
 
     public function stockMovements(): MorphMany

@@ -3,6 +3,7 @@
 namespace App\Actions\Purchasing;
 
 use App\DTO\Purchasing\CreatePurchaseOrderData;
+use App\Exceptions\InvalidDeliveryDateException;
 use App\Exceptions\NonPurchasableProductException;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
@@ -14,6 +15,10 @@ class CreatePurchaseOrderAction
 {
     public function handle(CreatePurchaseOrderData $data): PurchaseOrder
     {
+        if ($data->expectedDeliveryDate !== null && $data->expectedDeliveryDate < $data->orderDate) {
+            throw new InvalidDeliveryDateException($data->expectedDeliveryDate, $data->orderDate);
+        }
+
         return DB::transaction(function () use ($data) {
             $po = new PurchaseOrder([
                 'supplier_id' => $data->supplierId,

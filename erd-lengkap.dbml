@@ -1,0 +1,788 @@
+// =====================================================================
+// Sistem Informasi Manajemen - ERD lengkap (38 tabel)
+// Tempel ke https://dbdiagram.io untuk menampilkan diagram.
+// Warna header dan TableGroup mengikuti modul: Pengguna & Karyawan,
+// Pembelian, Persediaan, Produksi, Penjualan, Akuntansi.
+// =====================================================================
+
+// ============================== ENUM ==============================
+
+Enum user_role {
+  pembelian
+  penjualan
+  produksi
+  akuntansi
+  gudang
+  manajemen
+}
+
+Enum employee_status {
+  active
+  inactive
+}
+
+Enum po_status {
+  draft
+  pending_approval
+  approved
+  rejected
+  partially_received
+  fully_received
+  cancelled
+  closed
+}
+
+Enum receipt_condition {
+  good
+  damaged
+  incorrect_item
+}
+
+Enum document_status {
+  draft
+  posted
+  cancelled
+}
+
+Enum product_type {
+  finished_goods
+  wip
+  raw_material
+}
+
+Enum stock_direction {
+  in
+  out
+}
+
+Enum stock_movement_type {
+  purchase_receipt
+  purchase_return
+  material_issue
+  production_receipt
+  sales_delivery
+  sales_return
+  adjustment
+}
+
+Enum work_order_status {
+  draft
+  released
+  in_progress
+  completed
+  completed_short
+  cancelled
+}
+
+Enum reject_type {
+  normal
+  abnormal
+}
+
+Enum production_result_status {
+  draft
+  pending_verification
+  approved
+  rejected
+}
+
+Enum discrepancy_resolution {
+  none
+  loss
+  found
+  production_correction
+}
+
+Enum production_receipt_status {
+  pending
+  received
+  discrepancy_open
+  completed
+}
+
+Enum so_status {
+  draft
+  confirmed
+  partially_delivered
+  fully_delivered
+  cancelled
+}
+
+Enum account_type {
+  asset
+  liability
+  equity
+  revenue
+  expense
+}
+
+Enum normal_balance {
+  debit
+  credit
+}
+
+Enum journal_entry_type {
+  auto        // dibuat otomatis oleh fitur lain
+  manual      // jurnal umum manual
+  adjustment  // jurnal penyesuaian
+  closing     // jurnal penutup
+  opening     // saldo awal
+}
+
+Enum journal_status {
+  posted
+  reversed
+}
+
+Enum invoice_status {
+  unpaid
+  partially_paid
+  paid
+  cancelled
+}
+
+Enum payment_method {
+  cash
+  bank_transfer
+  giro
+}
+
+// ======================================================================
+// PENGGUNA & KARYAWAN (ERD 1)
+// Use case: Mengelola Data Karyawan, Mengelola Biaya Tenaga Kerja
+// ======================================================================
+
+Table users [headercolor: #6D6D6D] {
+  id bigint [pk, increment]
+  employee_id bigint [ref: - employees.id, null]
+  name varchar
+  email varchar [unique]
+  password varchar
+  role user_role
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table employees [headercolor: #6D6D6D] {
+  id bigint [pk, increment]
+  employee_code varchar [unique]
+  name varchar
+  position varchar
+  department varchar
+  hire_date date
+  status employee_status [default: 'active']
+  created_at timestamp
+  updated_at timestamp
+}
+
+// Akuntansi: Mengelola Biaya Tenaga Kerja
+// Riwayat tarif, supaya perintah kerja lama tetap memakai tarif yang berlaku saat itu.
+Table labor_rates [headercolor: #6D6D6D] {
+  id bigint [pk, increment]
+  employee_id bigint [ref: > employees.id]
+  hourly_rate decimal(18,2)
+  effective_from date
+  effective_to date [null]
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+// ======================================================================
+// PEMBELIAN & PENERIMAAN BAHAN BAKU (ERD 2)
+// Use case: Mengelola Data Pemasok, Menyusun Pesanan Pembelian,
+//           Menyetujui Pesanan Pembelian, Mencatat Penerimaan Barang,
+//           Menyusun Retur Pembelian, Melihat Laporan Pembelian
+// ======================================================================
+
+Table suppliers [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  supplier_code varchar [unique]
+  supplier_name varchar
+  contact_person varchar
+  phone varchar
+  email varchar
+  address text
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table product_supplier [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  product_id bigint [ref: > products.id]
+  supplier_id bigint [ref: > suppliers.id]
+  price decimal(18,2)
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (product_id, supplier_id) [unique]
+  }
+}
+
+Table purchase_orders [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  po_number varchar [unique]
+  supplier_id bigint [ref: > suppliers.id]
+  status po_status [default: 'draft']
+  order_date date
+  expected_delivery_date date [null]
+  total_amount decimal(18,2)
+  created_by bigint [ref: > users.id]
+  approved_by bigint [ref: > users.id, null, note: 'Manajemen: Menyetujui Pesanan Pembelian']
+  approved_at timestamp [null]
+  rejected_by bigint [ref: > users.id, null]
+  rejected_at timestamp [null]
+  rejection_reason varchar [null]
+  closed_by bigint [ref: > users.id, null, note: 'Menutup PO dari partially_received atau fully_received']
+  closed_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table purchase_order_items [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  purchase_order_id bigint [ref: > purchase_orders.id]
+  product_id bigint [ref: > products.id]
+  quantity_ordered decimal(18,4)
+  quantity_received decimal(18,4) [default: 0]
+  quantity_returned decimal(18,4) [default: 0]
+  quantity_invoiced decimal(18,4) [default: 0]
+  unit_price decimal(18,2)
+  subtotal decimal(18,2)
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table purchase_order_receipt_batches [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  receipt_number varchar [unique]
+  purchase_order_id bigint [ref: > purchase_orders.id]
+  received_at timestamp
+  received_by bigint [ref: > users.id]
+  attachment_path varchar [null, note: 'Surat jalan / foto pengiriman']
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table purchase_order_receipts [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  purchase_order_receipt_batch_id bigint [ref: > purchase_order_receipt_batches.id]
+  purchase_order_item_id bigint [ref: > purchase_order_items.id]
+  quantity_received decimal(18,4)
+  receipt_condition receipt_condition [default: 'good', note: 'Hanya good yang membuat lot persediaan; damaged/incorrect_item diretur']
+  unit_cost decimal(18,4) [note: 'Salinan unit_price PO; dipakai untuk biaya lot dan jurnal penerimaan']
+  total_value decimal(18,2) [note: 'Dr Persediaan Bahan Baku / Cr Barang Diterima Belum Difakturkan']
+  created_at timestamp
+  updated_at timestamp
+}
+
+// Jurnal: sebelum faktur -> Dr Barang Diterima Belum Difakturkan / Cr Persediaan Bahan Baku
+//         sesudah faktur -> Dr Utang Usaha / Cr Persediaan Bahan Baku (+ balik PPN Masukan)
+Table purchase_returns [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  return_number varchar [unique]
+  purchase_order_id bigint [ref: > purchase_orders.id]
+  supplier_id bigint [ref: > suppliers.id]
+  return_date date
+  reason text
+  total_amount decimal(18,2)
+  status document_status [default: 'draft']
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table purchase_return_items [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  purchase_return_id bigint [ref: > purchase_returns.id]
+  purchase_order_receipt_id bigint [ref: > purchase_order_receipts.id, note: 'Baris penerimaan/lot asal barang']
+  product_id bigint [ref: > products.id]
+  quantity decimal(18,4)
+  unit_cost decimal(18,2)
+  subtotal decimal(18,2)
+}
+
+// ======================================================================
+// PERSEDIAAN / FIFO (ERD 3)
+// Use case: Melihat Laporan Persediaan; dipakai oleh semua fitur yang menggerakkan stok
+// ======================================================================
+
+Table products [headercolor: #2E7D32] {
+  id bigint [pk, increment]
+  product_code varchar [unique]
+  product_name varchar
+  unit_of_measure varchar
+  type product_type
+  current_stock decimal(18,4) [default: 0, note: 'Total stok tersimpan; selalu diperbarui bersamaan dengan stock_movements']
+  safety_stock decimal(18,4) [default: 0]
+  reorder_point decimal(18,4) [default: 0]
+  selling_price decimal(18,2) [null, note: 'Hanya untuk finished_goods']
+  created_at timestamp
+  updated_at timestamp
+}
+
+// Satu lot = satu kelompok stok yang masuk bersamaan, dengan biaya sendiri.
+// Lot raw_material berasal dari penerimaan PO; lot wip dan finished_goods
+// berasal dari production_receipts. Mendukung FIFO, sehingga biaya lot WIP
+// terbawa penuh ke tahap produksi berikutnya.
+Table inventory_lots [headercolor: #2E7D32] {
+  id bigint [pk, increment]
+  lot_number varchar [unique]
+  product_id bigint [ref: > products.id]
+  source_type varchar [note: 'purchase_order_receipt | production_receipt | sales_return | adjustment']
+  source_id bigint [note: 'Polimorfik, menunjuk ke baris di tabel source_type']
+  quantity_initial decimal(18,4)
+  quantity_remaining decimal(18,4)
+  unit_cost decimal(18,4)
+  value_remaining decimal(18,2) [note: 'Pengeluaran terakhir dari lot mengambil seluruh sisa nilai, sehingga pembulatan habis menjadi 0']
+  received_at timestamp [note: 'Urutan FIFO: received_at paling lama dulu, lalu id terkecil']
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (product_id, received_at, id) [name: 'idx_lots_fifo']
+  }
+}
+
+// Pengeluaran FIFO: satu baris OUT untuk setiap lot yang dipakai. Mengeluarkan 150 unit
+// dari lot 100 (@1.000) dan lot 80 (@1.100) menghasilkan dua baris: 100 @1.000 dan 50 @1.100.
+Table stock_movements [headercolor: #2E7D32] {
+  id bigint [pk, increment]
+  product_id bigint [ref: > products.id]
+  inventory_lot_id bigint [ref: > inventory_lots.id]
+  direction stock_direction
+  type stock_movement_type
+  quantity decimal(18,4)
+  unit_cost decimal(18,4)
+  total_value decimal(18,2)
+  reference_type varchar [note: 'Polimorfik: baris dokumen yang menyebabkan mutasi']
+  reference_id bigint
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+}
+
+// ======================================================================
+// PRODUKSI (ERD 4)
+// Use case: Mengelola Formula Produksi, Menyusun Perintah Kerja
+//           (<<include>> Mengalokasi Biaya Tenaga Kerja, <<extend>> Mencetak Perintah Kerja),
+//           Mencatat Pengeluaran Barang, Mencatat Hasil Produksi,
+//           Mencatat Penerimaan Barang (hasil produksi), Melihat Laporan Biaya Produksi
+// ======================================================================
+
+// Mengelola Formula Produksi (BOM)
+Table production_formulas [headercolor: #C62828] {
+  id bigint [pk, increment]
+  formula_code varchar [unique]
+  product_id bigint [ref: > products.id, note: 'Produk yang dihasilkan: wip atau finished_goods']
+  version int [default: 1]
+  output_quantity decimal(18,4) [note: 'Ukuran batch yang menjadi dasar jumlah bahan']
+  overhead_rate_per_unit decimal(18,2) [note: 'BOP dibebankan per unit yang diproduksi (baik + reject)']
+  is_active boolean [default: true]
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table production_formula_items [headercolor: #C62828] {
+  id bigint [pk, increment]
+  production_formula_id bigint [ref: > production_formulas.id]
+  material_product_id bigint [ref: > products.id, note: 'raw_material atau wip']
+  quantity decimal(18,4) [note: 'Per output_quantity formula']
+}
+
+// Menyusun Perintah Kerja
+Table work_orders [headercolor: #C62828] {
+  id bigint [pk, increment]
+  wo_number varchar [unique]
+  production_formula_id bigint [ref: > production_formulas.id]
+  product_id bigint [ref: > products.id, note: 'Hasil: wip (tahap antara) atau finished_goods (tahap akhir)']
+  quantity_target decimal(18,4)
+  quantity_good decimal(18,4) [default: 0, note: 'Jumlah dari production_results yang disetujui']
+  quantity_reject decimal(18,4) [default: 0]
+  planned_start_date date
+  planned_end_date date
+  status work_order_status [default: 'draft']
+  printed_at timestamp [null, note: '<<extend>> Mencetak Perintah Kerja']
+  created_by bigint [ref: > users.id]
+  closed_by bigint [ref: > users.id, null, note: 'Keputusan supervisor menutup WO di bawah target']
+  closed_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+// <<include>> Mengalokasi Biaya Tenaga Kerja: rencana tenaga kerja untuk WO
+Table work_order_labors [headercolor: #C62828] {
+  id bigint [pk, increment]
+  work_order_id bigint [ref: > work_orders.id]
+  employee_id bigint [ref: > employees.id]
+  planned_hours decimal(10,2)
+  hourly_rate decimal(18,2) [note: 'Salinan tarif dari labor_rates saat alokasi']
+  planned_cost decimal(18,2)
+}
+
+// Gudang: Mencatat Pengeluaran Barang, yaitu mengeluarkan bahan untuk WO (tanpa jurnal)
+Table material_issues [headercolor: #C62828] {
+  id bigint [pk, increment]
+  issue_number varchar [unique]
+  work_order_id bigint [ref: > work_orders.id]
+  issued_at timestamp
+  issued_by bigint [ref: > users.id]
+  status document_status [default: 'draft']
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table material_issue_items [headercolor: #C62828] {
+  id bigint [pk, increment]
+  material_issue_id bigint [ref: > material_issues.id]
+  product_id bigint [ref: > products.id, note: 'raw_material atau wip dari tahap sebelumnya']
+  quantity decimal(18,4)
+  total_cost decimal(18,2) [note: 'Jumlah nilai stock_movements (lot FIFO) untuk baris ini']
+  quantity_consumed decimal(18,4) [default: 0, note: 'Jumlah yang sudah dibebankan ke production_results']
+}
+
+// Mencatat Hasil Produksi: membuat SATU jurnal saat disetujui
+// Dr Barang (Setengah) Jadi Belum Diterima, Dr Kerugian Produk Rusak (jika ada)
+// Cr Persediaan Bahan Baku / Barang Setengah Jadi, Cr BTKL Dibebankan, Cr BOP Dibebankan
+Table production_results [headercolor: #C62828] {
+  id bigint [pk, increment]
+  result_number varchar [unique]
+  work_order_id bigint [ref: > work_orders.id]
+  production_date date
+  shift varchar
+  quantity_good decimal(18,4)
+  quantity_reject decimal(18,4) [default: 0]
+  reject_type reject_type [default: 'normal']
+  reject_reason text [null, note: 'Keterangan cacat']
+  material_cost decimal(18,2)
+  labor_cost decimal(18,2)
+  overhead_cost decimal(18,2)
+  total_cost decimal(18,2)
+  output_cost decimal(18,2) [note: 'Debit ke akun transit sesuai jenis hasil: Barang Setengah Jadi Belum Diterima (wip) atau Barang Jadi Belum Diterima (finished_goods)']
+  abnormal_loss_cost decimal(18,2) [default: 0, note: 'Debit ke Kerugian Produk Rusak']
+  unit_cost decimal(18,4) [note: 'output_cost / quantity_good']
+  status production_result_status [default: 'draft']
+  notes text [null]
+  submitted_by bigint [ref: > users.id]
+  submitted_at timestamp [null]
+  verified_by bigint [ref: > users.id, null]
+  verified_at timestamp [null]
+  rejection_reason text [null]
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (work_order_id, production_date, shift) [unique]
+  }
+}
+
+Table production_result_materials [headercolor: #C62828] {
+  id bigint [pk, increment]
+  production_result_id bigint [ref: > production_results.id]
+  material_issue_item_id bigint [ref: > material_issue_items.id]
+  product_id bigint [ref: > products.id]
+  quantity decimal(18,4) [note: 'Terisi otomatis dari BOM, bisa diubah']
+  unit_cost decimal(18,4)
+  total_cost decimal(18,2)
+}
+
+Table production_result_labors [headercolor: #C62828] {
+  id bigint [pk, increment]
+  production_result_id bigint [ref: > production_results.id]
+  employee_id bigint [ref: > employees.id]
+  hours decimal(10,2) [note: 'Terisi otomatis dari work_order_labors, bisa diubah']
+  hourly_rate decimal(18,2)
+  total_cost decimal(18,2)
+}
+
+Table production_receipts [headercolor: #C62828] {
+  id bigint [pk, increment]
+  receipt_number varchar [unique]
+  production_result_id bigint [ref: - production_results.id]
+  product_id bigint [ref: > products.id, note: 'wip atau finished_goods']
+  quantity_handed_over decimal(18,4) [note: '= production_results.quantity_good']
+  quantity_received decimal(18,4) [null]
+  quantity_discrepancy decimal(18,4) [default: 0, note: 'handed_over - received']
+  discrepancy_reason text [null]
+  discrepancy_resolution discrepancy_resolution [default: 'none']
+  status production_receipt_status [default: 'pending']
+  received_by bigint [ref: > users.id, null]
+  received_at timestamp [null]
+  resolved_by bigint [ref: > users.id, null]
+  resolved_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+// ======================================================================
+// PENJUALAN & PENGIRIMAN (ERD 5)
+// Use case: Mengelola Data Pelanggan, Menyusun Pesanan Penjualan,
+//           Mencatat Pengiriman Penjualan, Menyusun Retur Penjualan,
+//           Melihat Laporan Penjualan
+// ======================================================================
+
+Table customers [headercolor: #6A1B9A] {
+  id bigint [pk, increment]
+  customer_code varchar [unique]
+  customer_name varchar
+  contact_person varchar
+  phone varchar
+  email varchar
+  address text
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table sales_orders [headercolor: #6A1B9A] {
+  id bigint [pk, increment]
+  so_number varchar [unique]
+  customer_id bigint [ref: > customers.id]
+  order_date date
+  expected_delivery_date date [null]
+  status so_status [default: 'draft']
+  total_amount decimal(18,2)
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table sales_order_items [headercolor: #6A1B9A] {
+  id bigint [pk, increment]
+  sales_order_id bigint [ref: > sales_orders.id]
+  product_id bigint [ref: > products.id]
+  quantity_ordered decimal(18,4)
+  quantity_delivered decimal(18,4) [default: 0]
+  quantity_returned decimal(18,4) [default: 0]
+  unit_price decimal(18,2)
+  subtotal decimal(18,2)
+}
+
+// Gudang: Mencatat Pengiriman Penjualan
+// Jurnal: Dr Harga Pokok Penjualan / Cr Persediaan Barang Jadi
+Table sales_deliveries [headercolor: #6A1B9A] {
+  id bigint [pk, increment]
+  delivery_number varchar [unique]
+  sales_order_id bigint [ref: > sales_orders.id]
+  delivered_at timestamp
+  delivered_by bigint [ref: > users.id]
+  status document_status [default: 'draft']
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table sales_delivery_items [headercolor: #6A1B9A] {
+  id bigint [pk, increment]
+  sales_delivery_id bigint [ref: > sales_deliveries.id]
+  sales_order_item_id bigint [ref: > sales_order_items.id]
+  product_id bigint [ref: > products.id, note: 'Hanya finished_goods']
+  quantity decimal(18,4)
+  cogs_total decimal(18,2) [note: 'HPP dari lot FIFO yang dipakai']
+}
+
+// Jurnal: Dr Retur Penjualan / Cr Piutang Usaha
+//         Dr Persediaan Barang Jadi / Cr Harga Pokok Penjualan
+Table sales_returns [headercolor: #6A1B9A] {
+  id bigint [pk, increment]
+  return_number varchar [unique]
+  sales_order_id bigint [ref: > sales_orders.id]
+  customer_id bigint [ref: > customers.id]
+  return_date date
+  reason text
+  total_amount decimal(18,2)
+  status document_status [default: 'draft']
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table sales_return_items [headercolor: #6A1B9A] {
+  id bigint [pk, increment]
+  sales_return_id bigint [ref: > sales_returns.id]
+  sales_delivery_item_id bigint [ref: > sales_delivery_items.id]
+  product_id bigint [ref: > products.id]
+  quantity decimal(18,4)
+  unit_price decimal(18,2)
+  unit_cost decimal(18,4) [note: 'HPP asal, agar pembalikan memakai biaya yang sama']
+  subtotal decimal(18,2)
+}
+
+// ======================================================================
+// AKUNTANSI (ERD 6)
+// Use case: Mengelola Akun Perusahaan, Mengelola Jurnal Umum, Melihat Laporan Laba Rugi,
+//           Menyusun Faktur Pembelian, Mencatat Pembayaran Pembelian,
+//           Menyusun Faktur Penjualan, Mencatat Pembayaran Penjualan
+// ======================================================================
+
+// Mengelola Akun Perusahaan (Chart of Accounts)
+// Akun yang dipakai jurnal otomatis diatur di konfigurasi aplikasi
+// (misalnya config/accounts.php): raw_material_inventory, wip_inventory,
+// finished_goods_inventory, wip_in_transit, fg_in_transit, applied_labor,
+// applied_overhead, spoilage_loss, discrepancy_loss, grni, purchase_price_variance,
+// vat_in, vat_out, accounts_payable, accounts_receivable, sales_revenue,
+// sales_return, cogs
+Table accounts [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  account_code varchar [unique]
+  account_name varchar
+  type account_type
+  normal_balance normal_balance
+  parent_id bigint [ref: > accounts.id, null]
+  is_active boolean [default: true]
+  created_at timestamp
+  updated_at timestamp
+}
+
+// Mengelola Jurnal Umum: jurnal otomatis (dari fitur lain), manual,
+// penyesuaian, penutup, dan saldo awal (dibedakan lewat entry_type)
+Table journal_entries [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  journal_number varchar [unique]
+  entry_date date
+  description text
+  entry_type journal_entry_type
+  source_type varchar [null, note: 'Polimorfik: production_result, production_receipt, purchase_invoice, dst.; null untuk jurnal manual, penyesuaian, penutup, dan saldo awal']
+  source_id bigint [null]
+  status journal_status [default: 'posted']
+  reversal_of_id bigint [ref: > journal_entries.id, null, note: 'Koreksi dilakukan dengan jurnal balik, bukan mengubah jurnal']
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+}
+
+// Total debit harus sama dengan total kredit per jurnal
+Table journal_entry_lines [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  journal_entry_id bigint [ref: > journal_entries.id]
+  account_id bigint [ref: > accounts.id]
+  debit decimal(18,2) [default: 0]
+  credit decimal(18,2) [default: 0]
+  memo varchar [null]
+}
+
+// Aturan: 1 faktur = 1 penerimaan (satu batch penerimaan).
+// Jurnal saat faktur:  Dr Barang Diterima Belum Difakturkan (receipt_value)
+// Saat diposting, purchase_order_items.quantity_invoiced diperbarui dari baris penerimaan batch tersebut.
+Table purchase_invoices [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  invoice_number varchar [note: 'Nomor faktur dari pemasok']
+  internal_number varchar [unique]
+  purchase_order_id bigint [ref: > purchase_orders.id]
+  purchase_order_receipt_batch_id bigint [ref: - purchase_order_receipt_batches.id, unique, note: '3-way match: PO - receipt - faktur']
+  supplier_id bigint [ref: > suppliers.id]
+  invoice_date date
+  due_date date
+  subtotal decimal(18,2) [note: 'Jumlah yang ditagih pemasok, sebelum pajak']
+  receipt_value decimal(18,2) [note: 'Jumlah total_value baris penerimaan; dihapus dari Barang Diterima Belum Difakturkan']
+  price_variance decimal(18,2) [default: 0, note: 'subtotal - receipt_value; diposting ke Selisih Harga Pembelian']
+  tax_amount decimal(18,2) [default: 0]
+  total_amount decimal(18,2)
+  amount_paid decimal(18,2) [default: 0]
+  status invoice_status [default: 'unpaid']
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+// Jurnal: Dr Utang Usaha / Cr Kas atau Bank
+Table purchase_payments [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  payment_number varchar [unique]
+  purchase_invoice_id bigint [ref: > purchase_invoices.id]
+  payment_date date
+  amount decimal(18,2)
+  method payment_method
+  cash_account_id bigint [ref: > accounts.id, note: 'Akun Kas / Bank yang dipakai']
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+}
+
+// Aturan: 1 faktur = 1 pengiriman (satu sales delivery).
+// Jurnal: Dr Piutang Usaha / Cr Penjualan (subtotal), Cr PPN Keluaran (tax_amount)
+Table sales_invoices [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  invoice_number varchar [unique]
+  sales_order_id bigint [ref: > sales_orders.id]
+  sales_delivery_id bigint [ref: - sales_deliveries.id, unique, note: 'Hanya menagih yang sudah dikirim']
+  customer_id bigint [ref: > customers.id]
+  invoice_date date
+  due_date date
+  subtotal decimal(18,2)
+  tax_amount decimal(18,2) [default: 0]
+  total_amount decimal(18,2)
+  amount_paid decimal(18,2) [default: 0]
+  status invoice_status [default: 'unpaid']
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+// Jurnal: Dr Kas atau Bank / Cr Piutang Usaha
+Table sales_payments [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  payment_number varchar [unique]
+  sales_invoice_id bigint [ref: > sales_invoices.id]
+  payment_date date
+  amount decimal(18,2)
+  method payment_method
+  cash_account_id bigint [ref: > accounts.id]
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+}
+
+// ============================== GRUP TABEL ==============================
+
+TableGroup Pengguna_Karyawan {
+  users
+  employees
+  labor_rates
+}
+
+TableGroup Pembelian {
+  suppliers
+  product_supplier
+  purchase_orders
+  purchase_order_items
+  purchase_order_receipt_batches
+  purchase_order_receipts
+  purchase_returns
+  purchase_return_items
+}
+
+TableGroup Persediaan {
+  products
+  inventory_lots
+  stock_movements
+}
+
+TableGroup Produksi {
+  production_formulas
+  production_formula_items
+  work_orders
+  work_order_labors
+  material_issues
+  material_issue_items
+  production_results
+  production_result_materials
+  production_result_labors
+  production_receipts
+}
+
+TableGroup Penjualan {
+  customers
+  sales_orders
+  sales_order_items
+  sales_deliveries
+  sales_delivery_items
+  sales_returns
+  sales_return_items
+}
+
+TableGroup Akuntansi {
+  accounts
+  journal_entries
+  journal_entry_lines
+  purchase_invoices
+  purchase_payments
+  sales_invoices
+  sales_payments
+}

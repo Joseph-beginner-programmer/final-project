@@ -48,11 +48,14 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/purchasing/orders/{purchaseOrder}', 'pages::purchasing.orders.show')
         ->name('purchasing.orders.show');
     
-    Route::livewire('/warehouse/inbound/purchase', 'pages::warehouse.inbound.purchasing.list')
-        ->name('warehouse.inbound.purchasing.list');
-        
-    Route::livewire('/warehouse/inbound/purchase/{purchaseOrder}', 'pages::warehouse.inbound.purchasing.detail')
-        ->name('warehouse.inbound.purchase.detail');
+    Route::livewire('/warehouse/inbound/item-receipts', 'pages::warehouse.inbound.item-receipts.list')
+        ->name('warehouse.inbound.item-receipts.list');
+
+    Route::livewire('/warehouse/inbound/item-receipts/create/{purchaseOrder?}', 'pages::warehouse.inbound.item-receipts.create')
+        ->name('warehouse.inbound.item-receipts.create');
+
+    Route::livewire('/warehouse/inbound/item-receipts/{purchaseOrder}', 'pages::warehouse.inbound.item-receipts.detail')
+        ->name('warehouse.inbound.item-receipts.detail');
 
 });
 

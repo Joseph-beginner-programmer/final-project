@@ -5,6 +5,7 @@ use App\Actions\Purchasing\RemovePurchaseOrderItemAction;
 use App\Actions\Purchasing\SubmitPurchaseOrderForApprovalAction;
 use App\Actions\Purchasing\UpdatePurchaseOrderItemAction;
 use App\Actions\Purchasing\ApprovePurchaseOrderAction;
+use App\Actions\Purchasing\ClosePurchaseOrderAction;
 use App\Actions\Purchasing\RejectPurchaseOrderAction;
 use App\Actions\Purchasing\ReopenPurchaseOrderAction;
 use App\Enums\PurchaseOrderStatus;
@@ -35,11 +36,13 @@ new #[Title('Purchase Order Details')] class extends Component {
 
     public string $rejectionReason = '';
 
+    public string $closeReason = '';
+
     public function mount(PurchaseOrder $purchaseOrder): void
     {
         Gate::authorize('view', $purchaseOrder);
 
-        $this->purchaseOrder = $purchaseOrder->load(['supplier', 'createdBy', 'approvedBy', 'items.product']);
+        $this->purchaseOrder = $purchaseOrder->load(['supplier', 'createdBy', 'approvedBy', 'closedBy', 'items.product']);
 
         $this->syncItemsFromModel();
     }
@@ -78,6 +81,10 @@ new #[Title('Purchase Order Details')] class extends Component {
             'newItem.product_id' => ['required', 'exists:products,id'],
             'newItem.quantity_ordered' => ['required', 'numeric', 'gt:0'],
             'newItem.unit_price' => ['required', 'numeric', 'gt:0'],
+        ], attributes: [
+            'newItem.product_id' => __('Product'),
+            'newItem.quantity_ordered' => __('Qty'),
+            'newItem.unit_price' => __('Unit Price'),
         ]);
 
         try {
@@ -111,6 +118,9 @@ new #[Title('Purchase Order Details')] class extends Component {
         $this->validate([
             "items.{$itemId}.quantity_ordered" => ['required', 'numeric', 'gt:0'],
             "items.{$itemId}.unit_price" => ['required', 'numeric', 'gt:0'],
+        ], attributes: [
+            "items.{$itemId}.quantity_ordered" => __('Qty'),
+            "items.{$itemId}.unit_price" => __('Unit Price'),
         ]);
 
         $item = $this->purchaseOrder->items->firstWhere('id', $itemId);
@@ -183,6 +193,8 @@ new #[Title('Purchase Order Details')] class extends Component {
 
         $this->validate([
             'rejectionReason' => ['required', 'string', 'max:1000'],
+        ], attributes: [
+            'rejectionReason' => __('Rejection reason'),
         ]);
 
         app(RejectPurchaseOrderAction::class)->handle($this->purchaseOrder, Auth::id(), $this->rejectionReason);
@@ -205,6 +217,25 @@ new #[Title('Purchase Order Details')] class extends Component {
         Flux::toast(variant: 'success', text: __('Purchase order moved back to Draft.'));
     }
 
+    public function close(): void
+    {
+        Gate::authorize('close', $this->purchaseOrder);
+
+        $this->validate([
+            'closeReason' => ['required', 'string', 'max:1000'],
+        ], attributes: [
+            'closeReason' => __('Close reason'),
+        ]);
+
+        app(ClosePurchaseOrderAction::class)->handle($this->purchaseOrder, Auth::id(), $this->closeReason);
+
+        $this->purchaseOrder->refresh();
+        $this->closeReason = '';
+        $this->modal('close-po')->close();
+
+        Flux::toast(variant: 'success', text: __('Purchase order closed.'));
+    }
+
     public function formatRupiah(string $amount): string
     {
         return 'Rp '.number_format((float) $amount, 0, ',', '.');
@@ -220,9 +251,23 @@ new #[Title('Purchase Order Details')] class extends Component {
             PurchaseOrderStatus::PartiallyReceived => 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-500/10 dark:text-purple-400 dark:border-purple-500/20',
             PurchaseOrderStatus::FullyReceived => 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20',
             PurchaseOrderStatus::Cancelled => 'bg-zinc-100 text-zinc-500 border-zinc-200 line-through dark:bg-white/5 dark:text-zinc-500 dark:border-white/10',
+            PurchaseOrderStatus::Closed => 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-500/10 dark:text-slate-400 dark:border-slate-500/20',
         };
     }
 }; ?>
+
+<style>
+    @keyframes fade-slide-up {
+        from { opacity: 0; transform: translateY(10px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+    .motion-safe\:animate-fade-slide-up {
+        animation: fade-slide-up .5s cubic-bezier(.16,1,.3,1) both;
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .motion-safe\:animate-fade-slide-up { animation: none; }
+    }
+</style>
 
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
@@ -235,16 +280,13 @@ new #[Title('Purchase Order Details')] class extends Component {
     @php($newItemProduct = $this->availableProducts->firstWhere('id', (int) ($newItem['product_id'] ?? 0)))
 
     {{-- Header --}}
-    <div class="mt-3 flex flex-wrap items-start justify-between gap-4">
+    <div class="mt-3 flex flex-wrap items-start justify-between gap-4 motion-safe:animate-fade-slide-up">
         <div>
-            <p class="font-mono text-[11px] font-semibold tracking-[0.2em] uppercase text-accent mb-2">
-                {{ __('Purchasing') }} &middot; {{ __('Order Detail') }}
-            </p>
             <div class="flex flex-wrap items-center gap-3">
                 <h1 class="font-data text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">
                     {{ $purchaseOrder->po_number }}
                 </h1>
-                <span class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium {{ $this->statusBadgeClasses($purchaseOrder->status) }}">
+                <span wire:key="status-badge-{{ $purchaseOrder->status->value }}" wire:transition class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium {{ $this->statusBadgeClasses($purchaseOrder->status) }}">
                     {{ $purchaseOrder->status->label() }}
                 </span>
             </div>
@@ -258,7 +300,7 @@ new #[Title('Purchase Order Details')] class extends Component {
                     <flux:button
                         variant="ghost"
                         icon="x-mark"
-                        class="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10"
+                        class="text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10 active:scale-[0.95]"
                     >
                         {{ __('Reject') }}
                     </flux:button>
@@ -266,19 +308,27 @@ new #[Title('Purchase Order Details')] class extends Component {
             @endcan
 
             @can('open', $purchaseOrder)
-                <flux:button variant="filled" icon="arrow-uturn-left" wire:click="reopen" wire:loading.attr="disabled" wire:target="reopen">
+                <flux:button variant="filled" icon="arrow-uturn-left" wire:click="reopen" wire:loading.attr="disabled" wire:target="reopen" class="active:scale-[0.95]">
                     {{ __('Move to Draft') }}
                 </flux:button>
             @endcan
 
+            @can('close', $purchaseOrder)
+                <flux:modal.trigger name="close-po">
+                    <flux:button variant="filled" icon="archive-box" class="active:scale-[0.95]">
+                        {{ __('Close') }}
+                    </flux:button>
+                </flux:modal.trigger>
+            @endcan
+
             @can('approve', $purchaseOrder)
-                <flux:button variant="primary" icon="check" wire:click="approve" wire:loading.attr="disabled" wire:target="approve">
+                <flux:button variant="primary" icon="check" wire:click="approve" wire:loading.attr="disabled" wire:target="approve" class="active:scale-[0.95]">
                     {{ __('Approve') }}
                 </flux:button>
             @endcan
 
             @can('submit', $purchaseOrder)
-                <flux:button variant="primary" icon="paper-airplane" wire:click="submit" wire:loading.attr="disabled" wire:target="submit">
+                <flux:button variant="primary" icon="paper-airplane" wire:click="submit" wire:loading.attr="disabled" wire:target="submit" class="active:scale-[0.95]">
                     {{ __('Submit for Approval') }}
                 </flux:button>
             @endcan
@@ -299,11 +349,36 @@ new #[Title('Purchase Order Details')] class extends Component {
 
                 <div class="flex justify-end gap-2">
                     <flux:modal.close>
-                        <flux:button variant="filled">{{ __('Cancel') }}</flux:button>
+                        <flux:button variant="filled" class="active:scale-[0.95]">{{ __('Cancel') }}</flux:button>
                     </flux:modal.close>
 
-                    <flux:button variant="danger" type="submit" wire:loading.attr="disabled" wire:target="reject">
+                    <flux:button variant="danger" type="submit" wire:loading.attr="disabled" wire:target="reject" class="active:scale-[0.95]">
                         {{ __('Reject Purchase Order') }}
+                    </flux:button>
+                </div>
+            </form>
+        </flux:modal>
+    @endcan
+
+    @can('close', $purchaseOrder)
+        <flux:modal name="close-po" :show="$errors->has('closeReason')" focusable class="max-w-lg">
+            <form wire:submit="close" class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Close this purchase order?') }}</flux:heading>
+                    <flux:subheading>
+                        {{ __('Closing marks it done, whether fully received or not — no further status changes will be possible. Please explain why it\'s being closed.') }}
+                    </flux:subheading>
+                </div>
+
+                <flux:textarea wire:model="closeReason" :label="__('Close reason')" rows="4" />
+
+                <div class="flex justify-end gap-2">
+                    <flux:modal.close>
+                        <flux:button variant="filled" class="active:scale-[0.95]">{{ __('Cancel') }}</flux:button>
+                    </flux:modal.close>
+
+                    <flux:button variant="danger" type="submit" wire:loading.attr="disabled" wire:target="close" class="active:scale-[0.95]">
+                        {{ __('Close Purchase Order') }}
                     </flux:button>
                 </div>
             </form>
@@ -315,7 +390,7 @@ new #[Title('Purchase Order Details')] class extends Component {
 
     {{-- Info cards --}}
     <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-4">
+        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{{ __('Supplier') }}</p>
             <p class="font-data text-xs text-accent">{{ $purchaseOrder->supplier->supplier_code }}</p>
             <p class="font-display text-sm font-bold text-zinc-900 dark:text-white mt-0.5">{{ $purchaseOrder->supplier->supplier_name }}</p>
@@ -331,7 +406,7 @@ new #[Title('Purchase Order Details')] class extends Component {
             </dl>
         </div>
 
-        <div class="rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-4">
+        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{{ __('Schedule') }}</p>
             <dl class="space-y-1.5 text-xs">
                 <div class="flex justify-between gap-2">
@@ -361,10 +436,20 @@ new #[Title('Purchase Order Details')] class extends Component {
                         <dd class="text-zinc-700 dark:text-zinc-300">{{ $purchaseOrder->approvedBy->name }}</dd>
                     </div>
                 @endif
+                @if ($purchaseOrder->closedBy)
+                    <div class="flex justify-between gap-2">
+                        <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Closed By') }}</dt>
+                        <dd class="text-zinc-700 dark:text-zinc-300">{{ $purchaseOrder->closedBy->name }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-2">
+                        <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Close Reason') }}</dt>
+                        <dd class="text-zinc-700 dark:text-zinc-300 text-right">{{ $purchaseOrder->close_reason }}</dd>
+                    </div>
+                @endif
             </dl>
         </div>
 
-        <div class="rounded-md border border-zinc-200 dark:border-white/10 border-s-[3px] border-s-accent bg-white dark:bg-zinc-900 overflow-hidden flex flex-col h-full">
+        <div class="rounded-xl border-s-[3px] border-s-accent bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 overflow-hidden flex flex-col h-full motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
             <div class="p-4 flex-1">
                 <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{{ __('Order Summary') }}</p>
                 <dl class="space-y-1.5 text-xs">
@@ -376,19 +461,19 @@ new #[Title('Purchase Order Details')] class extends Component {
             </div>
             <div class="px-4 py-3.5 bg-accent mt-auto">
                 <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Total') }}</p>
-                <p class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah((string) $purchaseOrder->total_amount) }}</p>
+                <p wire:key="po-total-{{ $purchaseOrder->total_amount }}" wire:transition.duration.300ms class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah((string) $purchaseOrder->total_amount) }}</p>
             </div>
         </div>
     </div>
 
     {{-- Line items --}}
-    <div class="mt-8">
+    <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 130ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">
             {{ __('Line Items') }}
         </h2>
 
         {{-- Desktop/tablet table --}}
-        <div class="hidden lg:block overflow-x-auto rounded-md border border-zinc-200 dark:border-white/10">
+        <div class="hidden lg:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <table class="w-full text-xs border-collapse">
                 <thead>
                     <tr class="text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10">
@@ -404,7 +489,7 @@ new #[Title('Purchase Order Details')] class extends Component {
                 </thead>
                 <tbody>
                     @forelse ($purchaseOrder->items as $item)
-                        <tr wire:key="po-item-{{ $item->id }}" class="border-b border-zinc-100 dark:border-white/5 last:border-0 align-top">
+                        <tr wire:key="po-item-{{ $item->id }}" wire:transition class="border-b border-zinc-100 dark:border-white/5 last:border-0 align-top">
                             <td class="py-2 px-3">
                                 <p class="font-data text-accent">{{ $item->product->product_code }}</p>
                                 <p class="text-zinc-700 dark:text-zinc-300">{{ $item->product->product_name }}</p>
@@ -444,8 +529,8 @@ new #[Title('Purchase Order Details')] class extends Component {
                             </td>
                             @can('update', $purchaseOrder)
                                 <td class="py-2 px-3 pt-2 text-right whitespace-nowrap">
-                                    <flux:button size="sm" variant="ghost" icon="check" wire:click="updateItem({{ $item->id }})" wire:loading.attr="disabled" wire:target="updateItem({{ $item->id }})" />
-                                    <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeItem({{ $item->id }})" wire:loading.attr="disabled" wire:target="removeItem({{ $item->id }})" />
+                                    <flux:button size="sm" variant="ghost" icon="check" wire:click="updateItem({{ $item->id }})" wire:loading.attr="disabled" wire:target="updateItem({{ $item->id }})" class="active:scale-[0.95]" />
+                                    <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeItem({{ $item->id }})" wire:loading.attr="disabled" wire:target="removeItem({{ $item->id }})" class="active:scale-[0.95]" />
                                 </td>
                             @endcan
                         </tr>
@@ -494,7 +579,7 @@ new #[Title('Purchase Order Details')] class extends Component {
                             <td class="py-2 px-3"></td>
                             <td class="py-2 px-3"></td>
                             <td class="py-2 px-3 text-right align-top">
-                                <flux:button size="sm" variant="ghost" icon="plus" wire:click="addItem" wire:loading.attr="disabled" wire:target="addItem">
+                                <flux:button size="sm" variant="ghost" icon="plus" wire:click="addItem" wire:loading.attr="disabled" wire:target="addItem" class="active:scale-[0.95]">
                                     {{ __('Add') }}
                                 </flux:button>
                             </td>
@@ -507,16 +592,16 @@ new #[Title('Purchase Order Details')] class extends Component {
         {{-- Mobile/narrow-tablet card list — the table's inline-edit columns don't
              fit below `lg` without horizontal scroll, so items stack vertically
              with the same editable fields instead. --}}
-        <div class="mt-4 lg:hidden rounded-md border border-zinc-200 dark:border-white/10 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
+        <div class="mt-4 lg:hidden rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
             @forelse ($purchaseOrder->items as $item)
-                <div wire:key="po-item-card-{{ $item->id }}" class="p-4">
+                <div wire:key="po-item-card-{{ $item->id }}" wire:transition class="p-4">
                     <div class="flex items-start justify-between gap-2">
                         <div>
                             <p class="font-data text-xs text-accent">{{ $item->product->product_code }}</p>
                             <p class="text-sm text-zinc-700 dark:text-zinc-300">{{ $item->product->product_name }}</p>
                         </div>
                         @can('update', $purchaseOrder)
-                            <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeItem({{ $item->id }})" wire:loading.attr="disabled" wire:target="removeItem({{ $item->id }})" />
+                            <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeItem({{ $item->id }})" wire:loading.attr="disabled" wire:target="removeItem({{ $item->id }})" class="active:scale-[0.95]" />
                         @endcan
                     </div>
 
@@ -544,7 +629,7 @@ new #[Title('Purchase Order Details')] class extends Component {
                             </span>
                             <span class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatRupiah((string) $item->subtotal) }}</span>
                         </div>
-                        <flux:button size="sm" variant="ghost" icon="check" class="w-full mt-2" wire:click="updateItem({{ $item->id }})" wire:loading.attr="disabled" wire:target="updateItem({{ $item->id }})">
+                        <flux:button size="sm" variant="ghost" icon="check" class="w-full mt-2 active:scale-[0.97]" wire:click="updateItem({{ $item->id }})" wire:loading.attr="disabled" wire:target="updateItem({{ $item->id }})">
                             {{ __('Save changes') }}
                         </flux:button>
                     @else
@@ -608,7 +693,7 @@ new #[Title('Purchase Order Details')] class extends Component {
                     @error('newItem.quantity_ordered') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
                     @error('newItem.unit_price') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
 
-                    <flux:button size="sm" variant="primary" icon="plus" class="w-full mt-3" wire:click="addItem" wire:loading.attr="disabled" wire:target="addItem">
+                    <flux:button size="sm" variant="primary" icon="plus" class="w-full mt-3 active:scale-[0.97]" wire:click="addItem" wire:loading.attr="disabled" wire:target="addItem">
                         {{ __('Add Item') }}
                     </flux:button>
                 </div>

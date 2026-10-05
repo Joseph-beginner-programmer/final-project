@@ -34,9 +34,4 @@ class PurchaseOrderReceiptBatch extends Model
     {
         return $this->hasMany(PurchaseOrderReceipt::class);
     }
-
-    public function purchaseOrderReceiptAttachments(): HasMany
-    {
-        return $this->hasMany(PurchaseOrderReceiptAttachment::class);
-    }
 }

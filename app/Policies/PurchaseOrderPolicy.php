@@ -73,6 +73,9 @@ class PurchaseOrderPolicy
     public function close(User $user, PurchaseOrder $po): bool
     {
         return $user->can('purchasing.close')
-            && $po->status === PurchaseOrderStatus::PartiallyReceived;
+            && in_array($po->status, [
+                PurchaseOrderStatus::PartiallyReceived,
+                PurchaseOrderStatus::FullyReceived,
+            ], true);
     }
 }

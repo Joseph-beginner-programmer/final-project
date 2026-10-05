@@ -17,7 +17,7 @@
         </flux:sidebar.header>
 
         <flux:sidebar.nav>
-            @foreach (UserRole::operational() as $role)
+            @foreach (UserRole::cases() as $role)
                 @can('view-dashboard', $role)
                     <flux:sidebar.group :heading="$role->label()" expandable class="grid">
                         <flux:sidebar.item icon="home" :href="route($role->dashboardRoute())"
@@ -26,20 +26,16 @@
                         </flux:sidebar.item>
 
                         @if ($role === UserRole::Purchasing)
-                            <flux:sidebar.item icon="document-plus" :href="route('purchasing.orders.create')"
-                                :current="request()->routeIs('purchasing.orders.create')" wire:navigate>
-                                {{ __('Create Purchase Order') }}
-                            </flux:sidebar.item>
                             <flux:sidebar.item icon="queue-list" :href="route('purchasing.orders.list')"
-                                :current="request()->routeIs('purchasing.orders.list')" wire:navigate>
-                                {{ __('Purchase Order List') }}
+                                :current="request()->routeIs('purchasing.orders.list', 'purchasing.orders.create')" wire:navigate>
+                                {{ __('Purchase Order') }}
                             </flux:sidebar.item>
                         @endif
 
                         @if ($role === UserRole::Warehouse)
-                            <flux:sidebar.item icon="inbox-arrow-down" :href="route('warehouse.inbound.purchasing.list')" 
-                            :current="request()->routeIs('warehouse.inbound.purchasing.list')" wire:navigate>
-                                {{ __('Purchase Order Receipt') }}
+                            <flux:sidebar.item icon="inbox-arrow-down" :href="route('warehouse.inbound.item-receipts.create')"
+                            :current="request()->routeIs('warehouse.inbound.item-receipts.list', 'warehouse.inbound.item-receipts.create')" wire:navigate>
+                                {{ __('Item Receipt') }}
                             </flux:sidebar.item>
                         @endif
                     </flux:sidebar.group>

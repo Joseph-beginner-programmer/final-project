@@ -35,9 +35,9 @@ class Product extends Model
         return $this->hasMany(StockMovement::class);
     }
 
-    public function rawMaterialLots(): HasMany
+    public function inventoryLots(): HasMany
     {
-        return $this->hasMany(RawMaterialLot::class);
+        return $this->hasMany(InventoryLot::class);
     }
 
     public function suppliers(): BelongsToMany

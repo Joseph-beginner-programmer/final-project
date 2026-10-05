@@ -9,10 +9,11 @@ use App\Enums\Direction;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\StockMovementType;
 use App\Exceptions\InvalidReceiptQuantityException;
+use App\Models\InventoryLot;
 use App\Models\PurchaseOrderItem;
 use App\Models\PurchaseOrderReceipt;
-use App\Models\RawMaterialLot;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ReceivePurchaseOrderAction
 {
@@ -31,11 +32,19 @@ class ReceivePurchaseOrderAction
                 'purchase_order_receipt_batch_id' => $data->purchaseOrderReceiptBatchId
             ]);
 
-            RawMaterialLot::create([
+            $lot = InventoryLot::create([
+                'lot_number' => (string) Str::uuid(), // placeholder; real number needs this row's own id, set below
                 'product_id' => $poItem->product->id,
-                'purchase_order_receipt_id' => $receipt->id,
-                'remaining_stock' => $data->quantityReceived,
+                'source_type' => 'purchase_order_receipt',
+                'source_id' => $receipt->id,
+                'quantity_initial' => $data->quantityReceived,
+                'quantity_remaining' => $data->quantityReceived,
+                'unit_cost' => $poItem->unit_price,
+                'value_remaining' => bcmul($data->quantityReceived, (string) $poItem->unit_price, 2),
+                'received_at' => now(),
             ]);
+            $lot->lot_number = sprintf('LOT-%s-%06d', $lot->received_at->format('Y'), $lot->id);
+            $lot->save();
 
             $poItem->syncQuantityReceived();
             $poItem->save();
