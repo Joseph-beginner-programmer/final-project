@@ -57,6 +57,28 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/warehouse/inbound/item-receipts/{purchaseOrder}', 'pages::warehouse.inbound.item-receipts.detail')
         ->name('warehouse.inbound.item-receipts.detail');
 
+    // literal /create must stay above the {workOrder} wildcard, or it would be captured as an id
+    Route::livewire('/production/work-orders', 'pages::production.work-orders.list')
+        ->name('production.work-orders.list');
+
+    Route::livewire('/production/work-orders/create', 'pages::production.work-orders.create')
+        ->name('production.work-orders.create');
+
+    Route::livewire('/production/work-orders/{workOrder}', 'pages::production.work-orders.show')
+        ->name('production.work-orders.show');
+
+    Route::get('/production/work-orders/{workOrder}/print', \App\Http\Controllers\Production\PrintWorkOrderController::class)
+        ->name('production.work-orders.print');
+
+    Route::livewire('/management/employees', 'pages::management.employees.list')
+        ->name('management.employees.list');
+
+    Route::livewire('/accounting/labor-rates', 'pages::accounting.labor-rates.list')
+        ->name('accounting.labor-rates.list');
+
+    Route::livewire('/accounting/overhead-rates', 'pages::accounting.overhead-rates.list')
+        ->name('accounting.overhead-rates.list');
+
 });
 
 require __DIR__.'/settings.php';

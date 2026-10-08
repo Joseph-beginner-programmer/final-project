@@ -55,6 +55,24 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('warehouse.receive', function ($user) {
             return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
         });
+        Gate::define('production.view', function ($user) {
+            return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
+        });
+        Gate::define('production.create', function ($user) {
+            return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
+        });
+        // use case: Manajemen — Mengelola Data Karyawan
+        Gate::define('employees.manage', function ($user) {
+            return in_array($user->role, [UserRole::Manager], true);
+        });
+        // use case: Akuntansi — Mengelola Biaya Tenaga Kerja
+        Gate::define('labor-rates.manage', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
+        // use case: Akuntansi — Mengelola Biaya Overhead
+        Gate::define('overhead.manage', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
 
         //morph
         Relation::morphMap([

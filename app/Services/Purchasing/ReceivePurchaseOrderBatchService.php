@@ -9,6 +9,7 @@ use App\Exceptions\PurchaseOrderReceiptBatchRequiresItemsException;
 use App\Exceptions\PurchaseOrderReceiptBatchRequiresAttachmentException;
 use App\Models\PurchaseOrderReceiptBatch;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ReceivePurchaseOrderBatchService
 {
@@ -27,19 +28,23 @@ class ReceivePurchaseOrderBatchService
                 throw new PurchaseOrderReceiptBatchRequiresAttachmentException();
             }
 
-            $batch = PurchaseOrderReceiptBatch::create([
+            $batch = new PurchaseOrderReceiptBatch([
                 'purchase_order_id' => $data->purchaseOrderId,
                 'received_by' => $data->receivedBy,
                 'received_at' => now(),
                 'attachment_path' => $data->attachmentPath,
             ]);
+            $batch->receipt_number = (string) Str::uuid(); // placeholder; real number needs this row's own id, set below
+            $batch->save();
+
+            $batch->receipt_number = sprintf('RCV-%s-%06d', $batch->received_at->format('Y'), $batch->id);
+            $batch->save();
 
             foreach ($itemsToReceive as $item) {
                 app(ReceivePurchaseOrderAction::class)->handle(new ReceivePurchaseOrderData(
                     purchaseOrderItemId: $item['purchaseOrderItemId'],
                     quantityReceived: $item['quantityReceived'],
                     receivedBy: $data->receivedBy,
-                    receiptCondition: $item['receiptCondition'],
                     purchaseOrderReceiptBatchId: $batch->id,
                 ));
             }

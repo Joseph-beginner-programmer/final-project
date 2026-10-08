@@ -385,8 +385,8 @@ new #[Title('Purchase Order Details')] class extends Component {
         </flux:modal>
     @endcan
 
-    @error('items') <flux:error class="mt-3">{{ $message }}</flux:error> @enderror
-    @error('newItem') <flux:error class="mt-3">{{ $message }}</flux:error> @enderror
+    @error('items') <flux:error class="mt-3" :message="$message" /> @enderror
+    @error('newItem') <flux:error class="mt-3" :message="$message" /> @enderror
 
     {{-- Info cards --}}
     <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -505,7 +505,7 @@ new #[Title('Purchase Order Details')] class extends Component {
                             <td class="py-2 px-3 w-32">
                                 @can('update', $purchaseOrder)
                                     <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model="items.{{ $item->id }}.quantity_ordered" :loading="false" />
-                                    @error("items.{$item->id}.quantity_ordered") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                                    @error("items.{$item->id}.quantity_ordered") <flux:error class="mt-1" :message="$message" /> @enderror
                                 @else
                                     <p class="text-right font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $item->quantity_ordered }}</p>
                                 @endcan
@@ -513,7 +513,7 @@ new #[Title('Purchase Order Details')] class extends Component {
                             <td class="py-2 px-3 w-40">
                                 @can('update', $purchaseOrder)
                                     <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model="items.{{ $item->id }}.unit_price" :loading="false"/>
-                                    @error("items.{$item->id}.unit_price") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                                    @error("items.{$item->id}.unit_price") <flux:error class="mt-1" :message="$message" /> @enderror
                                 @else
                                     <p class="text-right font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $this->formatRupiah((string) $item->unit_price) }}</p>
                                 @endcan
@@ -566,15 +566,15 @@ new #[Title('Purchase Order Details')] class extends Component {
                                         @endif
                                     </p>
                                 @endif
-                                @error('newItem.product_id') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                                @error('newItem.product_id') <flux:error class="mt-1" :message="$message" /> @enderror
                             </td>
                             <td class="py-2 px-3 w-32 align-top">
                                 <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model="newItem.quantity_ordered" :loading="false" />
-                                @error('newItem.quantity_ordered') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                                @error('newItem.quantity_ordered') <flux:error class="mt-1" :message="$message" /> @enderror
                             </td>
                             <td class="py-2 px-3 w-40 align-top">
                                 <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model.live="newItem.unit_price" :loading="false" />
-                                @error('newItem.unit_price') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                                @error('newItem.unit_price') <flux:error class="mt-1" :message="$message" /> @enderror
                             </td>
                             <td class="py-2 px-3"></td>
                             <td class="py-2 px-3"></td>
@@ -615,12 +615,12 @@ new #[Title('Purchase Order Details')] class extends Component {
                     @endif
 
                     @can('update', $purchaseOrder)
-                        <div class="grid grid-cols-2 gap-3 mt-3">
+                        <div class="grid grid-cols-2 items-start gap-3 mt-3">
                             <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" :label="__('Qty')" input:class="font-data tabular-nums" wire:model="items.{{ $item->id }}.quantity_ordered" :loading="false" />
                             <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" :label="__('Unit Price')" input:class="font-data tabular-nums" wire:model="items.{{ $item->id }}.unit_price" :loading="false" />
                         </div>
-                        @error("items.{$item->id}.quantity_ordered") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
-                        @error("items.{$item->id}.unit_price") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                        @error("items.{$item->id}.quantity_ordered") <flux:error class="mt-1" :message="$message" /> @enderror
+                        @error("items.{$item->id}.unit_price") <flux:error class="mt-1" :message="$message" /> @enderror
 
                         <div class="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-zinc-100 dark:border-white/10 text-xs">
                             <span class="inline-flex items-center gap-1.5 font-data tabular-nums text-zinc-500 dark:text-zinc-400">
@@ -684,14 +684,14 @@ new #[Title('Purchase Order Details')] class extends Component {
                             @endif
                         </p>
                     @endif
-                    @error('newItem.product_id') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                    @error('newItem.product_id') <flux:error class="mt-1" :message="$message" /> @enderror
 
-                    <div class="grid grid-cols-2 gap-3 mt-3">
+                    <div class="grid grid-cols-2 items-start gap-3 mt-3">
                         <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" :label="__('Qty')" input:class="font-data tabular-nums" wire:model="newItem.quantity_ordered" :loading="false" />
                         <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" :label="__('Unit Price')" input:class="font-data tabular-nums" wire:model.live="newItem.unit_price" :loading="false" />
                     </div>
-                    @error('newItem.quantity_ordered') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
-                    @error('newItem.unit_price') <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                    @error('newItem.quantity_ordered') <flux:error class="mt-1" :message="$message" /> @enderror
+                    @error('newItem.unit_price') <flux:error class="mt-1" :message="$message" /> @enderror
 
                     <flux:button size="sm" variant="primary" icon="plus" class="w-full mt-3 active:scale-[0.97]" wire:click="addItem" wire:loading.attr="disabled" wire:target="addItem">
                         {{ __('Add Item') }}

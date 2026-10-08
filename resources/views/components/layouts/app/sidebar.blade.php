@@ -32,6 +32,31 @@
                             </flux:sidebar.item>
                         @endif
 
+                        @if ($role === UserRole::Accounting)
+                            <flux:sidebar.item icon="banknotes" :href="route('accounting.labor-rates.list')"
+                                :current="request()->routeIs('accounting.labor-rates.*')" wire:navigate>
+                                {{ __('Labor Rates') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="bolt" :href="route('accounting.overhead-rates.list')"
+                                :current="request()->routeIs('accounting.overhead-rates.*')" wire:navigate>
+                                {{ __('Overhead Rates') }}
+                            </flux:sidebar.item>
+                        @endif
+
+                        @if ($role === UserRole::Manager)
+                            <flux:sidebar.item icon="users" :href="route('management.employees.list')"
+                                :current="request()->routeIs('management.employees.*')" wire:navigate>
+                                {{ __('Employees') }}
+                            </flux:sidebar.item>
+                        @endif
+
+                        @if ($role === UserRole::Production)
+                            <flux:sidebar.item icon="wrench-screwdriver" :href="route('production.work-orders.list')"
+                                :current="request()->routeIs('production.work-orders.*')" wire:navigate>
+                                {{ __('Work Order') }}
+                            </flux:sidebar.item>
+                        @endif
+
                         @if ($role === UserRole::Warehouse)
                             <flux:sidebar.item icon="inbox-arrow-down" :href="route('warehouse.inbound.item-receipts.create')"
                             :current="request()->routeIs('warehouse.inbound.item-receipts.list', 'warehouse.inbound.item-receipts.create')" wire:navigate>

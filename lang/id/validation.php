@@ -1,19 +1,6 @@
 <?php
 
 return [
-
-    /*
-    |--------------------------------------------------------------------------
-    | Validation Language Lines
-    |--------------------------------------------------------------------------
-    |
-    | Indonesian translation of Laravel's built-in validator messages. Only
-    | the framework's own rule keys live here — per-field display names come
-    | from each component's validationAttributes()/'attributes' below, kept
-    | separate from the literal-string overrides in lang/id.json.
-    |
-    */
-
     'accepted' => ':attribute wajib disetujui.',
     'accepted_if' => ':attribute wajib disetujui apabila :other bernilai :value.',
     'active_url' => ':attribute bukan URL yang valid.',
@@ -168,28 +155,9 @@ return [
     'ulid' => ':attribute harus berupa ULID yang valid.',
     'uuid' => ':attribute harus berupa UUID yang valid.',
 
-    /*
-    |--------------------------------------------------------------------------
-    | Custom Validation Language Lines
-    |--------------------------------------------------------------------------
-    */
-
     'custom' => [
         //
     ],
 
-    /*
-    |--------------------------------------------------------------------------
-    | Custom Validation Attributes
-    |--------------------------------------------------------------------------
-    |
-    | Left empty deliberately — every component in this app already supplies
-    | its own Indonesian labels via validationAttributes(), which takes
-    | precedence over this array. Only add an entry here for a field that
-    | has no such override (e.g. a plain $this->validate([...]) call).
-    |
-    */
-
     'attributes' => [],
-
 ];

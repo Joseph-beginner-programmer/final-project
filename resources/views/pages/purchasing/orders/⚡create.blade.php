@@ -59,7 +59,26 @@ new #[Title('Create Purchase Order')] class extends Component {
     #[Computed]
     public function suppliers(): Collection
     {
-        return Supplier::orderBy('supplier_name')->get();
+        return Supplier::query()
+            ->withCount(['products as purchasable_products_count' => fn ($query) => $query->purchasable()])
+            ->orderBy('supplier_name')
+            ->get();
+    }
+
+    /**
+     * Option rows for the supplier <x-picker>. A supplier with no purchasable products is listed
+     * but unavailable — a PO for it could never get a line item.
+     */
+    #[Computed]
+    public function supplierOptions(): array
+    {
+        return $this->suppliers->map(fn (Supplier $supplier) => [
+            'id' => $supplier->id,
+            'title' => $supplier->supplier_name,
+            'subtitle' => $supplier->supplier_code,
+            'meta' => trans_choice(':count product|:count products', $supplier->purchasable_products_count),
+            'disabled_reason' => $supplier->purchasable_products_count === 0 ? __('No products yet') : null,
+        ])->all();
     }
 
     #[Computed]
@@ -81,6 +100,25 @@ new #[Title('Create Purchase Order')] class extends Component {
     public function availableProducts(): Collection
     {
         return $this->selectedSupplier?->products()->purchasable()->get() ?? collect();
+    }
+
+    /**
+     * Option rows for one line item's <x-picker>: the supplier's products with their catalog price.
+     * A product already on another line is listed but unavailable (one line per product per PO).
+     */
+    public function productOptions(int $index): array
+    {
+        $taken = collect($this->items)->except($index)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all();
+
+        return $this->availableProducts->map(fn ($product) => [
+            'id' => $product->id,
+            'title' => $product->product_name,
+            'subtitle' => $product->product_code,
+            'meta' => $product->pivot->price !== null
+                ? $this->formatRupiah((string) $product->pivot->price).'/'.$product->unit_of_measure
+                : null,
+            'disabled_reason' => in_array($product->id, $taken, true) ? __('Already chosen') : null,
+        ])->all();
     }
 
     public function rowSubtotal(array $item): string
@@ -203,7 +241,7 @@ new #[Title('Create Purchase Order')] class extends Component {
         to   { opacity: 1; transform: translateY(0); }
     }
     .motion-safe\:animate-fade-slide-up {
-        animation: fade-slide-up .5s cubic-bezier(.16,1,.3,1) both;
+        animation: fade-slide-up .5s cubic-bezier(.16,1,.3,1) backwards;
     }
     @media (prefers-reduced-motion: reduce) {
         .motion-safe\:animate-fade-slide-up { animation: none; }
@@ -255,7 +293,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                         </h2>
                     </div>
 
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-5">
+                    <div class="grid grid-cols-1 md:grid-cols-5 items-start gap-5">
                         <div class="md:col-span-3">
                             @if ($this->selectedSupplier)
                                 <div wire:key="supplier-card" wire:transition class="rounded-md border border-zinc-200 dark:border-white/10 border-s-[3px] border-s-accent bg-zinc-50 dark:bg-white/[0.03] px-4 py-3.5">
@@ -290,17 +328,20 @@ new #[Title('Create Purchase Order')] class extends Component {
                                 </div>
                             @else
                                 <div wire:key="supplier-select" wire:transition>
-                                    <flux:select
-                                        wire:model.live="supplierId"
-                                        wire:loading.attr="disabled"
-                                        wire:target="supplierId"
-                                        :label="__('Supplier')"
-                                        :placeholder="__('Select a registered supplier...')"
-                                    >
-                                        @foreach ($this->suppliers as $supplier)
-                                            <option value="{{ $supplier->id }}">{{ $supplier->supplier_code }} — {{ $supplier->supplier_name }}</option>
-                                        @endforeach
-                                    </flux:select>
+                                    {{-- flux:field + flux:label: same label spacing as the date inputs beside it --}}
+                                    <flux:field>
+                                        <flux:label>{{ __('Supplier') }}</flux:label>
+                                        <x-picker
+                                            model="supplierId"
+                                            size="md"
+                                            :options="$this->supplierOptions"
+                                            :selected="(string) $supplierId"
+                                            :placeholder="__('Select a registered supplier...')"
+                                            :label="__('Supplier')"
+                                            :invalid="$errors->has('supplierId')"
+                                        />
+                                        @error('supplierId') <flux:error class="mt-1" :message="$message" /> @enderror
+                                    </flux:field>
 
                                     <div wire:loading wire:target="supplierId" class="flex items-center gap-1.5 mt-1.5 text-xs text-accent">
                                         <flux:icon.loading variant="micro" class="size-3.5" />
@@ -312,7 +353,7 @@ new #[Title('Create Purchase Order')] class extends Component {
 
                         <div class="md:col-span-2 grid grid-cols-1 gap-4">
                             <flux:input type="date" wire:model="orderDate" :label="__('Order Date')" disabled />
-                            <flux:input type="date" wire:model="expectedDeliveryDate" :label="__('Expected Delivery')" :error:icon="false" />
+                            <flux:input type="date" wire:model="expectedDeliveryDate" :label="__('Expected Delivery')" :min="$orderDate" :error:icon="false" />
                         </div>
                     </div>
                 </section>
@@ -362,85 +403,82 @@ new #[Title('Create Purchase Order')] class extends Component {
                             <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Select a supplier first to add items.') }}</p>
                         </div>
                     @else
-                        <div class="hidden lg:block overflow-x-auto rounded-md border border-zinc-200 dark:border-white/10">
-                            <table class="w-full text-sm border-collapse">
-                                <thead class="sticky top-0 z-10">
-                                    <tr class="text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10">
-                                        <th class="py-2.5 px-3">{{ __('Product') }}</th>
-                                        <th class="py-2.5 px-3 text-right">{{ __('Qty') }}</th>
-                                        <th class="py-2.5 px-3 text-right">{{ __('Unit Price') }}</th>
-                                        <th class="py-2.5 px-3 text-right">{{ __('Subtotal') }}</th>
-                                        <th class="py-2.5 px-3 w-9"></th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach ($items as $index => $item)
-                                        <?php $product = $this->availableProducts->firstWhere('id', (int) ($item['product_id'] ?? 0)); ?>
-                                        <tr
-                                            wire:key="item-row-{{ $index }}"
-                                            wire:transition
-                                            x-data="{ focused: false }"
-                                            x-on:focusin="focused = true"
-                                            x-on:focusout="focused = false"
-                                            :class="focused && 'bg-accent/5 dark:bg-accent/10'"
-                                            class="border-b border-zinc-100 dark:border-white/5 last:border-0 hover:bg-zinc-50/70 dark:hover:bg-white/3 transition-colors align-top"
-                                        >
-                                            <td class="py-2 px-3 min-w-48">
-                                                {{-- TODO --}}
-                                                <flux:select size="sm" wire:model.live="items.{{ $index }}.product_id" :placeholder="__('Select product...')">
-                                                    @foreach ($this->availableProducts as $option)
-                                                        <option value="{{ $option->id }}">{{ $option->product_code }} — {{ $option->product_name }}</option>
-                                                    @endforeach
-                                                </flux:select>
-                                                @if ($product)
-                                                    <p class="mt-1 pl-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-                                                        <span class="font-data text-accent">{{ $product->product_code }}</span>
-                                                    </p>
-                                                @endif
-                                                @error("items.$index.product_id") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
-                                            </td>
-                                            <td class="py-2 px-3 w-40">
-                                                <div class="flex items-center gap-1.5">
-                                                    <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model.live="items.{{ $index }}.quantity_ordered" :loading="false" class="flex-1" />
-                                                    @if ($product)
-                                                        <span class="inline-flex items-center gap-1 shrink-0" title="{{ $product->isBelowReorderPoint() ? __('Low stock') : __('Stock available') }}: {{ $product->current_stock }}">
-                                                            <span class="font-mono text-xs text-zinc-500 dark:text-zinc-400">{{ $product->unit_of_measure }}</span>
-                                                            <span class="size-1.5 rounded-full {{ $product->isBelowReorderPoint() ? 'bg-red-500' : 'bg-green-500' }}"></span>
-                                                        </span>
-                                                    @endif
-                                                </div>
-                                                @error("items.$index.quantity_ordered")
-                                                <flux:error class="mt-1">{{ $message }}</flux:error>
-                                                @enderror
-                                            </td>
-                                            {{-- TODO --}}
-                                            <td class="py-2 px-3 w-60">
-                                                <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model.live="items.{{ $index }}.unit_price" :loading="false" />
-                                                @error("items.$index.unit_price") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
-                                            </td>
-                                            <td class="py-2 px-3 pt-3.5">
-                                                <span
-                                                    wire:loading.remove
-                                                    wire:target="items.{{ $index }}.quantity_ordered,items.{{ $index }}.unit_price"
-                                                    class="inline-flex items-center justify-end w-full whitespace-nowrap font-data text-xs font-medium text-zinc-900 dark:text-white tabular-nums"
-                                                >
-                                                    {{ $this->formatRupiah($this->rowSubtotal($item)) }}
-                                                </span>
-                                                <span
-                                                    wire:loading
-                                                    wire:target="items.{{ $index }}.quantity_ordered,items.{{ $index }}.unit_price"
-                                                    class="inline-flex items-center justify-end w-full"
-                                                >
-                                                    <flux:icon.loading variant="micro" class="size-3.5 text-zinc-400 dark:text-zinc-500" />
-                                                </span>
-                                            </td>
-                                            <td class="py-2 px-3 pt-2.5 text-right">
-                                                <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeItemRow({{ $index }})" class="active:scale-[0.95]" />
-                                            </td>
-                                        </tr>
-                                    @endforeach
-                                </tbody>
-                            </table>
+                        {{-- Line items adapt to the width they actually get (a container query on this box,
+                             not the viewport): this form column can be ~550px even on a desktop screen.
+                             Narrow (< 48rem): two lines, product full width + remove, then qty / price / subtotal
+                             with small labels. Wide (>= 48rem): one row per item under column headers.
+                             Every numeric field keeps a usable width either way; the product never collapses. --}}
+                        <div class="@container hidden lg:block rounded-md border border-zinc-200 dark:border-white/10" role="table" aria-label="{{ __('Line Items') }}">
+                            <div role="row" class="hidden @3xl:grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_8rem_2rem] gap-x-3 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10 rounded-t-md">
+                                <span role="columnheader">{{ __('Product') }}</span>
+                                <span role="columnheader" class="text-right">{{ __('Qty') }}</span>
+                                <span role="columnheader" class="text-right">{{ __('Unit Price') }}</span>
+                                <span role="columnheader" class="text-right">{{ __('Subtotal') }}</span>
+                                <span role="columnheader"><span class="sr-only">{{ __('Remove') }}</span></span>
+                            </div>
+
+                            @foreach ($items as $index => $item)
+                                <?php $product = $this->availableProducts->firstWhere('id', (int) ($item['product_id'] ?? 0)); ?>
+                                <div
+                                    role="row"
+                                    wire:key="item-row-{{ $index }}"
+                                    wire:transition
+                                    x-data="{ focused: false }"
+                                    x-on:focusin="focused = true"
+                                    x-on:focusout="focused = false"
+                                    :class="focused && 'bg-accent/5 dark:bg-accent/10'"
+                                    class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2rem] @3xl:grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_8rem_2rem] gap-x-3 gap-y-2.5 @3xl:gap-y-0 items-start px-3 py-3 @3xl:py-2.5 border-b border-zinc-100 dark:border-white/5 last:border-0 transition-colors"
+                                >
+                                    {{-- product: the whole first line when narrow, first column when wide --}}
+                                    <div role="cell" class="col-span-3 @3xl:col-span-1 min-w-0">
+                                        <x-picker :model="'items.'.$index.'.product_id'" :options="$this->productOptions($index)" :selected="(string) $item['product_id']" :placeholder="__('Select product...')" :label="__('Product')" :invalid="$errors->has('items.'.$index.'.product_id')" />
+                                        @error("items.$index.product_id") <flux:error class="mt-1" :message="$message" /> @enderror
+                                    </div>
+
+                                    <div role="cell" class="min-w-0">
+                                        <p class="@3xl:hidden mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Qty') }}</p>
+                                        @if ($product)
+                                            {{-- unit lives inside the field as a suffix, so it can never squeeze the number --}}
+                                            <flux:input.group>
+                                                <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model.live="items.{{ $index }}.quantity_ordered" :loading="false" :aria-label="__('Qty')" />
+                                                <flux:input.group.suffix class="gap-1 px-2 text-xs" title="{{ $product->isBelowReorderPoint() ? __('Low stock') : __('Stock available') }}: {{ $product->current_stock }}">
+                                                    {{ $product->unit_of_measure }}
+                                                    <span class="size-1.5 rounded-full {{ $product->isBelowReorderPoint() ? 'bg-red-500' : 'bg-green-500' }}" aria-hidden="true"></span>
+                                                    <span class="sr-only">{{ $product->isBelowReorderPoint() ? __('Low stock') : __('Stock available') }}</span>
+                                                </flux:input.group.suffix>
+                                            </flux:input.group>
+                                        @else
+                                            <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model.live="items.{{ $index }}.quantity_ordered" :loading="false" :aria-label="__('Qty')" />
+                                        @endif
+                                        @error("items.$index.quantity_ordered") <flux:error class="mt-1" :message="$message" /> @enderror
+                                    </div>
+
+                                    <div role="cell" class="min-w-0">
+                                        <p class="@3xl:hidden mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Unit Price') }}</p>
+                                        <flux:input.group>
+                                            <flux:input.group.prefix class="px-2 text-xs">Rp</flux:input.group.prefix>
+                                            <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model.live="items.{{ $index }}.unit_price" :loading="false" :aria-label="__('Unit Price')" />
+                                        </flux:input.group>
+                                        @error("items.$index.unit_price") <flux:error class="mt-1" :message="$message" /> @enderror
+                                    </div>
+
+                                    <div role="cell" class="min-w-0 text-right">
+                                        <p class="@3xl:hidden mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Subtotal') }}</p>
+                                        <div class="flex min-h-8 items-center justify-end whitespace-nowrap">
+                                            <span wire:loading.remove wire:target="items.{{ $index }}.quantity_ordered,items.{{ $index }}.unit_price"
+                                                  class="font-data text-xs font-medium tabular-nums text-zinc-900 dark:text-white">
+                                                {{ $this->formatRupiah($this->rowSubtotal($item)) }}
+                                            </span>
+                                            <flux:icon.loading wire:loading wire:target="items.{{ $index }}.quantity_ordered,items.{{ $index }}.unit_price" variant="micro" class="size-3.5 text-zinc-400 dark:text-zinc-500" />
+                                        </div>
+                                    </div>
+
+                                    {{-- remove: beside the product on the first line when narrow, last column when wide --}}
+                                    <div role="cell" class="col-start-4 row-start-1 @3xl:col-start-5 flex justify-end">
+                                        <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeItemRow({{ $index }})" :aria-label="__('Remove')" class="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 active:scale-[0.95]" />
+                                    </div>
+                                </div>
+                            @endforeach
                         </div>
 
                         {{-- Mobile/narrow-tablet card list — the Qty/Unit Price columns get
@@ -452,12 +490,8 @@ new #[Title('Create Purchase Order')] class extends Component {
                                 <div wire:key="item-card-{{ $index }}" wire:transition class="rounded-md border border-zinc-200 dark:border-white/10 p-3.5">
                                     <div class="flex items-start justify-between gap-2">
                                         <div class="flex-1">
-                                            <flux:select size="sm" wire:model.live="items.{{ $index }}.product_id" :placeholder="__('Select product...')">
-                                                @foreach ($this->availableProducts as $option)
-                                                    <option value="{{ $option->id }}">{{ $option->product_code }} — {{ $option->product_name }}</option>
-                                                @endforeach
-                                            </flux:select>
-                                            @error("items.$index.product_id") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                                            <x-picker :model="'items.'.$index.'.product_id'" :options="$this->productOptions($index)" :selected="(string) $item['product_id']" :placeholder="__('Select product...')" :label="__('Product')" :invalid="$errors->has('items.'.$index.'.product_id')" />
+                                            @error("items.$index.product_id") <flux:error class="mt-1" :message="$message" /> @enderror
                                         </div>
                                         <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeItemRow({{ $index }})" class="active:scale-[0.95] shrink-0" />
                                     </div>
@@ -473,14 +507,14 @@ new #[Title('Create Purchase Order')] class extends Component {
                                         @endif
                                     @endif
 
-                                    <div class="grid grid-cols-2 gap-3 mt-3">
+                                    <div class="grid grid-cols-2 items-start gap-3 mt-3">
                                         <div>
                                             <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" :label="__('Qty')" input:class="text-right font-data tabular-nums" wire:model.live="items.{{ $index }}.quantity_ordered" :loading="false" />
-                                            @error("items.$index.quantity_ordered") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                                            @error("items.$index.quantity_ordered") <flux:error class="mt-1" :message="$message" /> @enderror
                                         </div>
                                         <div>
                                             <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" :label="__('Unit Price')" input:class="text-right font-data tabular-nums" wire:model.live="items.{{ $index }}.unit_price" :loading="false" />
-                                            @error("items.$index.unit_price") <flux:error class="mt-1">{{ $message }}</flux:error> @enderror
+                                            @error("items.$index.unit_price") <flux:error class="mt-1" :message="$message" /> @enderror
                                         </div>
                                     </div>
 
@@ -504,7 +538,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                             @endforeach
                         </div>
 
-                        @error('items') <flux:error class="mt-3">{{ $message }}</flux:error> @enderror
+                        @error('items') <flux:error class="mt-3" :message="$message" /> @enderror
                     @endif
                     </div>
                 </section>

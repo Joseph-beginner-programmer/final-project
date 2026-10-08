@@ -4,7 +4,6 @@ use Livewire\Component;
 use Livewire\Attributes\Title;
 use Livewire\Attributes\Computed;
 use App\Enums\PurchaseOrderStatus;
-use App\Enums\PurchaseOrderItemReceiptCondition;
 use App\Models\PurchaseOrder;
 use App\DTO\Purchasing\ReceivePurchaseOrderBatchData;
 use App\Services\Purchasing\ReceivePurchaseOrderBatchService;
@@ -13,7 +12,6 @@ use App\Exceptions\PurchaseOrderReceiptBatchRequiresAttachmentException;
 use App\Exceptions\PurchaseOrderNotReceivableException;
 use Illuminate\Support\Collection;
 use Livewire\WithFileUploads;
-use Illuminate\Validation\Rule;
 use Flux\Flux;
 
 new #[Title('Create Item Receipt')] class extends Component
@@ -71,7 +69,6 @@ new #[Title('Create Item Receipt')] class extends Component
 
             $this->items[$item->id] = [
                 'quantity' => '',
-                'receipt_condition' => '',
             ];
         }
     }
@@ -175,16 +172,10 @@ new #[Title('Create Item Receipt')] class extends Component
         }
 
         try {
-            $this->validate([
-                'attachment' => ['required', 'file', 'max:10240', 'mimes:pdf,png,jpg,jpeg'],
-            ]);
-
-            foreach ($itemsToSubmit->keys() as $itemId) {
-                $this->validate(
-                    ["items.{$itemId}.receipt_condition" => ['required', Rule::enum(PurchaseOrderItemReceiptCondition::class)]],
-                    ["items.{$itemId}.receipt_condition.required" => __('Please select a receipt condition for this item.')],
-                );
-            }
+            $this->validate(
+                ['attachment' => ['required', 'file', 'max:10240', 'mimes:pdf,png,jpg,jpeg']],
+                attributes: ['attachment' => __('Attachment')],
+            );
         } catch (\Illuminate\Validation\ValidationException $e) {
             Flux::toast(variant: 'danger', text: __('Please fix the highlighted fields before submitting.'));
             throw $e;
@@ -198,7 +189,6 @@ new #[Title('Create Item Receipt')] class extends Component
             items: $itemsToSubmit->map(fn ($item, $itemId) => [
                 'purchaseOrderItemId' => (int) $itemId,
                 'quantityReceived' => $item['quantity'],
-                'receiptCondition' => PurchaseOrderItemReceiptCondition::from($item['receipt_condition']),
             ])->values()->all(),
             attachmentPath: $attachmentPath,
         );
@@ -537,34 +527,19 @@ new #[Title('Create Item Receipt')] class extends Component
                                 @if ($item->isFullyReceived())
                                     <p class="text-right text-zinc-400 dark:text-zinc-500 italic">&mdash;</p>
                                 @else
-                                    <div class="space-y-1.5">
-                                        <flux:input.group>
-                                            <flux:input
-                                                wire:model="items.{{ $item->id }}.quantity"
-                                                size="sm"
-                                                type="text"
-                                                inputmode="decimal"
-                                                pattern="[0-9]*\.?[0-9]*"
-                                                placeholder="0"
-                                                input:class="text-right font-data tabular-nums transition-colors duration-150"
-                                                aria-label="{{ __('Quantity received now for :product', ['product' => $item->product->product_name]) }}"
-                                            />
-                                            <flux:input.group.suffix>{{ $item->product->unit_of_measure }}</flux:input.group.suffix>
-                                        </flux:input.group>
-                                        <flux:select
-                                            wire:model="items.{{ $item->id }}.receipt_condition"
+                                    <flux:input.group>
+                                        <flux:input
+                                            wire:model="items.{{ $item->id }}.quantity"
                                             size="sm"
-                                            aria-label="{{ __('Receipt condition for :product', ['product' => $item->product->product_name]) }}"
-                                        >
-                                            <option value="" disabled>{{ __('Select condition') }}</option>
-                                            @foreach (PurchaseOrderItemReceiptCondition::cases() as $condition)
-                                                <option value="{{ $condition->value }}">{{ __($condition->label()) }}</option>
-                                            @endforeach
-                                        </flux:select>
-                                        @error("items.{$item->id}.receipt_condition")
-                                            <p class="text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
-                                        @enderror
-                                    </div>
+                                            type="text"
+                                            inputmode="decimal"
+                                            pattern="[0-9]*\.?[0-9]*"
+                                            placeholder="0"
+                                            input:class="text-right font-data tabular-nums transition-colors duration-150"
+                                            aria-label="{{ __('Quantity received now for :product', ['product' => $item->product->product_name]) }}"
+                                        />
+                                        <flux:input.group.suffix>{{ $item->product->unit_of_measure }}</flux:input.group.suffix>
+                                    </flux:input.group>
                                 @endif
                             </td>
                             <td class="py-2.5 px-3">
@@ -624,43 +599,23 @@ new #[Title('Create Item Receipt')] class extends Component
                     </dl>
 
                     @unless ($item->isFullyReceived())
-                        <div class="mt-3 space-y-2">
-                            <div>
-                                <label class="block text-[10px] font-medium tracking-widest uppercase text-zinc-500 dark:text-zinc-400 mb-1">
-                                    {{ __('Receive Now') }}
-                                </label>
-                                <flux:input.group>
-                                    <flux:input
-                                        wire:model="items.{{ $item->id }}.quantity"
-                                        size="sm"
-                                        type="text"
-                                        inputmode="decimal"
-                                        pattern="[0-9]*\.?[0-9]*"
-                                        placeholder="0"
-                                        input:class="text-right font-data tabular-nums transition-colors duration-150"
-                                        aria-label="{{ __('Quantity received now for :product', ['product' => $item->product->product_name]) }}"
-                                    />
-                                    <flux:input.group.suffix>{{ $item->product->unit_of_measure }}</flux:input.group.suffix>
-                                </flux:input.group>
-                            </div>
-                            <div>
-                                <label class="block text-[10px] font-medium tracking-widest uppercase text-zinc-500 dark:text-zinc-400 mb-1">
-                                    {{ __('Condition') }}
-                                </label>
-                               <flux:select
-                                    wire:model="items.{{ $item->id }}.receipt_condition"
+                        <div class="mt-3">
+                            <label class="block text-[10px] font-medium tracking-widest uppercase text-zinc-500 dark:text-zinc-400 mb-1">
+                                {{ __('Receive Now') }}
+                            </label>
+                            <flux:input.group>
+                                <flux:input
+                                    wire:model="items.{{ $item->id }}.quantity"
                                     size="sm"
-                                    aria-label="{{ __('Receipt condition for :product', ['product' => $item->product->product_name]) }}"
-                                >
-                                    <option value="" disabled>{{ __('Select condition') }}</option>
-                                    @foreach (PurchaseOrderItemReceiptCondition::cases() as $condition)
-                                        <option value="{{ $condition->value }}">{{ __($condition->label()) }}</option>
-                                    @endforeach
-                                </flux:select>
-                                @error("items.{$item->id}.receipt_condition")
-                                    <p class="mt-1 text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
-                                @enderror
-                            </div>
+                                    type="text"
+                                    inputmode="decimal"
+                                    pattern="[0-9]*\.?[0-9]*"
+                                    placeholder="0"
+                                    input:class="text-right font-data tabular-nums transition-colors duration-150"
+                                    aria-label="{{ __('Quantity received now for :product', ['product' => $item->product->product_name]) }}"
+                                />
+                                <flux:input.group.suffix>{{ $item->product->unit_of_measure }}</flux:input.group.suffix>
+                            </flux:input.group>
                         </div>
                     @endunless
                 </div>

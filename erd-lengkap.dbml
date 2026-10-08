@@ -1,5 +1,5 @@
 // =====================================================================
-// Sistem Informasi Manajemen - ERD lengkap (38 tabel)
+// Sistem Informasi Manajemen - ERD lengkap (43 tabel)
 // Tempel ke https://dbdiagram.io untuk menampilkan diagram.
 // Warna header dan TableGroup mengikuti modul: Pengguna & Karyawan,
 // Pembelian, Persediaan, Produksi, Penjualan, Akuntansi.
@@ -30,12 +30,6 @@ Enum po_status {
   fully_received
   cancelled
   closed
-}
-
-Enum receipt_condition {
-  good
-  damaged
-  incorrect_item
 }
 
 Enum document_status {
@@ -166,9 +160,7 @@ Table users [headercolor: #6D6D6D] {
 Table employees [headercolor: #6D6D6D] {
   id bigint [pk, increment]
   employee_code varchar [unique]
-  name varchar
-  position varchar
-  department varchar
+  name varchar [note: 'Pekerja produksi (operator/perakit), tidak dibedakan jabatannya']
   hire_date date
   status employee_status [default: 'active']
   created_at timestamp
@@ -269,8 +261,7 @@ Table purchase_order_receipts [headercolor: #1565C0] {
   id bigint [pk, increment]
   purchase_order_receipt_batch_id bigint [ref: > purchase_order_receipt_batches.id]
   purchase_order_item_id bigint [ref: > purchase_order_items.id]
-  quantity_received decimal(18,4)
-  receipt_condition receipt_condition [default: 'good', note: 'Hanya good yang membuat lot persediaan; damaged/incorrect_item diretur']
+  quantity_received decimal(18,4) [note: 'Semua barang yang datang diterima dan selalu membuat lot persediaan; barang rusak tetap dipakai produksi (biaya bahan tambahan tercatat di work order)']
   unit_cost decimal(18,4) [note: 'Salinan unit_price PO; dipakai untuk biaya lot dan jurnal penerimaan']
   total_value decimal(18,2) [note: 'Dr Persediaan Bahan Baku / Cr Barang Diterima Belum Difakturkan']
   created_at timestamp
@@ -370,14 +361,38 @@ Table stock_movements [headercolor: #2E7D32] {
 //           Mencatat Penerimaan Barang (hasil produksi), Melihat Laporan Biaya Produksi
 // ======================================================================
 
+// Pusat kerja: kelompok mesin dengan tarif BOP sendiri.
+// Molding (9 mesin identik, raw -> wip) dan Assembly Line (1 lini, wip -> finished_goods).
+Table work_centers [headercolor: #C62828] {
+  id bigint [pk, increment]
+  code varchar [unique]
+  name varchar
+  created_at timestamp
+  updated_at timestamp
+}
+
+// Akuntansi: Mengelola Biaya Overhead. Tarif BOP dibebankan per jam mesin, berlaku per periode
+// (tidak pernah ditimpa: tarif baru menutup tarif lama sehari sebelum mulai berlaku).
+// Tarif = perkiraan BOP bulanan (listrik + penyusutan) / anggaran jam mesin.
+Table overhead_rates [headercolor: #C62828] {
+  id bigint [pk, increment]
+  work_center_id bigint [ref: > work_centers.id]
+  rate_per_hour decimal(18,2)
+  effective_from date
+  effective_to date [null]
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
 // Mengelola Formula Produksi (BOM)
 Table production_formulas [headercolor: #C62828] {
   id bigint [pk, increment]
   formula_code varchar [unique]
   product_id bigint [ref: > products.id, note: 'Produk yang dihasilkan: wip atau finished_goods']
+  work_center_id bigint [ref: > work_centers.id, note: 'Pusat kerja yang mengerjakan; menentukan tarif BOP']
   version int [default: 1]
   output_quantity decimal(18,4) [note: 'Ukuran batch yang menjadi dasar jumlah bahan']
-  overhead_rate_per_unit decimal(18,2) [note: 'BOP dibebankan per unit yang diproduksi (baik + reject)']
   is_active boolean [default: true]
   created_by bigint [ref: > users.id]
   created_at timestamp
@@ -397,11 +412,15 @@ Table work_orders [headercolor: #C62828] {
   wo_number varchar [unique]
   production_formula_id bigint [ref: > production_formulas.id]
   product_id bigint [ref: > products.id, note: 'Hasil: wip (tahap antara) atau finished_goods (tahap akhir)']
+  work_center_id bigint [ref: > work_centers.id, note: 'Salinan dari production_formulas saat WO dibuat; menentukan arti planned_machine_hours dan asal overhead_rate']
   quantity_target decimal(18,4)
   quantity_good decimal(18,4) [default: 0, note: 'Jumlah dari production_results yang disetujui']
   quantity_reject decimal(18,4) [default: 0]
   planned_start_date date
   planned_end_date date
+  planned_machine_hours decimal(10,2) [note: 'Jam mesin berjalan (diinput manual); bukan jam pekerja. 4 pekerja x 8 jam di satu lini = 8 jam mesin']
+  overhead_rate decimal(18,2) [note: 'Salinan tarif dari overhead_rates saat WO dibuat']
+  planned_overhead_cost decimal(18,2) [note: 'planned_machine_hours x overhead_rate']
   status work_order_status [default: 'draft']
   printed_at timestamp [null, note: '<<extend>> Mencetak Perintah Kerja']
   created_by bigint [ref: > users.id]
@@ -409,6 +428,23 @@ Table work_orders [headercolor: #C62828] {
   closed_at timestamp [null]
   created_at timestamp
   updated_at timestamp
+}
+
+// Rencana bahan WO: salinan formula (production_formula_items) yang sudah diskalakan ke quantity_target,
+// dibuat saat WO dibuat. Disalin, bukan dihitung ulang dari formula, agar perubahan formula di kemudian
+// hari tidak mengubah rencana WO lama (pola yang sama dengan salinan tarif tenaga kerja dan BOP).
+// Realisasi dibandingkan per product_id: material_issue_items (dikeluarkan gudang) dan
+// production_result_materials (dipakai produksi). Bahan tambahan di luar rencana (mis. untuk menutup
+// barang rusak) tidak punya baris di sini, sehingga terlihat sebagai pemakaian di luar rencana.
+Table work_order_materials [headercolor: #C62828] {
+  id bigint [pk, increment]
+  work_order_id bigint [ref: > work_orders.id]
+  product_id bigint [ref: > products.id, note: 'raw_material atau wip']
+  quantity_planned decimal(18,4) [note: 'production_formula_items.quantity x quantity_target / output_quantity']
+
+  indexes {
+    (work_order_id, product_id) [unique]
+  }
 }
 
 // <<include>> Mengalokasi Biaya Tenaga Kerja: rencana tenaga kerja untuk WO
@@ -457,7 +493,8 @@ Table production_results [headercolor: #C62828] {
   reject_reason text [null, note: 'Keterangan cacat']
   material_cost decimal(18,2)
   labor_cost decimal(18,2)
-  overhead_cost decimal(18,2)
+  machine_hours decimal(10,2) [note: 'Jam mesin aktual (diinput manual)']
+  overhead_cost decimal(18,2) [note: 'BOP dibebankan = machine_hours x work_orders.overhead_rate']
   total_cost decimal(18,2)
   output_cost decimal(18,2) [note: 'Debit ke akun transit sesuai jenis hasil: Barang Setengah Jadi Belum Diterima (wip) atau Barang Jadi Belum Diterima (finished_goods)']
   abnormal_loss_cost decimal(18,2) [default: 0, note: 'Debit ke Kerugian Produk Rusak']
@@ -482,7 +519,7 @@ Table production_result_materials [headercolor: #C62828] {
   production_result_id bigint [ref: > production_results.id]
   material_issue_item_id bigint [ref: > material_issue_items.id]
   product_id bigint [ref: > products.id]
-  quantity decimal(18,4) [note: 'Terisi otomatis dari BOM, bisa diubah']
+  quantity decimal(18,4) [note: 'Terisi otomatis dari work_order_materials (rencana WO, proporsional terhadap jumlah hasil), bisa diubah']
   unit_cost decimal(18,4)
   total_cost decimal(18,2)
 }
@@ -610,6 +647,7 @@ Table sales_return_items [headercolor: #6A1B9A] {
 // ======================================================================
 // AKUNTANSI (ERD 6)
 // Use case: Mengelola Akun Perusahaan, Mengelola Jurnal Umum, Melihat Laporan Laba Rugi,
+//           Mengelola Biaya Overhead,
 //           Menyusun Faktur Pembelian, Mencatat Pembayaran Pembelian,
 //           Menyusun Faktur Penjualan, Mencatat Pembayaran Penjualan
 // ======================================================================
@@ -618,7 +656,7 @@ Table sales_return_items [headercolor: #6A1B9A] {
 // Akun yang dipakai jurnal otomatis diatur di konfigurasi aplikasi
 // (misalnya config/accounts.php): raw_material_inventory, wip_inventory,
 // finished_goods_inventory, wip_in_transit, fg_in_transit, applied_labor,
-// applied_overhead, spoilage_loss, discrepancy_loss, grni, purchase_price_variance,
+// applied_overhead, overhead_variance, spoilage_loss, discrepancy_loss, grni, purchase_price_variance,
 // vat_in, vat_out, accounts_payable, accounts_receivable, sales_revenue,
 // sales_return, cogs
 Table accounts [headercolor: #EF6C00] {
@@ -631,6 +669,32 @@ Table accounts [headercolor: #EF6C00] {
   is_active boolean [default: true]
   created_at timestamp
   updated_at timestamp
+}
+
+// Akuntansi: Mengelola Biaya Overhead — BOP aktual dicatat per bulan untuk seluruh pabrik
+// (listrik satu meteran, tidak bisa dipisah per pusat kerja; penyusutan diinput manual).
+Table overhead_expenses [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  period date [note: 'Hari pertama bulan, mis. 2026-10-01']
+  category varchar [note: 'electricity | depreciation | other']
+  description varchar [null]
+  amount decimal(18,2)
+  created_by bigint [ref: > users.id]
+  created_at timestamp
+  updated_at timestamp
+}
+
+// Penutupan BOP per bulan: BOP dibebankan (jumlah production_results.overhead_cost) vs BOP aktual.
+// Selisih kurang/lebih dibebankan ditutup dengan jurnal (Selisih BOP).
+Table overhead_period_closings [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  period date [unique]
+  applied_total decimal(18,2)
+  actual_total decimal(18,2)
+  variance decimal(18,2) [note: 'actual - applied; positif = kurang dibebankan (underapplied)']
+  journal_entry_id bigint [ref: - journal_entries.id, null]
+  closed_by bigint [ref: > users.id]
+  closed_at timestamp
 }
 
 // Mengelola Jurnal Umum: jurnal otomatis (dari fitur lain), manual,
@@ -755,9 +819,12 @@ TableGroup Persediaan {
 }
 
 TableGroup Produksi {
+  work_centers
+  overhead_rates
   production_formulas
   production_formula_items
   work_orders
+  work_order_materials
   work_order_labors
   material_issues
   material_issue_items
@@ -778,6 +845,8 @@ TableGroup Penjualan {
 }
 
 TableGroup Akuntansi {
+  overhead_expenses
+  overhead_period_closings
   accounts
   journal_entries
   journal_entry_lines

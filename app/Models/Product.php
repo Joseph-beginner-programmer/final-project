@@ -40,6 +40,16 @@ class Product extends Model
         return $this->hasMany(InventoryLot::class);
     }
 
+    public function productionFormulas(): HasMany
+    {
+        return $this->hasMany(ProductionFormula::class);
+    }
+
+    public function workOrders(): HasMany
+    {
+        return $this->hasMany(WorkOrder::class);
+    }
+
     public function suppliers(): BelongsToMany
     {
         return $this->belongsToMany(Supplier::class)
