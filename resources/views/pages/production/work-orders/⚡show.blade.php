@@ -64,9 +64,12 @@ new #[Title('Work Order Detail')] class extends Component {
     #[Computed]
     public function plannedMaterials(): Collection
     {
+        $issued = $this->workOrder->issuedQuantities();
+
         return $this->workOrder->materials->map(fn ($material) => [
             'product' => $material->product,
             'required' => (string) $material->quantity_planned,
+            'issued' => $issued[$material->product_id] ?? '0',
         ]);
     }
 
@@ -394,6 +397,7 @@ new #[Title('Work Order Detail')] class extends Component {
                         <th class="py-2 px-3">{{ __('Material') }}</th>
                         <th class="py-2 px-3">{{ __('Type') }}</th>
                         <th class="py-2 px-3 text-right">{{ __('Planned') }}</th>
+                        <th class="py-2 px-3 text-right">{{ __('Already issued') }}</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -405,6 +409,7 @@ new #[Title('Work Order Detail')] class extends Component {
                             </td>
                             <td class="py-2 px-3 text-zinc-500 dark:text-zinc-400">{{ __($row['product']->type->label()) }}</td>
                             <td class="py-2 px-3 text-right font-data font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->formatQuantity($row['required']) }} {{ $row['product']->unit_of_measure }}</td>
+                            <td class="py-2 px-3 text-right font-data tabular-nums whitespace-nowrap {{ bccomp($row['issued'], $row['required'], 2) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-zinc-600 dark:text-zinc-400' }}">{{ $this->formatQuantity($row['issued']) }} {{ $row['product']->unit_of_measure }}</td>
                         </tr>
                     @endforeach
                 </tbody>
@@ -420,7 +425,10 @@ new #[Title('Work Order Detail')] class extends Component {
                         <p class="text-sm text-zinc-700 dark:text-zinc-300">{{ $row['product']->product_name }}</p>
                         <p class="text-zinc-500 dark:text-zinc-400 mt-0.5">{{ __($row['product']->type->label()) }}</p>
                     </div>
-                    <p class="font-data font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->formatQuantity($row['required']) }} {{ $row['product']->unit_of_measure }}</p>
+                    <div class="text-right">
+                        <p class="font-data font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->formatQuantity($row['required']) }} {{ $row['product']->unit_of_measure }}</p>
+                        <p class="font-data text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{{ __('Already issued') }} {{ $this->formatQuantity($row['issued']) }}</p>
+                    </div>
                 </div>
             @endforeach
         </div>

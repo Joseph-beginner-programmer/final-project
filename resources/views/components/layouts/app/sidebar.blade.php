@@ -62,6 +62,10 @@
                             :current="request()->routeIs('warehouse.inbound.item-receipts.list', 'warehouse.inbound.item-receipts.create')" wire:navigate>
                                 {{ __('Item Receipt') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="arrow-up-tray" :href="route('warehouse.outbound.material-issues.list')"
+                                :current="request()->routeIs('warehouse.outbound.material-issues.*')" wire:navigate>
+                                {{ __('Material Issue') }}
+                            </flux:sidebar.item>
                         @endif
                     </flux:sidebar.group>
                 @endcan

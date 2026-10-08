@@ -65,7 +65,8 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    // WIB (UTC+7) — the factory is in Surabaya. Asia/Jakarta is the IANA name for WIB (no DST).
+    'timezone' => env('APP_TIMEZONE', 'Asia/Jakarta'),
 
     /*
     |--------------------------------------------------------------------------

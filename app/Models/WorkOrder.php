@@ -76,6 +76,35 @@ class WorkOrder extends Model
         return $this->hasMany(WorkOrderLabor::class);
     }
 
+    public function materialIssues(): HasMany
+    {
+        return $this->hasMany(MaterialIssue::class);
+    }
+
+    /**
+     * Materials can be issued once the WO is on the floor, and until it's finished.
+     */
+    public function canReceiveMaterials(): bool
+    {
+        return in_array($this->status, [WorkOrderStatus::Released, WorkOrderStatus::InProgress], true);
+    }
+
+    /**
+     * Quantity already issued (posted issues only) per product id — the "already issued" column.
+     *
+     * @return array<int, string>
+     */
+    public function issuedQuantities(): array
+    {
+        return MaterialIssueItem::query()
+            ->whereHas('materialIssue', fn ($query) => $query->where('work_order_id', $this->id)->where('status', 'posted'))
+            ->selectRaw('product_id, sum(quantity) as issued')
+            ->groupBy('product_id')
+            ->pluck('issued', 'product_id')
+            ->map(fn ($value) => (string) $value)
+            ->all();
+    }
+
     public function transitionTo(WorkOrderStatus $target): void
     {
         if (!$this->status->canTransitionTo($target)) {

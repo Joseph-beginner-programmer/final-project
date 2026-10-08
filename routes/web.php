@@ -70,6 +70,19 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/production/work-orders/{workOrder}/print', \App\Http\Controllers\Production\PrintWorkOrderController::class)
         ->name('production.work-orders.print');
 
+    // literal /create/... and /{issue}/edit are declared before the bare {materialIssue} wildcard
+    Route::livewire('/warehouse/outbound/material-issues', 'pages::warehouse.outbound.material-issues.list')
+        ->name('warehouse.outbound.material-issues.list');
+
+    Route::livewire('/warehouse/outbound/material-issues/create/{workOrder}', 'pages::warehouse.outbound.material-issues.form')
+        ->name('warehouse.outbound.material-issues.create');
+
+    Route::livewire('/warehouse/outbound/material-issues/{materialIssue}/edit', 'pages::warehouse.outbound.material-issues.form')
+        ->name('warehouse.outbound.material-issues.edit');
+
+    Route::livewire('/warehouse/outbound/material-issues/{materialIssue}', 'pages::warehouse.outbound.material-issues.show')
+        ->name('warehouse.outbound.material-issues.show');
+
     Route::livewire('/management/employees', 'pages::management.employees.list')
         ->name('management.employees.list');
 

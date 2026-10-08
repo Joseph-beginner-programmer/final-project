@@ -18,8 +18,15 @@ class StockMovement extends Model {
             'direction' => Direction::class,
             'type' => StockMovementType::class,
             'created_at' => 'datetime',
-            'amount' => 'decimal:2'
+            'quantity' => 'decimal:2',
+            'unit_cost' => 'decimal:2',
+            'total_value' => 'decimal:2',
         ];
+    }
+
+    public function inventoryLot(): BelongsTo
+    {
+        return $this->belongsTo(InventoryLot::class);
     }
 
     public function createdBy(): BelongsTo

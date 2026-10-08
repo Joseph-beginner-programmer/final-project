@@ -6,6 +6,7 @@ use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 use App\Http\Responses\LoginResponse;
 use Carbon\CarbonImmutable;
 use App\Enums\UserRole;
+use App\Models\MaterialIssueItem;
 use App\Models\PurchaseOrderReceipt;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Gate;
@@ -55,6 +56,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('warehouse.receive', function ($user) {
             return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
         });
+        Gate::define('warehouse.issue', function ($user) {
+            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
+        });
         Gate::define('production.view', function ($user) {
             return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
         });
@@ -77,6 +81,7 @@ class AppServiceProvider extends ServiceProvider
         //morph
         Relation::morphMap([
             'purchase_order_receipt' => PurchaseOrderReceipt::class,
+            'material_issue_item' => MaterialIssueItem::class,
         ]);
     }
 

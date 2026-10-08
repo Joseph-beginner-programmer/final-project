@@ -54,13 +54,15 @@ class ReceivePurchaseOrderAction
             if($target !== $poItem->purchaseOrder->status) $poItem->purchaseOrder->transitionTo($target);
 
             app(CreateStockMovementAction::class)->handle(new CreateStockMovementData(
-                $poItem->product->id,
-                Direction::In,
-                StockMovementType::PurchaseReceived,
-                $data->quantityReceived,
-                $data->receivedBy,
-                $receipt->id,
-                'purchase_order_receipt' 
+                productId: $poItem->product->id,
+                inventoryLotId: $lot->id,
+                direction: Direction::In,
+                type: StockMovementType::PurchaseReceived,
+                quantity: $data->quantityReceived,
+                unitCost: (string) $lot->unit_cost,
+                createdBy: $data->receivedBy,
+                referenceId: $receipt->id,
+                referenceType: 'purchase_order_receipt',
             ));
 
             return $receipt;
