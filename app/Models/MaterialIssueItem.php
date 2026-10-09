@@ -44,6 +44,36 @@ class MaterialIssueItem extends Model
     }
 
     /**
+     * Value of $quantity of this line that was NOT used, priced at the lots drawn LAST (reverse FIFO),
+     * so a leftover is the exact undo of the last draws: stock ends up as if only the used amount had
+     * been issued. The same walk decides which lots a Material Return refills (decided 2026-10-08).
+     * Expects stockMovements to be loaded or loadable; the line must be posted.
+     */
+    public function leftoverValue(string $quantity): string
+    {
+        $stillLeft = $quantity;
+        $value = '0';
+
+        foreach ($this->stockMovements->sortByDesc('id') as $movement) {
+            if (bccomp($stillLeft, '0', 2) <= 0) {
+                break;
+            }
+
+            $drawn = (string) $movement->quantity;
+            $take = bccomp($drawn, $stillLeft, 2) <= 0 ? $drawn : $stillLeft;
+
+            // a whole draw comes back at exactly what it took out (incl. the emptying draw's rounding)
+            $value = bcadd($value, bccomp($take, $drawn, 2) === 0
+                ? (string) $movement->total_value
+                : bcmul($take, (string) $movement->unit_cost, 2), 2);
+
+            $stillLeft = bcsub($stillLeft, $take, 2);
+        }
+
+        return $value;
+    }
+
+    /**
      * Average FIFO cost per unit of this line (a line can span lots at different costs).
      */
     public function unitCost(): string

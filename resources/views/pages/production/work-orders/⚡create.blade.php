@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Production\CreateWorkOrderAction;
+use App\Actions\Production\UpdateWorkOrderAction;
 use App\DTO\Production\CreateWorkOrderData;
 use App\Enums\ProductType;
 use App\Exceptions\InactiveEmployeeException;
@@ -9,6 +10,7 @@ use App\Exceptions\InvalidPlannedDateRangeException;
 use App\Exceptions\MissingLaborRateException;
 use App\Exceptions\MissingOverheadRateException;
 use App\Exceptions\PlannedStartDateInPastException;
+use App\Exceptions\WorkOrderNotEditableException;
 use App\Exceptions\WorkOrderRequiresLaborException;
 use App\Models\Employee;
 use App\Models\ProductionFormula;
@@ -18,10 +20,18 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Create Work Order')] class extends Component {
+    /** set when editing a Draft WO — the same form serves create and edit */
+    #[Locked]
+    public ?int $workOrderId = null;
+
+    #[Locked]
+    public string $workOrderNumber = '';
+
     public string $productionFormulaId = '';
 
     public string $quantityTarget = '';
@@ -34,8 +44,26 @@ new #[Title('Create Work Order')] class extends Component {
 
     public string $plannedMachineHours = '';
 
-    public function mount(): void
+    public function mount(?WorkOrder $workOrder = null): void
     {
+        if ($workOrder?->exists) {
+            Gate::authorize('update', $workOrder);
+
+            $this->workOrderId = $workOrder->id;
+            $this->workOrderNumber = $workOrder->wo_number;
+            $this->productionFormulaId = (string) $workOrder->production_formula_id;
+            $this->quantityTarget = $this->formatQuantity((string) $workOrder->quantity_target);
+            $this->plannedStartDate = $workOrder->planned_start_date->toDateString();
+            $this->plannedEndDate = $workOrder->planned_end_date->toDateString();
+            $this->plannedMachineHours = $this->formatQuantity((string) $workOrder->planned_machine_hours);
+            $this->labors = $workOrder->labors->map(fn ($labor) => [
+                'employee_id' => (string) $labor->employee_id,
+                'planned_hours' => $this->formatQuantity((string) $labor->planned_hours),
+            ])->all();
+
+            return;
+        }
+
         Gate::authorize('create', WorkOrder::class);
 
         $this->plannedStartDate = now()->toDateString();
@@ -288,7 +316,8 @@ new #[Title('Create Work Order')] class extends Component {
 
     public function create(): void
     {
-        Gate::authorize('create', WorkOrder::class);
+        $existing = $this->workOrderId ? WorkOrder::findOrFail($this->workOrderId) : null;
+        $existing ? Gate::authorize('update', $existing) : Gate::authorize('create', WorkOrder::class);
 
         // drop untouched blank rows, but keep half-filled ones so they hit a real validation error
         $this->labors = array_values(array_filter(
@@ -320,14 +349,18 @@ new #[Title('Create Work Order')] class extends Component {
         );
 
         try {
-            $workOrder = app(CreateWorkOrderAction::class)->handle($data);
-        } catch (PlannedStartDateInPastException|InvalidPlannedDateRangeException|InactiveProductionFormulaException|WorkOrderRequiresLaborException|InactiveEmployeeException|MissingLaborRateException|MissingOverheadRateException $e) {
+            $workOrder = $existing
+                ? app(UpdateWorkOrderAction::class)->handle($existing, $data)
+                : app(CreateWorkOrderAction::class)->handle($data);
+        } catch (PlannedStartDateInPastException|InvalidPlannedDateRangeException|InactiveProductionFormulaException|WorkOrderRequiresLaborException|InactiveEmployeeException|MissingLaborRateException|MissingOverheadRateException|WorkOrderNotEditableException $e) {
             Flux::toast(variant: 'danger', text: $e->userMessage());
 
             return;
         }
 
-        Flux::toast(variant: 'success', text: __('Work order :number created.', ['number' => $workOrder->wo_number]));
+        Flux::toast(variant: 'success', text: $existing
+            ? __('Work order :number updated.', ['number' => $workOrder->wo_number])
+            : __('Work order :number created.', ['number' => $workOrder->wo_number]));
 
         $this->redirect(route('production.work-orders.show', $workOrder), navigate: true);
     }
@@ -350,17 +383,26 @@ new #[Title('Create Work Order')] class extends Component {
     <flux:breadcrumbs>
         <flux:breadcrumbs.item :href="route('production.dashboard')" wire:navigate>{{ __('Production') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item :href="route('production.work-orders.list')" wire:navigate>{{ __('Work Orders') }}</flux:breadcrumbs.item>
-        <flux:breadcrumbs.item>{{ __('Create') }}</flux:breadcrumbs.item>
+        @if ($workOrderId)
+            <flux:breadcrumbs.item :href="route('production.work-orders.show', $workOrderId)" wire:navigate>{{ $workOrderNumber }}</flux:breadcrumbs.item>
+            <flux:breadcrumbs.item>{{ __('Edit') }}</flux:breadcrumbs.item>
+        @else
+            <flux:breadcrumbs.item>{{ __('Create') }}</flux:breadcrumbs.item>
+        @endif
     </flux:breadcrumbs>
 
     <div class="mt-3 flex flex-wrap items-start justify-between gap-4 motion-safe:animate-fade-slide-up">
         <div>
             <h1 class="font-display text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">
-                {{ __('New Work Order') }}
+                {{ $workOrderId ? __('Edit Work Order') : __('New Work Order') }}
             </h1>
             <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
             <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">
-                {{ __('Opened') }} {{ now()->format('d M Y') }}
+                @if ($workOrderId)
+                    <span class="font-data text-accent">{{ $workOrderNumber }}</span> · {{ __('Rates are refreshed when the work order is released.') }}
+                @else
+                    {{ __('Opened') }} {{ now()->format('d M Y') }}
+                @endif
             </p>
         </div>
 

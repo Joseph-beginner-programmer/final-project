@@ -2,8 +2,12 @@
 
 use App\Actions\Production\ReleaseWorkOrderAction;
 use App\Enums\WorkOrderStatus;
+use App\Exceptions\InactiveEmployeeException;
 use App\Exceptions\InvalidWorkOrderStatusTransitionException;
+use App\Exceptions\MissingLaborRateException;
+use App\Exceptions\MissingOverheadRateException;
 use App\Exceptions\WorkOrderRequiresLaborException;
+use App\Models\ProductionResult;
 use App\Models\WorkOrder;
 use Flux\Flux;
 use Illuminate\Support\Collection;
@@ -19,7 +23,7 @@ new #[Title('Work Order Detail')] class extends Component {
     {
         Gate::authorize('view', $this->workOrder);
 
-        $this->workOrder->load(['product', 'productionFormula', 'workCenter', 'materials.product', 'createdBy', 'closedBy', 'labors.employee']);
+        $this->workOrder->load(['product', 'productionFormula', 'workCenter', 'materials.product', 'createdBy', 'labors.employee', 'productionResult']);
     }
 
     public function release(): void
@@ -28,13 +32,15 @@ new #[Title('Work Order Detail')] class extends Component {
 
         try {
             app(ReleaseWorkOrderAction::class)->handle($this->workOrder);
-        } catch (WorkOrderRequiresLaborException|InvalidWorkOrderStatusTransitionException $e) {
+        } catch (WorkOrderRequiresLaborException|InvalidWorkOrderStatusTransitionException|InactiveEmployeeException|MissingLaborRateException|MissingOverheadRateException $e) {
             Flux::toast(variant: 'danger', text: $e->userMessage());
 
             return;
         }
 
-        $this->workOrder->refresh();
+        // rates were refreshed on release — reload so the page shows the new costs
+        $this->workOrder->refresh()->load(['labors.employee', 'workCenter']);
+        unset($this->plannedLaborCost);
         $this->modal('release-wo')->close();
 
         Flux::toast(variant: 'success', text: __('Work order released to the production floor.'));
@@ -73,6 +79,23 @@ new #[Title('Work Order Detail')] class extends Component {
         ]);
     }
 
+    /**
+     * Planned materials with less stock than the plan needs — warned about before release, not
+     * blocked (decided 2026-10-09). Stock isn't reserved, so this is a snapshot of right now.
+     */
+    #[Computed]
+    public function shortMaterials(): Collection
+    {
+        return $this->workOrder->materials
+            ->filter(fn ($material) => bccomp((string) $material->product->current_stock, (string) $material->quantity_planned, 2) < 0)
+            ->map(fn ($material) => [
+                'product' => $material->product,
+                'required' => (string) $material->quantity_planned,
+                'stock' => (string) $material->product->current_stock,
+            ])
+            ->values();
+    }
+
     #[Computed]
     public function outputProgress(): array
     {
@@ -105,7 +128,6 @@ new #[Title('Work Order Detail')] class extends Component {
             WorkOrderStatus::Released => 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20',
             WorkOrderStatus::InProgress => 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20',
             WorkOrderStatus::Completed => 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20',
-            WorkOrderStatus::CompletedShort => 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-500/10 dark:text-teal-400 dark:border-teal-500/20',
             WorkOrderStatus::Cancelled => 'bg-zinc-100 text-zinc-500 border-zinc-200 line-through dark:bg-white/5 dark:text-zinc-500 dark:border-white/10',
         };
     }
@@ -161,6 +183,24 @@ new #[Title('Work Order Detail')] class extends Component {
                 </flux:button>
             @endcan
 
+            @if ($workOrder->productionResult)
+                <flux:button variant="filled" icon="clipboard-document-check" :href="route('production.results.show', $workOrder->productionResult)" wire:navigate class="active:scale-[0.95]">
+                    {{ __('Production Result') }}
+                </flux:button>
+            @elseif ($workOrder->canRecordResult())
+                @can('create', ProductionResult::class)
+                    <flux:button variant="primary" icon="clipboard-document-check" :href="route('production.results.create', $workOrder)" wire:navigate class="active:scale-[0.95]">
+                        {{ __('Record result') }}
+                    </flux:button>
+                @endcan
+            @endif
+
+            @can('update', $workOrder)
+                <flux:button variant="filled" icon="pencil-square" :href="route('production.work-orders.edit', $workOrder)" wire:navigate class="active:scale-[0.95]">
+                    {{ __('Edit') }}
+                </flux:button>
+            @endcan
+
             @can('release', $workOrder)
                 <flux:modal.trigger name="release-wo">
                     <flux:button variant="primary" icon="play" class="active:scale-[0.95]">
@@ -179,7 +219,28 @@ new #[Title('Work Order Detail')] class extends Component {
                     <flux:subheading>
                         {{ __('Releasing hands the work order to the production floor. It can no longer go back to Draft, and the warehouse can start issuing materials for it.') }}
                     </flux:subheading>
+                    <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+                        {{ __('Labor and overhead rates are updated to the rates in effect today.') }}
+                    </p>
                 </div>
+
+                @if ($this->shortMaterials->isNotEmpty())
+                    <div class="rounded-md border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 px-3 py-2.5">
+                        <p class="flex items-center gap-1.5 text-xs font-semibold text-amber-800 dark:text-amber-300">
+                            <flux:icon.exclamation-triangle variant="micro" class="size-3.5" />
+                            {{ __('Not enough stock for :count material(s)', ['count' => $this->shortMaterials->count()]) }}
+                        </p>
+                        <ul class="mt-1.5 space-y-1">
+                            @foreach ($this->shortMaterials as $short)
+                                <li class="flex items-center justify-between gap-3 text-xs text-amber-800 dark:text-amber-300">
+                                    <span>{{ $short['product']->product_name }}</span>
+                                    <span class="font-data tabular-nums">{{ __('need') }} {{ $this->formatQuantity($short['required']) }} · {{ __('stock') }} {{ $this->formatQuantity($short['stock']) }} {{ $short['product']->unit_of_measure }}</span>
+                                </li>
+                            @endforeach
+                        </ul>
+                        <p class="mt-2 text-[11px] text-amber-700 dark:text-amber-400">{{ __('You can still release it. The warehouse cannot issue more than what is in stock.') }}</p>
+                    </div>
+                @endif
 
                 <div class="flex justify-end gap-2">
                     <flux:modal.close>
@@ -248,12 +309,6 @@ new #[Title('Work Order Detail')] class extends Component {
                     <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Last printed') }}</dt>
                     <dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $workOrder->printed_at?->format('d M Y H:i') ?? '—' }}</dd>
                 </div>
-                @if ($workOrder->closed_at)
-                    <div class="flex items-center justify-between gap-2">
-                        <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Closed By') }}</dt>
-                        <dd class="text-zinc-800 dark:text-zinc-200">{{ $workOrder->closedBy?->name ?? '—' }} &middot; <span class="font-data tabular-nums">{{ $workOrder->closed_at->format('d M Y') }}</span></dd>
-                    </div>
-                @endif
             </dl>
         </div>
 

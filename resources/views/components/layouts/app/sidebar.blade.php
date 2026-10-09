@@ -55,6 +55,10 @@
                                 :current="request()->routeIs('production.work-orders.*')" wire:navigate>
                                 {{ __('Work Order') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="clipboard-document-check" :href="route('production.results.list')"
+                                :current="request()->routeIs('production.results.*')" wire:navigate>
+                                {{ __('Production Results') }}
+                            </flux:sidebar.item>
                         @endif
 
                         @if ($role === UserRole::Warehouse)

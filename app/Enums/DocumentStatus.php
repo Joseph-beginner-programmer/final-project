@@ -22,10 +22,10 @@ enum DocumentStatus: string
 
     public function label(): string
     {
-        return match ($this) {
+        return __(match ($this) {
             self::Draft => 'Draft',
             self::Posted => 'Posted',
             self::Cancelled => 'Cancelled',
-        };
+        });
     }
 }

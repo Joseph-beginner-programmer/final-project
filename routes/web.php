@@ -64,11 +64,28 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/production/work-orders/create', 'pages::production.work-orders.create')
         ->name('production.work-orders.create');
 
+    // the create page doubles as the edit page for a Draft WO
+    Route::livewire('/production/work-orders/{workOrder}/edit', 'pages::production.work-orders.create')
+        ->name('production.work-orders.edit');
+
     Route::livewire('/production/work-orders/{workOrder}', 'pages::production.work-orders.show')
         ->name('production.work-orders.show');
 
     Route::get('/production/work-orders/{workOrder}/print', \App\Http\Controllers\Production\PrintWorkOrderController::class)
         ->name('production.work-orders.print');
+
+    // literal /create/... and /{result}/edit are declared before the bare {productionResult} wildcard
+    Route::livewire('/production/results', 'pages::production.results.list')
+        ->name('production.results.list');
+
+    Route::livewire('/production/results/create/{workOrder}', 'pages::production.results.form')
+        ->name('production.results.create');
+
+    Route::livewire('/production/results/{productionResult}/edit', 'pages::production.results.form')
+        ->name('production.results.edit');
+
+    Route::livewire('/production/results/{productionResult}', 'pages::production.results.show')
+        ->name('production.results.show');
 
     // literal /create/... and /{issue}/edit are declared before the bare {materialIssue} wildcard
     Route::livewire('/warehouse/outbound/material-issues', 'pages::warehouse.outbound.material-issues.list')

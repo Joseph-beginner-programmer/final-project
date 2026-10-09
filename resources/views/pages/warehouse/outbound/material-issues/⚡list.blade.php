@@ -187,6 +187,15 @@ new #[Title('Material Issue')] class extends Component {
                                 <flux:button size="sm" variant="filled" icon="pencil-square" :href="route('warehouse.outbound.material-issues.show', $workOrder->open_draft)" wire:navigate class="active:scale-[0.95]">
                                     {{ __('Open draft') }}
                                 </flux:button>
+                            @elseif ($complete)
+                                {{-- every planned material is fully issued; a link can't be disabled, so render a plain disabled button --}}
+                                <flux:tooltip :content="__('All planned materials have been issued.')">
+                                    <div>
+                                        <flux:button size="sm" variant="primary" icon="arrow-up-tray" disabled>
+                                            {{ __('Issue materials') }}
+                                        </flux:button>
+                                    </div>
+                                </flux:tooltip>
                             @else
                                 <flux:button size="sm" variant="primary" icon="arrow-up-tray" :href="route('warehouse.outbound.material-issues.create', $workOrder)" wire:navigate class="active:scale-[0.95]">
                                     {{ __('Issue materials') }}
@@ -208,7 +217,9 @@ new #[Title('Material Issue')] class extends Component {
                             <th class="py-2 px-3">{{ __('Work Order') }}</th>
                             <th class="py-2 px-3">{{ __('Created') }}</th>
                             <th class="py-2 px-3">{{ __('Posted') }}</th>
-                            <th class="py-2 px-3 text-right">{{ __('Cost') }}</th>
+                            @can('costs.view')
+                                <th class="py-2 px-3 text-right">{{ __('Cost') }}</th>
+                            @endcan
                             <th class="py-2 px-3">{{ __('Status') }}</th>
                         </tr>
                     </thead>
@@ -224,15 +235,17 @@ new #[Title('Material Issue')] class extends Component {
                                 </td>
                                 <td class="py-2 px-3 font-data tabular-nums text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{ $issue->created_at->format('d M Y') }}</td>
                                 <td class="py-2 px-3 font-data tabular-nums text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{ $issue->issued_at?->format('d M Y H:i') ?? '—' }}</td>
-                                <td class="py-2 px-3 text-right font-data font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">
-                                    {{ $issue->status === DocumentStatus::Posted ? $this->formatRupiah($issue->totalCost()) : '—' }}
-                                </td>
+                                @can('costs.view')
+                                    <td class="py-2 px-3 text-right font-data font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">
+                                        {{ $issue->status === DocumentStatus::Posted ? $this->formatRupiah($issue->totalCost()) : '—' }}
+                                    </td>
+                                @endcan
                                 <td class="py-2 px-3">
                                     <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ $this->documentBadgeClasses($issue->status) }}">{{ __($issue->status->label()) }}</span>
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No material issues yet.') }}</td></tr>
+                            <tr><td colspan="{{ auth()->user()->can('costs.view') ? 6 : 5 }}" class="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No material issues yet.') }}</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -246,7 +259,7 @@ new #[Title('Material Issue')] class extends Component {
                             <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ $this->documentBadgeClasses($issue->status) }}">{{ __($issue->status->label()) }}</span>
                         </div>
                         <p class="mt-1 text-sm text-zinc-700 dark:text-zinc-300"><span class="font-data">{{ $issue->workOrder->wo_number }}</span> · {{ $issue->workOrder->product->product_name }}</p>
-                        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400 font-data tabular-nums">{{ $issue->created_at->format('d M Y') }}{{ $issue->status === DocumentStatus::Posted ? ' · '.$this->formatRupiah($issue->totalCost()) : '' }}</p>
+                        <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400 font-data tabular-nums">{{ $issue->created_at->format('d M Y') }}{{ $issue->status === DocumentStatus::Posted && auth()->user()->can('costs.view') ? ' · '.$this->formatRupiah($issue->totalCost()) : '' }}</p>
                     </a>
                 @empty
                     <p class="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No material issues yet.') }}</p>

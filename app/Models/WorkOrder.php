@@ -9,12 +9,14 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Collection;
 
 /**
  * @property int $id
  * @property WorkOrderStatus $status
  */
-#[Guarded(['id', 'wo_number', 'status', 'quantity_good', 'quantity_reject', 'overhead_rate', 'planned_overhead_cost', 'printed_at', 'closed_by', 'closed_at'])]
+#[Guarded(['id', 'wo_number', 'status', 'quantity_good', 'quantity_reject', 'overhead_rate', 'planned_overhead_cost', 'printed_at'])]
 class WorkOrder extends Model
 {
     use HasFactory;
@@ -32,7 +34,6 @@ class WorkOrder extends Model
             'overhead_rate' => 'decimal:2',
             'planned_overhead_cost' => 'decimal:2',
             'printed_at' => 'datetime',
-            'closed_at' => 'datetime',
         ];
     }
 
@@ -48,11 +49,6 @@ class WorkOrder extends Model
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
-    }
-
-    public function closedBy(): BelongsTo
-    {
-        return $this->belongsTo(User::class, 'closed_by');
     }
 
     /**
@@ -79,6 +75,42 @@ class WorkOrder extends Model
     public function materialIssues(): HasMany
     {
         return $this->hasMany(MaterialIssue::class);
+    }
+
+    /**
+     * Posted issue lines of this WO, oldest issue first — the order in which reported material use
+     * is charged to them (FIFO by issue, decided 2026-10-08).
+     *
+     * @return Collection<int, MaterialIssueItem>
+     */
+    public function postedIssueItems(bool $lock = false): Collection
+    {
+        return MaterialIssueItem::query()
+            ->select('material_issue_items.*')
+            ->join('material_issues', 'material_issues.id', '=', 'material_issue_items.material_issue_id')
+            ->where('material_issues.work_order_id', $this->id)
+            ->where('material_issues.status', 'posted')
+            ->orderBy('material_issues.issued_at')
+            ->orderBy('material_issues.id')
+            ->with(['product', 'stockMovements'])
+            ->when($lock, fn ($query) => $query->lockForUpdate())
+            ->get();
+    }
+
+    /**
+     * One result per WO (decided 2026-10-09) — reported once the work is finished.
+     */
+    public function productionResult(): HasOne
+    {
+        return $this->hasOne(ProductionResult::class);
+    }
+
+    /**
+     * A result can be recorded once production has started (first issue posted) and before it's completed.
+     */
+    public function canRecordResult(): bool
+    {
+        return $this->status === WorkOrderStatus::InProgress;
     }
 
     /**

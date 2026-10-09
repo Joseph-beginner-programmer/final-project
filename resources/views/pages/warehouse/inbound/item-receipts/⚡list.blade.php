@@ -135,7 +135,9 @@ new #[Title('Item Receipt')] class extends Component
                     <th class="py-3 px-4">{{ __('Supplier') }}</th>
                     <th class="py-3 px-4">{{ __('Order Date') }}</th>
                     <th class="py-3 px-4">{{ __('Expected Delivery') }}</th>
-                    <th class="py-3 px-4 text-right">{{ __('Total') }}</th>
+                    @can('costs.view')
+                        <th class="py-3 px-4 text-right">{{ __('Total') }}</th>
+                    @endcan
                     <th class="py-3 px-4">{{ __('Status') }}</th>
                 </tr>
             </thead>
@@ -154,9 +156,11 @@ new #[Title('Item Receipt')] class extends Component
                         <td class="py-4 px-4 text-zinc-700 dark:text-zinc-300">{{ $order->supplier->supplier_name }}</td>
                         <td class="py-4 px-4 font-data tabular-nums text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{ $order->order_date?->format('d M Y') }}</td>
                         <td class="py-4 px-4 font-data tabular-nums text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{ $order->expected_delivery_date?->format('d M Y') ?? '—' }}</td>
-                        <td class="py-4 px-4 text-right font-data font-medium tabular-nums whitespace-nowrap text-zinc-900 dark:text-white">
-                            Rp {{ number_format((float) $order->total_amount, 0, ',', '.') }}
-                        </td>
+                        @can('costs.view')
+                            <td class="py-4 px-4 text-right font-data font-medium tabular-nums whitespace-nowrap text-zinc-900 dark:text-white">
+                                Rp {{ number_format((float) $order->total_amount, 0, ',', '.') }}
+                            </td>
+                        @endcan
                         <td class="py-4 px-4">
                             <span class="inline-flex items-center rounded-full border px-2.5 py-1 text-xs font-medium whitespace-nowrap transition-transform duration-150 group-hover:scale-105 {{ $this->statusBadgeClasses($order->status) }}">
                                 {{ $order->status->label() }}
@@ -165,7 +169,7 @@ new #[Title('Item Receipt')] class extends Component
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6" class="py-12 px-4 text-center">
+                        <td colspan="{{ auth()->user()->can('costs.view') ? 6 : 5 }}" class="py-12 px-4 text-center">
                             <flux:icon.inbox class="mx-auto size-8 text-zinc-300 dark:text-zinc-600 mb-2" />
                             <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('No purchase orders found.') }}</p>
                         </td>
@@ -200,9 +204,11 @@ new #[Title('Item Receipt')] class extends Component
                     <span class="font-data tabular-nums text-zinc-500 dark:text-zinc-400">
                         {{ $order->expected_delivery_date?->format('d M Y') ?? __('No delivery date') }}
                     </span>
-                    <span class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">
-                        Rp {{ number_format((float) $order->total_amount, 0, ',', '.') }}
-                    </span>
+                    @can('costs.view')
+                        <span class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">
+                            Rp {{ number_format((float) $order->total_amount, 0, ',', '.') }}
+                        </span>
+                    @endcan
                 </div>
             </a>
         @empty

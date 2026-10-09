@@ -33,6 +33,15 @@ class WorkOrderPolicy
             && ! in_array($workOrder->status, [WorkOrderStatus::Draft, WorkOrderStatus::Cancelled], true);
     }
 
+    /**
+     * A Draft is still only a plan — nothing printed or issued — so it can be edited.
+     */
+    public function update(User $user, WorkOrder $workOrder): bool
+    {
+        return $user->can('production.create')
+            && $workOrder->status === WorkOrderStatus::Draft;
+    }
+
     public function release(User $user, WorkOrder $workOrder): bool
     {
         return $user->can('production.create')

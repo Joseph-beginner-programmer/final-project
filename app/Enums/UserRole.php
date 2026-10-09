@@ -14,7 +14,7 @@ enum UserRole: string
 
     public function label(): string
     {
-        return match($this) {
+        return __(match ($this) {
             self::Purchasing => 'Purchasing',
             self::Sales => 'Sales',
             self::Accounting => 'Accounting',
@@ -22,7 +22,7 @@ enum UserRole: string
             self::Warehouse => 'Warehouse',
             self::SystemAdmin => 'System Admin',
             self::Manager => 'Manager',
-        };
+        });
     }
 
     public function dashboardRoute(): string

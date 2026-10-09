@@ -77,6 +77,11 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('overhead.manage', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
+        // need-to-know: rupiah amounts (purchase prices, FIFO costs) on operational pages
+        // such as the warehouse ones; staff there work with quantities only
+        Gate::define('costs.view', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
 
         //morph
         Relation::morphMap([

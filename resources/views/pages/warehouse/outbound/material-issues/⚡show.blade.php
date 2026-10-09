@@ -149,7 +149,7 @@ new #[Title('Material Issue')] class extends Component {
     </div>
 
     {{-- Info --}}
-    <div class="mt-6 grid grid-cols-2 sm:grid-cols-4 rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100 dark:divide-white/5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
+    <div class="mt-6 grid grid-cols-2 {{ auth()->user()->can('costs.view') ? 'sm:grid-cols-4' : 'sm:grid-cols-3' }} rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100 dark:divide-white/5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <div class="px-4 py-3">
             <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Work Order') }}</p>
             <p class="mt-1 font-data text-sm text-zinc-800 dark:text-zinc-200">{{ $issue->workOrder->wo_number }}</p>
@@ -164,13 +164,15 @@ new #[Title('Material Issue')] class extends Component {
             <p class="mt-1 text-sm text-zinc-800 dark:text-zinc-200">{{ $issue->issuedBy?->name ?? '—' }}</p>
             <p class="font-data text-[11px] text-zinc-500 dark:text-zinc-400">{{ $issue->issued_at?->format('d M Y H:i') }}</p>
         </div>
-        <div class="px-4 py-3">
-            <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Total cost') }}</p>
-            <p class="mt-1 font-data text-sm font-medium tabular-nums text-zinc-900 dark:text-white">{{ $posted ? $this->formatRupiah($issue->totalCost()) : '—' }}</p>
-            @unless ($posted)
-                <p class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('Set by FIFO on posting') }}</p>
-            @endunless
-        </div>
+        @can('costs.view')
+            <div class="px-4 py-3">
+                <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Total cost') }}</p>
+                <p class="mt-1 font-data text-sm font-medium tabular-nums text-zinc-900 dark:text-white">{{ $posted ? $this->formatRupiah($issue->totalCost()) : '—' }}</p>
+                @unless ($posted)
+                    <p class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('Set by FIFO on posting') }}</p>
+                @endunless
+            </div>
+        @endcan
     </div>
 
     {{-- Lines --}}
@@ -195,7 +197,7 @@ new #[Title('Material Issue')] class extends Component {
                         </div>
                         <div class="text-right">
                             <p class="font-data text-sm font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatQuantity((string) $item->quantity) }} {{ $item->product->unit_of_measure }}</p>
-                            @if ($posted)
+                            @if ($posted && auth()->user()->can('costs.view'))
                                 <p class="font-data text-xs tabular-nums text-zinc-700 dark:text-zinc-300">{{ $this->formatRupiah((string) $item->total_cost) }}</p>
                                 <p class="font-data text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">@ {{ $this->formatRupiah($item->unitCost()) }}/{{ $item->product->unit_of_measure }}</p>
                             @endif
@@ -209,7 +211,11 @@ new #[Title('Material Issue')] class extends Component {
                             @foreach ($item->stockMovements->sortBy('id') as $movement)
                                 <div class="flex items-center justify-between gap-3 font-data text-[11px] tabular-nums text-zinc-600 dark:text-zinc-400">
                                     <span>{{ $movement->inventoryLot->lot_number }} <span class="text-zinc-400 dark:text-zinc-500">· {{ $movement->inventoryLot->received_at->format('d M Y') }}</span></span>
-                                    <span>{{ $this->formatQuantity((string) $movement->quantity) }} × {{ $this->formatRupiah((string) $movement->unit_cost) }} = {{ $this->formatRupiah((string) $movement->total_value) }}</span>
+                                    @can('costs.view')
+                                        <span>{{ $this->formatQuantity((string) $movement->quantity) }} × {{ $this->formatRupiah((string) $movement->unit_cost) }} = {{ $this->formatRupiah((string) $movement->total_value) }}</span>
+                                    @else
+                                        <span>{{ $this->formatQuantity((string) $movement->quantity) }} {{ $item->product->unit_of_measure }}</span>
+                                    @endcan
                                 </div>
                             @endforeach
                         </div>

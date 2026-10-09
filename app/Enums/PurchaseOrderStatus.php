@@ -33,7 +33,7 @@ enum PurchaseOrderStatus: string
 
     public function label(): string
     {
-        return match ($this) {
+        return __(match ($this) {
             self::Draft => 'Draft',
             self::PendingApproval => 'Pending Approval',
             self::Approved => 'Approved',
@@ -42,6 +42,6 @@ enum PurchaseOrderStatus: string
             self::FullyReceived => 'Fully Received',
             self::Cancelled => 'Cancelled',
             self::Closed => 'Closed',
-        };
+        });
     }
 }

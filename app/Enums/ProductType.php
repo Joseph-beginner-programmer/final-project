@@ -15,10 +15,10 @@ enum ProductType: string
 
     public function label(): string
     {
-        return match ($this) {
+        return __(match ($this) {
             self::RawMaterial => 'Raw Material',
             self::Wip => 'Work In Progress',
             self::FinishedGoods => 'Finished Goods',
-        };
+        });
     }
 }

@@ -168,7 +168,7 @@ new #[Title('Item Receipt Detail')] class extends Component
     {{-- Summary --}}
     @php($progress = $this->receivingProgress())
     @php($breakdown = $this->itemStatusBreakdown())
-    <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 items-stretch">
+    <div class="mt-4 grid grid-cols-1 {{ auth()->user()->can('costs.view') ? 'lg:grid-cols-3' : 'lg:grid-cols-2' }} gap-4 items-stretch">
         <div class="rounded-md border border-zinc-200 dark:border-white/10 border-s-[3px] border-s-accent bg-white dark:bg-zinc-900 shadow-sm shadow-zinc-900/5 dark:shadow-none overflow-hidden flex flex-col motion-safe:animate-fade-slide-up" style="animation-delay: 60ms;">
             <div class="p-4 flex-1">
                 <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
@@ -251,6 +251,7 @@ new #[Title('Item Receipt Detail')] class extends Component
             </div>
         </div>
 
+        @can('costs.view')
         <div class="rounded-md border border-zinc-200 dark:border-white/10 border-s-[3px] border-s-accent bg-white dark:bg-zinc-900 shadow-sm shadow-zinc-900/5 dark:shadow-none overflow-hidden flex flex-col motion-safe:animate-fade-slide-up" style="animation-delay: 120ms;">
             <div class="p-4 flex-1">
                 <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-3">
@@ -270,6 +271,7 @@ new #[Title('Item Receipt Detail')] class extends Component
                 </p>
             </div>
         </div>
+        @endcan
     </div>
 
     {{-- Items --}}

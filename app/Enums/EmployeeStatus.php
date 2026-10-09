@@ -9,9 +9,9 @@ enum EmployeeStatus: string
 
     public function label(): string
     {
-        return match ($this) {
+        return __(match ($this) {
             self::Active => 'Active',
             self::Inactive => 'Inactive',
-        };
+        });
     }
 }

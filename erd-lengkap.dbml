@@ -64,21 +64,8 @@ Enum work_order_status {
   draft
   released
   in_progress
-  completed
-  completed_short
+  completed   // diisi saat hasil produksi diposting; di bawah target tetap completed (batch lebih kecil)
   cancelled
-}
-
-Enum reject_type {
-  normal
-  abnormal
-}
-
-Enum production_result_status {
-  draft
-  pending_verification
-  approved
-  rejected
 }
 
 Enum discrepancy_resolution {
@@ -415,18 +402,16 @@ Table work_orders [headercolor: #C62828] {
   product_id bigint [ref: > products.id, note: 'Hasil: wip (tahap antara) atau finished_goods (tahap akhir)']
   work_center_id bigint [ref: > work_centers.id, note: 'Salinan dari production_formulas saat WO dibuat; menentukan arti planned_machine_hours dan asal overhead_rate']
   quantity_target decimal(18,4)
-  quantity_good decimal(18,4) [default: 0, note: 'Dari production_results yang disetujui (satu hasil per WO)']
+  quantity_good decimal(18,4) [default: 0, note: 'Dari production_results yang diposting (satu hasil per WO)']
   quantity_reject decimal(18,4) [default: 0]
   planned_start_date date
   planned_end_date date
   planned_machine_hours decimal(10,2) [note: 'Jam mesin berjalan (diinput manual); bukan jam pekerja. 4 pekerja x 8 jam di satu lini = 8 jam mesin']
-  overhead_rate decimal(18,2) [note: 'Salinan tarif dari overhead_rates saat WO dibuat']
+  overhead_rate decimal(18,2) [note: 'Salinan tarif dari overhead_rates; sementara selama draf, disalin ulang saat WO dirilis lalu tetap']
   planned_overhead_cost decimal(18,2) [note: 'planned_machine_hours x overhead_rate']
   status work_order_status [default: 'draft']
   printed_at timestamp [null, note: '<<extend>> Mencetak Perintah Kerja']
   created_by bigint [ref: > users.id]
-  closed_by bigint [ref: > users.id, null, note: 'Keputusan supervisor menutup WO di bawah target']
-  closed_at timestamp [null]
   created_at timestamp
   updated_at timestamp
 }
@@ -454,7 +439,7 @@ Table work_order_labors [headercolor: #C62828] {
   work_order_id bigint [ref: > work_orders.id]
   employee_id bigint [ref: > employees.id]
   planned_hours decimal(10,2)
-  hourly_rate decimal(18,2) [note: 'Salinan tarif dari labor_rates saat alokasi']
+  hourly_rate decimal(18,2) [note: 'Salinan tarif dari labor_rates; sementara selama draf, disalin ulang saat WO dirilis lalu tetap']
   planned_cost decimal(18,2)
 }
 
@@ -488,12 +473,19 @@ Table material_issue_items [headercolor: #C62828] {
 }
 
 // Gudang: pengembalian sisa bahan dari produksi (dokumen terpisah, diposting oleh gudang).
+// Hanya pergerakan persediaan: WO tidak menunggu retur (tidak ada status WO tambahan).
 // Hasil produksi mencatat sisa per bahan; stok baru bertambah saat gudang memposting retur ini,
 // yaitu saat bahan benar-benar diterima kembali. Draf -> Posting.
 // Stok kembali ke lot ASAL: membalik mutasi OUT baris pengeluaran, mulai dari lot yang terakhir
 // diambil (kebalikan urutan FIFO), maksimal sebanyak yang diambil dari lot tersebut. Hasilnya
 // persediaan sama persis seperti bila hanya jumlah yang dipakai yang dikeluarkan secara FIFO.
 // Satu stock_movements IN (type material_return) per lot yang diisi ulang, dengan biaya lot itu.
+// Gudang mencatat jumlah AKTUAL yang diterima. Selisih terhadap sisa yang dilaporkan produksi
+// tidak mengubah biaya WO (hasil produksi sudah diposting); selisihnya dicatat sebagai selisih bahan.
+// Jurnal hanya untuk selisih (pengeluaran bahan tidak berjurnal, jadi nilai sisa yang dilaporkan
+// masih ada di akun persediaan):
+//   kurang: Dr Selisih Bahan / Cr Persediaan Bahan Baku (atau Barang Setengah Jadi)
+//   lebih:  Dr Persediaan / Cr Selisih Bahan
 Table material_returns [headercolor: #C62828] {
   id bigint [pk, increment]
   return_number varchar [unique]
@@ -512,8 +504,10 @@ Table material_return_items [headercolor: #C62828] {
   material_return_id bigint [ref: > material_returns.id]
   material_issue_item_id bigint [ref: > material_issue_items.id, note: 'Baris pengeluaran yang dikembalikan; menentukan lot yang diisi ulang']
   product_id bigint [ref: > products.id]
-  quantity decimal(18,4)
+  quantity_expected decimal(18,4) [note: 'Sisa menurut hasil produksi = material_issue_items.quantity - quantity_consumed']
+  quantity decimal(18,4) [note: 'Jumlah aktual yang diterima gudang']
   total_cost decimal(18,2) [note: 'Jumlah nilai stock_movements IN, dengan biaya lot yang diisi ulang (bukan biaya rata-rata baris)']
+  variance_value decimal(18,2) [default: 0, note: 'Nilai sisa yang dilaporkan - total_cost; positif = kurang (kerugian), negatif = lebih. Dijurnal ke Selisih Bahan']
 
   indexes {
     (material_return_id, material_issue_item_id) [unique]
@@ -521,34 +515,29 @@ Table material_return_items [headercolor: #C62828] {
 }
 
 // Mencatat Hasil Produksi: SATU hasil per WO, dilaporkan setelah pekerjaan selesai.
-// Membuat SATU jurnal saat disetujui
-// Dr Barang (Setengah) Jadi Belum Diterima, Dr Kerugian Produk Rusak (jika ada)
+// Diinput oleh Kepala Produksi (bertanggung jawab atas jumlah hasil); tanpa langkah persetujuan.
+// Draf -> Posting. Membuat SATU jurnal saat diposting
+// Dr Barang (Setengah) Jadi Belum Diterima
 // Cr Persediaan Bahan Baku / Barang Setengah Jadi, Cr BTKL Dibebankan, Cr BOP Dibebankan
 Table production_results [headercolor: #C62828] {
   id bigint [pk, increment]
-  result_number varchar [unique]
+  result_number varchar [unique, note: 'RES-{tahun}-{id}']
   work_order_id bigint [ref: - work_orders.id, note: 'Satu hasil per WO']
-  production_date date [note: 'Tanggal pekerjaan selesai']
-  shift varchar
+  production_date date [note: 'Tanggal pekerjaan selesai; tidak boleh di masa depan atau sebelum pengeluaran bahan pertama']
   quantity_good decimal(18,4)
-  quantity_reject decimal(18,4) [default: 0]
-  reject_type reject_type [default: 'normal']
+  quantity_reject decimal(18,4) [default: 0, note: 'Satu jenis reject; biayanya diserap unit baik (tidak ada pembedaan normal/abnormal)']
   reject_reason text [null, note: 'Keterangan cacat']
   material_cost decimal(18,2) [note: 'Jumlah production_result_materials.total_cost = nilai dikeluarkan - nilai sisa yang dikembalikan']
   labor_cost decimal(18,2)
   machine_hours decimal(10,2) [note: 'Jam mesin aktual (diinput manual)']
   overhead_cost decimal(18,2) [note: 'BOP dibebankan = machine_hours x work_orders.overhead_rate']
-  total_cost decimal(18,2)
-  output_cost decimal(18,2) [note: 'Debit ke akun transit sesuai jenis hasil: Barang Setengah Jadi Belum Diterima (wip) atau Barang Jadi Belum Diterima (finished_goods)']
-  abnormal_loss_cost decimal(18,2) [default: 0, note: 'Debit ke Kerugian Produk Rusak']
-  unit_cost decimal(18,4) [note: 'output_cost / quantity_good']
-  status production_result_status [default: 'draft']
+  total_cost decimal(18,2) [note: 'material + labor + overhead; seluruhnya didebit ke akun transit sesuai jenis hasil: Barang Setengah Jadi Belum Diterima (wip) atau Barang Jadi Belum Diterima (finished_goods)']
+  unit_cost decimal(18,4) [note: 'total_cost / quantity_good (biaya reject diserap unit baik)']
+  status document_status [default: 'draft']
   notes text [null]
-  submitted_by bigint [ref: > users.id]
-  submitted_at timestamp [null]
-  verified_by bigint [ref: > users.id, null]
-  verified_at timestamp [null]
-  rejection_reason text [null]
+  created_by bigint [ref: > users.id, note: 'Kepala Produksi']
+  posted_by bigint [ref: > users.id, null, note: 'Diisi saat posting']
+  posted_at timestamp [null]
   created_at timestamp
   updated_at timestamp
 
@@ -571,9 +560,13 @@ Table production_result_labors [headercolor: #C62828] {
   id bigint [pk, increment]
   production_result_id bigint [ref: > production_results.id]
   employee_id bigint [ref: > employees.id]
-  hours decimal(10,2) [note: 'Terisi otomatis dari work_order_labors, bisa diubah']
-  hourly_rate decimal(18,2)
+  hours decimal(10,2) [note: 'Jam aktual. Pekerja terencana terisi dari work_order_labors (bisa diubah); pekerja tambahan (pengganti/pembantu) boleh ditambahkan']
+  hourly_rate decimal(18,2) [note: 'Diisi saat posting: salinan tarif di work_order_labors, atau untuk pekerja tambahan tarif labor_rates pada production_date']
   total_cost decimal(18,2)
+
+  indexes {
+    (production_result_id, employee_id) [unique]
+  }
 }
 
 Table production_receipts [headercolor: #C62828] {
@@ -699,7 +692,7 @@ Table sales_return_items [headercolor: #6A1B9A] {
 // Akun yang dipakai jurnal otomatis diatur di konfigurasi aplikasi
 // (misalnya config/accounts.php): raw_material_inventory, wip_inventory,
 // finished_goods_inventory, wip_in_transit, fg_in_transit, applied_labor,
-// applied_overhead, overhead_variance, spoilage_loss, discrepancy_loss, grni, purchase_price_variance,
+// applied_overhead, overhead_variance, discrepancy_loss, material_variance, grni, purchase_price_variance,
 // vat_in, vat_out, accounts_payable, accounts_receivable, sales_revenue,
 // sales_return, cogs
 Table accounts [headercolor: #EF6C00] {
