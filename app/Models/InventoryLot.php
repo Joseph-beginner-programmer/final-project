@@ -35,9 +35,6 @@ class InventoryLot extends Model
         return $this->morphTo();
     }
 
-    /**
-     * Every movement in or out of this lot (the IN that created it, then the FIFO OUTs that drew from it).
-     */
     public function stockMovements(): HasMany
     {
         return $this->hasMany(StockMovement::class);

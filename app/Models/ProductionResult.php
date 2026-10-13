@@ -52,6 +52,16 @@ class ProductionResult extends Model
         return $this->hasMany(ProductionResultLabor::class);
     }
 
+    public function materialReturns(): HasMany
+    {
+        return $this->hasMany(MaterialReturn::class);
+    }
+
+    public function productionReceipts(): HasMany
+    {
+        return $this->hasMany(ProductionReceipt::class);
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -63,8 +73,6 @@ class ProductionResult extends Model
     }
 
     /**
-     * Material used per product id, summed over the issue lines it was allocated to.
-     *
      * @return array<int, string>
      */
     public function usedQuantities(): array

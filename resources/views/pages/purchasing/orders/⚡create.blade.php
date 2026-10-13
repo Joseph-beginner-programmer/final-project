@@ -65,10 +65,6 @@ new #[Title('Create Purchase Order')] class extends Component {
             ->get();
     }
 
-    /**
-     * Option rows for the supplier <x-picker>. A supplier with no purchasable products is listed
-     * but unavailable — a PO for it could never get a line item.
-     */
     #[Computed]
     public function supplierOptions(): array
     {
@@ -102,10 +98,6 @@ new #[Title('Create Purchase Order')] class extends Component {
         return $this->selectedSupplier?->products()->purchasable()->get() ?? collect();
     }
 
-    /**
-     * Option rows for one line item's <x-picker>: the supplier's products with their catalog price.
-     * A product already on another line is listed but unavailable (one line per product per PO).
-     */
     public function productOptions(int $index): array
     {
         $taken = collect($this->items)->except($index)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all();
@@ -274,9 +266,7 @@ new #[Title('Create Purchase Order')] class extends Component {
     <div class="mt-6 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-md shadow-zinc-900/4 dark:shadow-none p-6 sm:p-8 lg:p-10 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
 
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-x-10 gap-y-10">
-            {{-- Main column --}}
             <div class="lg:col-span-2 space-y-10">
-                {{-- Vendor Information --}}
                 <section class="motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
                     <div class="flex items-center gap-2.5 pb-2.5 mb-5 border-b border-zinc-200 dark:border-white/10">
                         <span class="flex items-center justify-center size-5">
@@ -328,7 +318,6 @@ new #[Title('Create Purchase Order')] class extends Component {
                                 </div>
                             @else
                                 <div wire:key="supplier-select" wire:transition>
-                                    {{-- flux:field + flux:label: same label spacing as the date inputs beside it --}}
                                     <flux:field>
                                         <flux:label>{{ __('Supplier') }}</flux:label>
                                         <x-picker
@@ -358,7 +347,6 @@ new #[Title('Create Purchase Order')] class extends Component {
                     </div>
                 </section>
 
-                {{-- Line Item Specifications --}}
                 <section class="motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
                     <div class="flex items-center justify-between pb-2.5 mb-5 border-b border-zinc-200 dark:border-white/10">
                         <div class="flex items-center gap-2.5">
@@ -403,11 +391,6 @@ new #[Title('Create Purchase Order')] class extends Component {
                             <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Select a supplier first to add items.') }}</p>
                         </div>
                     @else
-                        {{-- Line items adapt to the width they actually get (a container query on this box,
-                             not the viewport): this form column can be ~550px even on a desktop screen.
-                             Narrow (< 48rem): two lines, product full width + remove, then qty / price / subtotal
-                             with small labels. Wide (>= 48rem): one row per item under column headers.
-                             Every numeric field keeps a usable width either way; the product never collapses. --}}
                         <div class="@container hidden lg:block rounded-md border border-zinc-200 dark:border-white/10" role="table" aria-label="{{ __('Line Items') }}">
                             <div role="row" class="hidden @3xl:grid grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_8rem_2rem] gap-x-3 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10 rounded-t-md">
                                 <span role="columnheader">{{ __('Product') }}</span>
@@ -429,7 +412,6 @@ new #[Title('Create Purchase Order')] class extends Component {
                                     :class="focused && 'bg-accent/5 dark:bg-accent/10'"
                                     class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2rem] @3xl:grid-cols-[minmax(0,1fr)_8.5rem_8.5rem_8rem_2rem] gap-x-3 gap-y-2.5 @3xl:gap-y-0 items-start px-3 py-3 @3xl:py-2.5 border-b border-zinc-100 dark:border-white/5 last:border-0 transition-colors"
                                 >
-                                    {{-- product: the whole first line when narrow, first column when wide --}}
                                     <div role="cell" class="col-span-3 @3xl:col-span-1 min-w-0">
                                         <x-picker :model="'items.'.$index.'.product_id'" :options="$this->productOptions($index)" :selected="(string) $item['product_id']" :placeholder="__('Select product...')" :label="__('Product')" :invalid="$errors->has('items.'.$index.'.product_id')" />
                                         @error("items.$index.product_id") <flux:error class="mt-1" :message="$message" /> @enderror
@@ -438,7 +420,6 @@ new #[Title('Create Purchase Order')] class extends Component {
                                     <div role="cell" class="min-w-0">
                                         <p class="@3xl:hidden mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Qty') }}</p>
                                         @if ($product)
-                                            {{-- unit lives inside the field as a suffix, so it can never squeeze the number --}}
                                             <flux:input.group>
                                                 <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model.live="items.{{ $index }}.quantity_ordered" :loading="false" :aria-label="__('Qty')" />
                                                 <flux:input.group.suffix class="gap-1 px-2 text-xs" title="{{ $product->isBelowReorderPoint() ? __('Low stock') : __('Stock available') }}: {{ $product->current_stock }}">
@@ -473,7 +454,6 @@ new #[Title('Create Purchase Order')] class extends Component {
                                         </div>
                                     </div>
 
-                                    {{-- remove: beside the product on the first line when narrow, last column when wide --}}
                                     <div role="cell" class="col-start-4 row-start-1 @3xl:col-start-5 flex justify-end">
                                         <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeItemRow({{ $index }})" :aria-label="__('Remove')" class="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 active:scale-[0.95]" />
                                     </div>
@@ -481,9 +461,6 @@ new #[Title('Create Purchase Order')] class extends Component {
                             @endforeach
                         </div>
 
-                        {{-- Mobile/narrow-tablet card list — the Qty/Unit Price columns get
-                             too cramped below `lg`, so items stack vertically with the same
-                             fields given their own grid cells instead. --}}
                         <div class="lg:hidden space-y-3">
                             @foreach ($items as $index => $item)
                                 <?php $product = $this->availableProducts->firstWhere('id', (int) ($item['product_id'] ?? 0)); ?>
@@ -544,7 +521,6 @@ new #[Title('Create Purchase Order')] class extends Component {
                 </section>
             </div>
 
-            {{-- Order Summary rail --}}
             <div class="lg:col-span-1">
                 <div class="lg:sticky lg:top-6 motion-safe:animate-fade-slide-up" style="animation-delay: 130ms;">
                     <div class="rounded-md border border-zinc-200 dark:border-white/10 overflow-hidden">

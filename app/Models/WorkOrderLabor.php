@@ -12,7 +12,6 @@ class WorkOrderLabor extends Model
 {
     use HasFactory;
 
-    // table has no created_at/updated_at (matches the ERD)
     public $timestamps = false;
 
     protected function casts(): array

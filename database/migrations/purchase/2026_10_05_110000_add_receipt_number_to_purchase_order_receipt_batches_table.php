@@ -14,7 +14,6 @@ return new class extends Migration
             $table->string('receipt_number')->nullable()->after('id');
         });
 
-        // backfill existing batches before tightening the constraint
         DB::table('purchase_order_receipt_batches')->orderBy('id')->each(function ($batch) {
             DB::table('purchase_order_receipt_batches')
                 ->where('id', $batch->id)

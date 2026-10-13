@@ -10,11 +10,6 @@ use App\Models\User;
 use App\Models\WorkCenter;
 use Illuminate\Database\Seeder;
 
-/**
- * Dev data for the Production module: WIP + finished-goods products and one formula each.
- * Two-hop chain: raw PP → WIP (body, lid), then WIP → finished thermos.
- * Idempotent (firstOrCreate on unique codes), so it's safe to re-run.
- */
 class ProductionSeeder extends Seeder
 {
     public function run(): void
@@ -33,7 +28,6 @@ class ProductionSeeder extends Seeder
 
         $id = fn (string $code) => Product::where('product_code', $code)->value('id');
 
-        // work centers ship with their migration (reference data); dev overhead rates are set here
         $workCenter = fn (string $code) => WorkCenter::where('code', $code)->firstOrFail();
 
         foreach (['MOLDING' => '15000', 'ASSEMBLY' => '40000'] as $code => $rate) {
@@ -42,7 +36,6 @@ class ProductionSeeder extends Seeder
             }
         }
 
-        // material quantities are per output_quantity (a batch of 100 pcs)
         $formulas = [
             'F-WIP-001' => [
                 'product' => 'WIP-001', 'work_center' => 'MOLDING', 'output_quantity' => '100',

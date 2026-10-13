@@ -8,10 +8,6 @@ use App\Models\WorkCenter;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Same effective-dating rules as SetLaborRateAction: never overwrite — a new rate closes the
- * previous one the day before it starts, so every work order keeps the rate it was planned with.
- */
 class SetOverheadRateAction
 {
     public function handle(WorkCenter $workCenter, string $ratePerHour, string $effectiveFrom, int $createdBy): OverheadRate

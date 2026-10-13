@@ -43,9 +43,6 @@ new #[Title('Material Issue')] class extends Component {
         return str_replace(['%', '_'], ['\%', '\_'], $this->search);
     }
 
-    /**
-     * Work Orders on the floor that can receive materials, with how much of their plan is already issued.
-     */
     #[Computed]
     public function workOrders(): Collection
     {
@@ -133,7 +130,6 @@ new #[Title('Material Issue')] class extends Component {
         <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
     </div>
 
-    {{-- Tabs --}}
     <div class="mt-6 flex items-center gap-1.5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         @foreach (['work-orders' => __('Work orders needing materials'), 'documents' => __('Issue documents')] as $key => $label)
             <button type="button" wire:click="$set('tab', '{{ $key }}')"
@@ -155,7 +151,6 @@ new #[Title('Material Issue')] class extends Component {
 
     <div wire:loading.class="opacity-50" wire:target="search,tab" class="mt-4 transition-opacity motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
         @if ($tab === 'work-orders')
-            {{-- Work Orders that can receive materials --}}
             <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
                 @forelse ($this->workOrders as $workOrder)
                     @php($complete = $workOrder->materials_total > 0 && $workOrder->materials_fulfilled === $workOrder->materials_total)
@@ -171,7 +166,6 @@ new #[Title('Material Issue')] class extends Component {
                             </p>
                         </div>
 
-                        {{-- fulfilment: how many planned materials are fully issued --}}
                         <div class="sm:w-44">
                             <div class="flex items-center justify-between text-xs">
                                 <span class="text-zinc-500 dark:text-zinc-400">{{ __('Materials issued') }}</span>
@@ -188,7 +182,6 @@ new #[Title('Material Issue')] class extends Component {
                                     {{ __('Open draft') }}
                                 </flux:button>
                             @elseif ($complete)
-                                {{-- every planned material is fully issued; a link can't be disabled, so render a plain disabled button --}}
                                 <flux:tooltip :content="__('All planned materials have been issued.')">
                                     <div>
                                         <flux:button size="sm" variant="primary" icon="arrow-up-tray" disabled>
@@ -208,7 +201,6 @@ new #[Title('Material Issue')] class extends Component {
                 @endforelse
             </div>
         @else
-            {{-- Issue documents --}}
             <div class="hidden md:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
                 <table class="w-full text-xs border-collapse">
                     <thead>

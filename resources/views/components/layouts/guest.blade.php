@@ -7,13 +7,8 @@
 
     <title>{{ $title ?? config('app.name', 'MIMS') }}</title>
 
-    {{-- Lets Flux manage the .dark class on <html> based on system preference
-         or the user's saved choice (local storage). Remove this if you want
-         to manage appearance manually — see fluxui.dev/docs/dark-mode --}}
     @fluxAppearance
 
-    {{-- Roboto (display) + Fira Code (tabular data) — Open Sans
-         is assumed to already be loaded app-wide. See design-system/mims/MASTER.md. --}}
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=roboto:500,600|fira-code:400,500&display=swap" rel="stylesheet" />
 

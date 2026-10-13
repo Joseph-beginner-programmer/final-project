@@ -23,23 +23,22 @@ class WorkOrderPolicy
         return $user->can('production.create');
     }
 
-    /**
-     * <<extend>> Mencetak Perintah Kerja — the paper copy is how the floor receives a WO, so it exists
-     * once the WO is released (never for a Draft plan or a Cancelled order).
-     */
     public function print(User $user, WorkOrder $workOrder): bool
     {
         return $user->can('production.view')
             && ! in_array($workOrder->status, [WorkOrderStatus::Draft, WorkOrderStatus::Cancelled], true);
     }
 
-    /**
-     * A Draft is still only a plan — nothing printed or issued — so it can be edited.
-     */
     public function update(User $user, WorkOrder $workOrder): bool
     {
         return $user->can('production.create')
             && $workOrder->status === WorkOrderStatus::Draft;
+    }
+
+    public function cancel(User $user, WorkOrder $workOrder): bool
+    {
+        return $user->can('production.create')
+            && in_array($workOrder->status, [WorkOrderStatus::Draft, WorkOrderStatus::Released], true);
     }
 
     public function release(User $user, WorkOrder $workOrder): bool

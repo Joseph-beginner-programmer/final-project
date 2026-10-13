@@ -42,9 +42,6 @@ class Employee extends Model
         return $query->where('status', EmployeeStatus::Active->value);
     }
 
-    /**
-     * The rate in effect on $date (today by default): started on/before it, and not yet ended.
-     */
     public function laborRateOn(?Carbon $date = null): ?LaborRate
     {
         $day = ($date ?? now())->toDateString();

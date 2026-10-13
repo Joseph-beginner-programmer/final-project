@@ -2,10 +2,6 @@
 
 namespace App\DTO\Production;
 
-/**
- * What the Kepala Produksi copies from the paper log: output, completion date, machine hours,
- * material used per product and actual hours per worker.
- */
 class ProductionResultData
 {
     /**

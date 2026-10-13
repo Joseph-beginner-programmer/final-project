@@ -16,7 +16,7 @@ use Illuminate\Support\Collection;
  * @property int $id
  * @property WorkOrderStatus $status
  */
-#[Guarded(['id', 'wo_number', 'status', 'quantity_good', 'quantity_reject', 'overhead_rate', 'planned_overhead_cost', 'printed_at'])]
+#[Guarded(['id', 'wo_number', 'status', 'quantity_good', 'quantity_reject', 'overhead_rate', 'planned_overhead_cost', 'printed_at', 'cancelled_by', 'cancelled_at', 'cancel_reason'])]
 class WorkOrder extends Model
 {
     use HasFactory;
@@ -34,6 +34,7 @@ class WorkOrder extends Model
             'overhead_rate' => 'decimal:2',
             'planned_overhead_cost' => 'decimal:2',
             'printed_at' => 'datetime',
+            'cancelled_at' => 'datetime',
         ];
     }
 
@@ -51,17 +52,16 @@ class WorkOrder extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    /**
-     * Copied from the formula at creation — the plan this WO was approved with.
-     */
+    public function cancelledBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
+    }
+
     public function workCenter(): BelongsTo
     {
         return $this->belongsTo(WorkCenter::class);
     }
 
-    /**
-     * Copied from the formula at creation, already scaled to quantity_target.
-     */
     public function materials(): HasMany
     {
         return $this->hasMany(WorkOrderMaterial::class);
@@ -78,9 +78,6 @@ class WorkOrder extends Model
     }
 
     /**
-     * Posted issue lines of this WO, oldest issue first — the order in which reported material use
-     * is charged to them (FIFO by issue, decided 2026-10-08).
-     *
      * @return Collection<int, MaterialIssueItem>
      */
     public function postedIssueItems(bool $lock = false): Collection
@@ -97,33 +94,22 @@ class WorkOrder extends Model
             ->get();
     }
 
-    /**
-     * One result per WO (decided 2026-10-09) — reported once the work is finished.
-     */
     public function productionResult(): HasOne
     {
         return $this->hasOne(ProductionResult::class);
     }
 
-    /**
-     * A result can be recorded once production has started (first issue posted) and before it's completed.
-     */
     public function canRecordResult(): bool
     {
         return $this->status === WorkOrderStatus::InProgress;
     }
 
-    /**
-     * Materials can be issued once the WO is on the floor, and until it's finished.
-     */
     public function canReceiveMaterials(): bool
     {
         return in_array($this->status, [WorkOrderStatus::Released, WorkOrderStatus::InProgress], true);
     }
 
     /**
-     * Quantity already issued (posted issues only) per product id — the "already issued" column.
-     *
      * @return array<int, string>
      */
     public function issuedQuantities(): array

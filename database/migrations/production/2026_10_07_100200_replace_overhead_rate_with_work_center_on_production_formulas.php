@@ -13,7 +13,6 @@ return new class extends Migration
             $table->foreignId('work_center_id')->nullable()->after('product_id')->constrained()->restrictOnDelete();
         });
 
-        // backfill existing formulas: raw → WIP runs on molding, WIP → finished goods on the assembly line
         $molding = DB::table('work_centers')->where('code', 'MOLDING')->value('id');
         $assembly = DB::table('work_centers')->where('code', 'ASSEMBLY')->value('id');
 
@@ -29,7 +28,6 @@ return new class extends Migration
 
         Schema::table('production_formulas', function (Blueprint $table) {
             $table->foreignId('work_center_id')->nullable(false)->change();
-            // overhead is now a per-machine-hour rate on the work center, not a per-unit rate on the recipe
             $table->dropColumn('overhead_rate_per_unit');
         });
     }

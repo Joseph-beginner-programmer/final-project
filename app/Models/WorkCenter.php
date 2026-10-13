@@ -24,9 +24,6 @@ class WorkCenter extends Model
         return $this->hasMany(ProductionFormula::class);
     }
 
-    /**
-     * The overhead rate in effect on $date (today by default) — same lookup as Employee::laborRateOn().
-     */
     public function overheadRateOn(?Carbon $date = null): ?OverheadRate
     {
         $day = ($date ?? now())->toDateString();

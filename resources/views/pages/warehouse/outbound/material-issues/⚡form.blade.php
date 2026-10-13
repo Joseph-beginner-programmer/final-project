@@ -24,10 +24,8 @@ new #[Title('Material Issue')] class extends Component {
     #[Locked]
     public ?int $materialIssueId = null;
 
-    /** planned materials: product_id => ['quantity' => string] */
     public array $planned = [];
 
-    /** materials outside the plan: list of ['product_id', 'quantity', 'note'] */
     public array $extras = [];
 
     public function mount(?WorkOrder $workOrder = null, ?MaterialIssue $materialIssue = null): void
@@ -56,7 +54,6 @@ new #[Title('Material Issue')] class extends Component {
             if ($draftLines->isNotEmpty()) {
                 $quantity = $draftLines->has($material->product_id) ? (string) $draftLines[$material->product_id]->quantity : '';
             } else {
-                // a new issue starts from what's still needed: plan − already posted
                 $remaining = bcsub((string) $material->quantity_planned, $issued[$material->product_id] ?? '0', 2);
                 $quantity = bccomp($remaining, '0', 2) > 0 ? $remaining : '';
             }
@@ -98,9 +95,6 @@ new #[Title('Material Issue')] class extends Component {
         });
     }
 
-    /**
-     * Raw materials and WIP outside the plan — already-added extras are shown as taken.
-     */
     public function extraOptions(int $index): array
     {
         $plannedIds = array_map('intval', array_keys($this->planned));
@@ -245,16 +239,15 @@ new #[Title('Material Issue')] class extends Component {
         </flux:button>
     </div>
 
-    {{-- Planned materials --}}
     <div class="mt-6 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">{{ __('Planned Materials') }}</h2>
 
-        @php($grid = 'grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_6.5rem_7.5rem_10rem] gap-x-3 gap-y-2 items-start')
+        @php($grid = 'grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_6.5rem_9rem_6.5rem_7.5rem_10rem] gap-x-3 gap-y-2 items-start')
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <div class="{{ $grid }} hidden md:grid px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10 rounded-t-xl">
                 <span>{{ __('Material') }}</span>
                 <span class="text-right">{{ __('Planned') }}</span>
-                <span class="text-right">{{ __('Already issued') }}</span>
+                <span class="text-right whitespace-nowrap">{{ __('Already issued') }}</span>
                 <span class="text-right">{{ __('Remaining') }}</span>
                 <span class="text-right">{{ __('In Stock') }}</span>
                 <span class="text-right">{{ __('Issue now') }}</span>
@@ -308,7 +301,6 @@ new #[Title('Material Issue')] class extends Component {
         <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Leave a material empty to skip it in this issue. Issuing more than planned is allowed.') }}</p>
     </div>
 
-    {{-- Materials outside the plan --}}
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
         <div class="flex items-center justify-between gap-3 mb-3">
             <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300">{{ __('Materials outside the plan') }}</h2>

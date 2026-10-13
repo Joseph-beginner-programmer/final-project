@@ -28,6 +28,7 @@ new #[Title('Production Result')] class extends Component {
     #[Locked]
     public ?int $productionResultId = null;
 
+    #[Locked]
     public string $productionDate = '';
 
     public string $quantityGood = '';
@@ -40,13 +41,10 @@ new #[Title('Production Result')] class extends Component {
 
     public string $notes = '';
 
-    /** material used per product: product_id => ['quantity' => string] */
     public array $used = [];
 
-    /** actual hours of the WO's planned workers: employee_id => ['hours' => string] */
     public array $hours = [];
 
-    /** workers added on the day (not in the plan): list of ['employee_id', 'hours'] */
     public array $extras = [];
 
     public function mount(?WorkOrder $workOrder = null, ?ProductionResult $productionResult = null): void
@@ -58,7 +56,6 @@ new #[Title('Production Result')] class extends Component {
         } else {
             Gate::authorize('create', ProductionResult::class);
 
-            // one result per WO — an existing one is opened instead of starting a second
             if ($existing = $workOrder->productionResult) {
                 $this->redirectRoute('production.results.show', $existing, navigate: true);
 
@@ -78,7 +75,7 @@ new #[Title('Production Result')] class extends Component {
         $issued = $workOrder->issuedQuantities();
 
         if ($productionResult?->exists) {
-            $this->productionDate = $productionResult->production_date->toDateString();
+            $this->productionDate = today()->toDateString();
             $this->quantityGood = $this->formatQuantity((string) $productionResult->quantity_good);
             $this->quantityReject = $this->formatQuantity((string) $productionResult->quantity_reject);
             $this->rejectReason = (string) $productionResult->reject_reason;
@@ -102,7 +99,6 @@ new #[Title('Production Result')] class extends Component {
         } else {
             $this->productionDate = today()->toDateString();
 
-            // pre-filled with everything issued; lowered when there is a leftover (decided 2026-10-09)
             foreach ($issued as $productId => $quantity) {
                 $this->used[$productId] = ['quantity' => $this->formatQuantity($quantity)];
             }
@@ -119,9 +115,6 @@ new #[Title('Production Result')] class extends Component {
         return WorkOrder::with(['product', 'workCenter', 'materials.product', 'labors.employee'])->findOrFail($this->workOrderId);
     }
 
-    /**
-     * One row per material: everything planned, plus anything issued outside the plan.
-     */
     #[Computed]
     public function materialRows(): Collection
     {
@@ -213,7 +206,6 @@ new #[Title('Production Result')] class extends Component {
     protected function rules(): array
     {
         return [
-            'productionDate' => ['required', 'date', 'before_or_equal:today'],
             'quantityGood' => ['required', 'numeric', 'gt:0'],
             'quantityReject' => ['nullable', 'numeric', 'min:0'],
             'rejectReason' => ['nullable', 'string', 'max:255'],
@@ -226,17 +218,9 @@ new #[Title('Production Result')] class extends Component {
         ];
     }
 
-    protected function messages(): array
-    {
-        return [
-            'productionDate.before_or_equal' => __('The completion date cannot be in the future.'),
-        ];
-    }
-
     protected function validationAttributes(): array
     {
         return [
-            'productionDate' => __('Completion date'),
             'quantityGood' => __('Good'),
             'quantityReject' => __('Reject'),
             'rejectReason' => __('Reject reason'),
@@ -270,7 +254,7 @@ new #[Title('Production Result')] class extends Component {
         }
 
         $data = new ProductionResultData(
-            productionDate: $this->productionDate,
+            productionDate: today()->toDateString(),
             quantityGood: $this->quantityGood,
             quantityReject: $this->quantityReject,
             machineHours: $this->machineHours,
@@ -332,14 +316,12 @@ new #[Title('Production Result')] class extends Component {
         </flux:button>
     </div>
 
-    {{-- Output & machine --}}
     <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4 items-start motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <div class="lg:col-span-2 rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-5">
             <h2 class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Output') }}</h2>
             <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
                 <div>
-                    <flux:input type="date" wire:model="productionDate" :label="__('Completion date')" :max="today()->toDateString()" />
-                </div>
+                    <flux:input type="date" :value="$productionDate" :label="__('Completion date')" disabled />                </div>
                 <div>
                     <flux:field>
                         <flux:label>{{ __('Good') }}</flux:label>
@@ -390,7 +372,6 @@ new #[Title('Production Result')] class extends Component {
         </div>
     </div>
 
-    {{-- Workers --}}
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
         <div class="flex items-center justify-between gap-3 mb-3">
             <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300">{{ __('Workers') }}</h2>
@@ -450,7 +431,6 @@ new #[Title('Production Result')] class extends Component {
         <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Enter 0 for a planned worker who did not work. Add a worker who replaced someone or helped out.') }}</p>
     </div>
 
-    {{-- Materials --}}
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">{{ __('Materials') }}</h2>
 

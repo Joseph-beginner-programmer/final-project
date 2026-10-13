@@ -5,11 +5,6 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * A WO is always Completed once its result is posted — 92 of 100 just means the batch made 92
- * (decided 2026-10-09). So there is no "Completed Short" status and no supervisor closing a WO
- * below target: closed_by / closed_at go.
- */
 return new class extends Migration
 {
     public function up(): void

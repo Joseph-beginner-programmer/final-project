@@ -1,21 +1,3 @@
-{{--
-    Searchable listbox replacing a native <select>: options can show a title, a code/subtitle and
-    a right-hand detail, and unavailable options say *why*. Used for workers (Work Order) and
-    products (Purchase Order line items).
-
-    The panel is absolutely positioned under the trigger (or above it when there's no room below), so
-    it must not sit inside an `overflow: hidden/auto` container — the pages using it render their rows
-    as grids for exactly that reason.
-
-    Props:
-      model          Livewire property path to set, e.g. "items.0.product_id"
-      options        list of ['id', 'title', 'subtitle', 'meta', 'disabled_reason'] (meta / disabled_reason nullable)
-      selected       currently selected id (string, '' when empty)
-      placeholder    trigger text when nothing is selected
-      label          accessible name for the trigger + listbox
-      invalid        true when the field has a validation error (red border)
-      size           'sm' = h-8, matches flux:input size="sm" (table rows); 'md' = h-10, matches a default flux:input
---}}
 @props([
     'model',
     'options' => [],
@@ -27,7 +9,7 @@
 ])
 
 @php
-    $current = collect($options)->firstWhere('id', (int) $selected);
+    $current = collect($options)->first(fn ($o) => (string) $o['id'] === (string) $selected);
     $searchables = collect($options)->map(fn ($o) => mb_strtolower($o['title'].' '.$o['subtitle']))->values()->all();
 @endphp
 
@@ -75,7 +57,6 @@
         ])
     >
         @if ($current)
-            {{-- name only once chosen; the code is shown in the list, where it helps choosing --}}
             <span class="truncate text-sm text-zinc-900 dark:text-white" title="{{ $current['title'] }} · {{ $current['subtitle'] }}">{{ $current['title'] }}</span>
         @else
             <span class="truncate text-sm text-zinc-400 dark:text-zinc-500">{{ $placeholder }}</span>
@@ -87,9 +68,6 @@
         </span>
     </button>
 
-    {{-- A plain absolute panel inside the component. (Teleporting it to <body> was tried and dropped:
-         Livewire re-syncs the teleported copy with server HTML on every update, wiping the inline
-         styles Alpine uses to hide/position it.) Nothing around these pickers clips overflow. --}}
     <div
         x-ref="panel"
         x-show="open"
@@ -123,7 +101,7 @@
         <div role="listbox" aria-label="{{ $label }}" class="max-h-64 overflow-y-auto p-1.5 space-y-0.5">
             @foreach ($options as $i => $option)
                 @php
-                    $isSelected = (int) $selected === $option['id'];
+                    $isSelected = (string) $selected === (string) $option['id'];
                     $reason = $isSelected ? null : ($option['disabled_reason'] ?? null);
                 @endphp
                 <button

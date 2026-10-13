@@ -9,10 +9,6 @@ use App\Models\Employee;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
-/**
- * Dev floor workers with an hourly rate each. Goes through the real Actions so codes and
- * rate history are built exactly as the app would. Skips anyone already present by name.
- */
 class EmployeeSeeder extends Seeder
 {
     public function run(): void

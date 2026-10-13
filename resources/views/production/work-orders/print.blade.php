@@ -8,7 +8,6 @@
 <head>
     <meta charset="utf-8">
     <title>{{ $workOrder->wo_number }} — {{ __('Work Order') }}</title>
-    {{-- Self-contained styles: a printed document shouldn't depend on the app layout or the Vite build. --}}
     <style>
         @page { size: A4 portrait; margin: 12mm; }
 
@@ -93,7 +92,6 @@
     </div>
 
     <div class="sheet">
-        {{-- Header --}}
         <div class="head">
             <div>
                 <div class="company">{{ config('app.name') }}</div>
@@ -105,7 +103,6 @@
             </div>
         </div>
 
-        {{-- Plan --}}
         <div class="info">
             <div>
                 <span class="label">{{ __('Product') }}</span>
@@ -147,7 +144,6 @@
             </div>
         </div>
 
-        {{-- Materials --}}
         <h2>{{ __('Materials') }} <small>— {{ __('fill in the issued and used columns by hand') }}</small></h2>
         <table>
             <thead>
@@ -169,14 +165,12 @@
                         <td class="fill"></td>
                     </tr>
                 @endforeach
-                {{-- spare lines for extra material added on the floor (e.g. to compensate damaged goods) --}}
                 @for ($i = 0; $i < 2; $i++)
                     <tr class="blank"><td class="w-no"></td><td></td><td></td><td></td><td></td></tr>
                 @endfor
             </tbody>
         </table>
 
-        {{-- Workers --}}
         <h2>{{ __('Workers') }}</h2>
         <table>
             <thead>
@@ -201,7 +195,6 @@
             </tbody>
         </table>
 
-        {{-- Production log — what later gets entered as Production Results --}}
         <h2>{{ __('Production Log') }} <small>— {{ __('one line per date and shift') }}</small></h2>
         <table>
             <thead>
@@ -222,7 +215,6 @@
             </tbody>
         </table>
 
-        {{-- Single approval signature: the head of production signs the order off --}}
         <div class="signatures">
             <div class="sig">
                 <span class="label">{{ __('Head of Production') }}</span>

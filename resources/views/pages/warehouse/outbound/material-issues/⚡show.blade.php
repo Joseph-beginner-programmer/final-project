@@ -148,7 +148,6 @@ new #[Title('Material Issue')] class extends Component {
         </div>
     </div>
 
-    {{-- Info --}}
     <div class="mt-6 grid grid-cols-2 {{ auth()->user()->can('costs.view') ? 'sm:grid-cols-4' : 'sm:grid-cols-3' }} rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100 dark:divide-white/5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <div class="px-4 py-3">
             <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Work Order') }}</p>
@@ -175,7 +174,6 @@ new #[Title('Material Issue')] class extends Component {
         @endcan
     </div>
 
-    {{-- Lines --}}
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">{{ __('Materials') }}</h2>
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5">
@@ -204,7 +202,6 @@ new #[Title('Material Issue')] class extends Component {
                         </div>
                     </div>
 
-                    {{-- FIFO trail: which lots this line drew from --}}
                     @if ($posted && $item->stockMovements->isNotEmpty())
                         <div class="mt-2 rounded-md bg-zinc-50 dark:bg-white/[0.03] px-3 py-2">
                             <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-1">{{ __('Drawn from (oldest lot first)') }}</p>

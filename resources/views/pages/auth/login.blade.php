@@ -26,10 +26,8 @@
 
     <div class="min-h-screen flex bg-zinc-50 dark:bg-zinc-950">
 
-        {{-- Left panel: brand identity --}}
         <div class="hidden lg:flex lg:w-[46%] relative flex-col items-center justify-center px-12 overflow-hidden bg-zinc-900">
 
-            {{-- Layered depth: base gradient + soft glows + fine grid texture --}}
             <div class="absolute inset-0 bg-linear-to-br from-zinc-900 via-zinc-900 to-black"></div>
             <div class="absolute -top-24 -left-16 w-72 h-72 rounded-full opacity-20 blur-3xl" style="background-color: var(--color-accent);"></div>
             <div class="absolute -bottom-32 -right-16 w-80 h-80 rounded-full opacity-[0.15] blur-3xl" style="background-color: var(--color-primary);"></div>
@@ -39,7 +37,6 @@
 
             <div class="relative z-10 flex flex-col items-center text-center">
 
-                {{-- Glass badge icon with soft glow ring --}}
                 <div class="relative">
                     <div class="absolute inset-0 rounded-2xl blur-xl opacity-30" style="background-color: var(--color-accent);"></div>
                     <div class="relative w-16 h-16 rounded-2xl border flex items-center justify-center bg-white/5 backdrop-blur-sm shadow-lg"
@@ -73,7 +70,6 @@
             </p>
         </div>
 
-        {{-- Mobile brand strip --}}
         <div class="lg:hidden absolute top-0 left-0 right-0 bg-linear-to-r from-zinc-900 to-zinc-800 px-6 py-4 z-10 flex items-center gap-3 border-b" style="border-color: color-mix(in srgb, var(--color-accent) 25%, transparent);">
             <div class="w-8 h-8 rounded-lg border flex items-center justify-center bg-white/5" style="border-color: var(--color-accent);">
                 <svg viewBox="0 0 24 24" class="w-4 h-4" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -83,7 +79,6 @@
             <span class="font-display text-sm font-bold tracking-wide text-white uppercase">PT SAI</span>
         </div>
 
-        {{-- Right panel: login form --}}
         <div class="relative flex-1 flex flex-col justify-center px-6 py-24 lg:py-12 overflow-hidden">
 
             <div class="w-full max-w-sm mx-auto relative z-10">

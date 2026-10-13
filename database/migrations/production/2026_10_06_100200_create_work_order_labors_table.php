@@ -13,7 +13,7 @@ return new class extends Migration
             $table->foreignId('work_order_id')->constrained()->cascadeOnDelete();
             $table->foreignId('employee_id')->constrained()->restrictOnDelete();
             $table->decimal('planned_hours', 10, 2)->unsigned();
-            $table->decimal('hourly_rate', 12, 2)->unsigned(); // snapshot of labor_rates at allocation time
+            $table->decimal('hourly_rate', 12, 2)->unsigned();
             $table->decimal('planned_cost', 12, 2)->unsigned();
             $table->unique(['work_order_id', 'employee_id']);
         });

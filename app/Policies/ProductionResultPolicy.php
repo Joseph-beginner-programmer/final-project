@@ -6,10 +6,6 @@ use App\Enums\DocumentStatus;
 use App\Models\ProductionResult;
 use App\Models\User;
 
-/**
- * Produksi — Mencatat Hasil Produksi. The Kepala Produksi records and posts it; no separate
- * approval step (they are responsible for the production amounts, decided 2026-10-09).
- */
 class ProductionResultPolicy
 {
     public function viewAny(User $user): bool

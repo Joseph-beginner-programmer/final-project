@@ -43,9 +43,6 @@ new #[Title('Production Results')] class extends Component {
         return str_replace(['%', '_'], ['\%', '\_'], $this->search);
     }
 
-    /**
-     * Work orders on the floor whose result hasn't been posted yet (none, or a draft).
-     */
     #[Computed]
     public function workOrders(): Collection
     {
@@ -121,7 +118,6 @@ new #[Title('Production Results')] class extends Component {
         <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
     </div>
 
-    {{-- Tabs --}}
     <div class="mt-6 flex items-center gap-1.5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         @foreach (['work-orders' => __('Work orders awaiting a result'), 'results' => __('Result documents')] as $key => $label)
             <button type="button" wire:click="$set('tab', '{{ $key }}')"

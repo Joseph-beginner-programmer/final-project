@@ -24,7 +24,6 @@ new #[Title('Create Item Receipt')] class extends Component
 
     public array $items = [];
 
-    /** @var \Livewire\Features\SupportFileUploads\TemporaryUploadedFile|null */
     public $attachment = null;
 
     public function mount(?PurchaseOrder $purchaseOrder = null): void {
@@ -113,7 +112,7 @@ new #[Title('Create Item Receipt')] class extends Component
             'received'     => $received,
             'unit'         => $unit,
             'percentage'   => $percentage,
-            'barPercentage' => min(100, $percentage), // clamped so the bar never overflows its track
+            'barPercentage' => min(100, $percentage),
         ];
     }
 
@@ -233,7 +232,6 @@ new #[Title('Create Item Receipt')] class extends Component
     </flux:breadcrumbs>
 
     @if (! $purchaseOrder)
-        {{-- Source picker — nothing selected yet --}}
         <div class="mt-3 flex flex-wrap items-start justify-between gap-4 motion-safe:animate-fade-slide-up">
             <div>
                 <h1 class="font-display text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">
@@ -328,7 +326,6 @@ new #[Title('Create Item Receipt')] class extends Component
 
     @php($isLate = $purchaseOrder->expected_delivery_date?->isPast() && !$purchaseOrder->status->isTerminal())
 
-    {{-- Header --}}
     <div class="mt-3 motion-safe:animate-fade-slide-up">
         <div class="flex flex-wrap items-center gap-3">
             <h1 class="font-data text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">
@@ -342,7 +339,6 @@ new #[Title('Create Item Receipt')] class extends Component
         <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">{{ $purchaseOrder->supplier->supplier_name }}</p>
     </div>
 
-    {{-- PO Info --}}
     <div class="mt-4 rounded-md border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-sm shadow-zinc-900/5 dark:shadow-none overflow-hidden motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <dl class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 px-5 py-4 text-xs">
             <div>
@@ -373,7 +369,6 @@ new #[Title('Create Item Receipt')] class extends Component
             </div>
         </dl>
     </div>
-    {{-- Summary --}}
     @php($progress = $this->receivingProgress())
     @php($breakdown = $this->itemStatusBreakdown())
     <div class="mt-4 grid grid-cols-1 {{ auth()->user()->can('costs.view') ? 'lg:grid-cols-3' : 'lg:grid-cols-2' }} gap-4 items-stretch">
@@ -481,7 +476,6 @@ new #[Title('Create Item Receipt')] class extends Component
         </div>
         @endcan
     </div>
-    {{-- Items to Receive --}}
     <div class="mt-6 motion-safe:animate-fade-slide-up" style="animation-delay: 150ms;">
         <h2 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">
             <flux:icon.clipboard-document-list variant="micro" class="size-3.5 text-zinc-400 dark:text-zinc-500" />
@@ -491,7 +485,6 @@ new #[Title('Create Item Receipt')] class extends Component
             <p class="mb-3 text-xs text-red-600 dark:text-red-400">{{ $message }}</p>
         @enderror
 
-        {{-- Desktop/tablet table --}}
         <div class="hidden lg:block overflow-x-auto rounded-md border border-zinc-200 dark:border-white/10 shadow-sm shadow-zinc-900/5 dark:shadow-none">
             <table class="w-full text-xs border-collapse">
                 <thead>
@@ -564,7 +557,6 @@ new #[Title('Create Item Receipt')] class extends Component
             </table>
         </div>
 
-        {{-- Mobile cards --}}
         <div class="lg:hidden space-y-3">
             @forelse ($purchaseOrder->items as $item)
                 <div
@@ -629,7 +621,6 @@ new #[Title('Create Item Receipt')] class extends Component
         </div>
     </div>
 
-    {{-- Attachments --}}
     <div class="mt-6 motion-safe:animate-fade-slide-up" style="animation-delay: 180ms;">
         <h2 class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">
             <flux:icon.paper-clip variant="micro" class="size-3.5 text-zinc-400 dark:text-zinc-500" />
@@ -686,7 +677,6 @@ new #[Title('Create Item Receipt')] class extends Component
         @endif
     </div>
 
-    {{-- Actions --}}
     <div class="mt-6 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 border-t border-zinc-100 dark:border-white/10 pt-4 motion-safe:animate-fade-slide-up" style="animation-delay: 240ms;">
         <flux:button variant="filled" :href="route('warehouse.inbound.item-receipts.list')" wire:navigate class="w-full sm:w-auto">
             {{ __('Cancel') }}

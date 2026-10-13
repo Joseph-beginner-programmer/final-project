@@ -176,7 +176,6 @@ new #[Title('Overhead Rates')] class extends Component {
         @endforeach
     </div>
 
-    {{-- Set rate modal --}}
     <flux:modal name="set-overhead-rate" focusable class="max-w-md">
         <form wire:submit="saveRate" class="space-y-5">
             <div>
@@ -212,7 +211,6 @@ new #[Title('Overhead Rates')] class extends Component {
         </form>
     </flux:modal>
 
-    {{-- History modal --}}
     <flux:modal name="overhead-history" class="max-w-lg">
         <div class="space-y-4">
             <div>

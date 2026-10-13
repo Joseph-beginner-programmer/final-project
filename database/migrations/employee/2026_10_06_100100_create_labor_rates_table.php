@@ -16,7 +16,6 @@ return new class extends Migration
             $table->date('effective_to')->nullable();
             $table->foreignId('created_by')->constrained('users')->restrictOnDelete();
             $table->timestamps();
-            // "which rate applied to this employee on date X" is the hot lookup
             $table->index(['employee_id', 'effective_from']);
         });
     }

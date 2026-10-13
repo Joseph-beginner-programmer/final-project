@@ -32,6 +32,17 @@
                             </flux:sidebar.item>
                         @endif
 
+                        @if ($role === UserRole::Sales)
+                            <flux:sidebar.item icon="document-text" :href="route('sales.orders.list')"
+                                :current="request()->routeIs('sales.orders.*')" wire:navigate>
+                                {{ __('Sales Orders') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="building-storefront" :href="route('sales.customers.list')"
+                                :current="request()->routeIs('sales.customers.*')" wire:navigate>
+                                {{ __('Customers') }}
+                            </flux:sidebar.item>
+                        @endif
+
                         @if ($role === UserRole::Accounting)
                             <flux:sidebar.item icon="banknotes" :href="route('accounting.labor-rates.list')"
                                 :current="request()->routeIs('accounting.labor-rates.*')" wire:navigate>
@@ -62,13 +73,25 @@
                         @endif
 
                         @if ($role === UserRole::Warehouse)
-                            <flux:sidebar.item icon="inbox-arrow-down" :href="route('warehouse.inbound.item-receipts.create')"
-                            :current="request()->routeIs('warehouse.inbound.item-receipts.list', 'warehouse.inbound.item-receipts.create')" wire:navigate>
+                            <flux:sidebar.item icon="inbox-arrow-down" :href="route('warehouse.inbound.item-receipts.list')"
+                                :current="request()->routeIs('warehouse.inbound.item-receipts.*')" wire:navigate>
                                 {{ __('Item Receipt') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="cube" :href="route('warehouse.inbound.production-receipts.list')"
+                                :current="request()->routeIs('warehouse.inbound.production-receipts.*')" wire:navigate>
+                                {{ __('Production Receipt') }}
                             </flux:sidebar.item>
                             <flux:sidebar.item icon="arrow-up-tray" :href="route('warehouse.outbound.material-issues.list')"
                                 :current="request()->routeIs('warehouse.outbound.material-issues.*')" wire:navigate>
                                 {{ __('Material Issue') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="arrow-uturn-left" :href="route('warehouse.inbound.material-returns.list')"
+                                :current="request()->routeIs('warehouse.inbound.material-returns.*')" wire:navigate>
+                                {{ __('Material Return') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="truck" :href="route('warehouse.outbound.sales-deliveries.list')"
+                                :current="request()->routeIs('warehouse.outbound.sales-deliveries.*')" wire:navigate>
+                                {{ __('Sales Delivery') }}
                             </flux:sidebar.item>
                         @endif
                     </flux:sidebar.group>
@@ -81,7 +104,6 @@
         <x-desktop-user-menu class="hidden lg:block" :name="auth()->user()->name" />
     </flux:sidebar>
 
-    <!-- Mobile User Menu -->
     <flux:header class="lg:hidden">
         <flux:sidebar.toggle class="lg:hidden" icon="bars-2" inset="left" />
 

@@ -25,7 +25,6 @@ new #[Title('Employees')] class extends Component {
     #[Url]
     public string $status = '';
 
-    // form state, shared by the create and edit modal
     #[Locked]
     public ?int $editingId = null;
 
@@ -200,7 +199,6 @@ new #[Title('Employees')] class extends Component {
         @endcan
     </div>
 
-    {{-- Status tabs --}}
     <div class="mt-6 flex items-center gap-1.5 overflow-x-auto pb-1 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <button type="button" wire:click="$set('status', '')"
             class="shrink-0 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer transition-colors duration-150 active:scale-[0.97]
@@ -225,7 +223,6 @@ new #[Title('Employees')] class extends Component {
     </div>
 
     <div wire:loading.class="opacity-50" wire:target="search,status" class="transition-opacity duration-150 motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
-        {{-- Desktop --}}
         <div class="mt-4 hidden md:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <table class="w-full text-xs border-collapse">
                 <thead>
@@ -261,7 +258,6 @@ new #[Title('Employees')] class extends Component {
             </table>
         </div>
 
-        {{-- Mobile --}}
         <div class="mt-4 md:hidden rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
             @forelse ($this->employees as $employee)
                 <button type="button" wire:key="emp-m-{{ $employee->id }}" wire:click="openEdit({{ $employee->id }})"
@@ -284,7 +280,6 @@ new #[Title('Employees')] class extends Component {
         {{ $this->employees->links() }}
     </div>
 
-    {{-- Create / edit modal --}}
     <flux:modal name="employee-form" focusable class="max-w-lg">
         <form wire:submit="save" class="space-y-5">
             <div>

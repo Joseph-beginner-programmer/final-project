@@ -31,10 +31,6 @@ new #[Title('Labor Rates')] class extends Component {
         Gate::authorize('viewAny', LaborRate::class);
     }
 
-    /**
-     * Every employee (inactive ones too — their rate history is still part of old work orders' costs),
-     * with full rate history eager-loaded newest-first.
-     */
     #[Computed]
     public function employees(): Collection
     {
@@ -156,7 +152,6 @@ new #[Title('Labor Rates')] class extends Component {
     </div>
 
     <div wire:loading.class="opacity-50" wire:target="search" class="transition-opacity duration-150 motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
-        {{-- Desktop --}}
         <div class="mt-4 hidden md:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <table class="w-full text-xs border-collapse">
                 <thead>
@@ -213,7 +208,6 @@ new #[Title('Labor Rates')] class extends Component {
             </table>
         </div>
 
-        {{-- Mobile --}}
         <div class="mt-4 md:hidden rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
             @forelse ($this->employees as $employee)
                 @php($current = $this->currentRate($employee))
@@ -240,7 +234,6 @@ new #[Title('Labor Rates')] class extends Component {
         </div>
     </div>
 
-    {{-- Set rate modal --}}
     <flux:modal name="set-rate" focusable class="max-w-md">
         <form wire:submit="saveRate" class="space-y-5">
             <div>
@@ -274,7 +267,6 @@ new #[Title('Labor Rates')] class extends Component {
         </form>
     </flux:modal>
 
-    {{-- History modal --}}
     <flux:modal name="rate-history" class="max-w-lg">
         <div class="space-y-4">
             <div>

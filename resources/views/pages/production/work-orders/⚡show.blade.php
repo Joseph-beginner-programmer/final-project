@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Production\CancelWorkOrderAction;
 use App\Actions\Production\ReleaseWorkOrderAction;
 use App\Enums\WorkOrderStatus;
 use App\Exceptions\InactiveEmployeeException;
@@ -9,8 +10,10 @@ use App\Exceptions\MissingOverheadRateException;
 use App\Exceptions\WorkOrderRequiresLaborException;
 use App\Models\ProductionResult;
 use App\Models\WorkOrder;
+use App\Support\IncomingStock;
 use Flux\Flux;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -23,7 +26,34 @@ new #[Title('Work Order Detail')] class extends Component {
     {
         Gate::authorize('view', $this->workOrder);
 
-        $this->workOrder->load(['product', 'productionFormula', 'workCenter', 'materials.product', 'createdBy', 'labors.employee', 'productionResult']);
+        $this->workOrder->load(['product', 'productionFormula', 'workCenter', 'materials.product', 'createdBy', 'cancelledBy', 'labors.employee', 'productionResult']);
+    }
+
+    public string $cancelReason = '';
+
+    public function cancelWorkOrder(): void
+    {
+        Gate::authorize('cancel', $this->workOrder);
+
+        $this->validate(
+            ['cancelReason' => ['required', 'string', 'max:1000']],
+            [],
+            ['cancelReason' => __('Reason')],
+        );
+
+        try {
+            app(CancelWorkOrderAction::class)->handle($this->workOrder, Auth::id(), $this->cancelReason);
+        } catch (InvalidWorkOrderStatusTransitionException $e) {
+            $this->modal('cancel-wo')->close();
+            Flux::toast(variant: 'danger', text: $e->userMessage());
+
+            return;
+        }
+
+        $this->cancelReason = '';
+        $this->workOrder->refresh()->load('cancelledBy');
+        $this->modal('cancel-wo')->close();
+        Flux::toast(variant: 'success', text: __('Work order cancelled.'));
     }
 
     public function release(): void
@@ -38,7 +68,6 @@ new #[Title('Work Order Detail')] class extends Component {
             return;
         }
 
-        // rates were refreshed on release — reload so the page shows the new costs
         $this->workOrder->refresh()->load(['labors.employee', 'workCenter']);
         unset($this->plannedLaborCost);
         $this->modal('release-wo')->close();
@@ -63,26 +92,47 @@ new #[Title('Work Order Detail')] class extends Component {
         return 'Rp '.number_format((float) $amount, 0, ',', '.');
     }
 
-    /**
-     * The WO's own copied plan (work_order_materials) — deliberately not recomputed from the
-     * formula, so a later formula edit can't change what this WO was approved with.
-     */
     #[Computed]
     public function plannedMaterials(): Collection
     {
         $issued = $this->workOrder->issuedQuantities();
+        $checkShortage = ! $this->workOrder->status->isTerminal();
 
-        return $this->workOrder->materials->map(fn ($material) => [
-            'product' => $material->product,
-            'required' => (string) $material->quantity_planned,
-            'issued' => $issued[$material->product_id] ?? '0',
-        ]);
+        return $this->workOrder->materials->map(function ($material) use ($issued, $checkShortage) {
+            $alreadyIssued = $issued[$material->product_id] ?? '0';
+            $stillNeeded = bcsub((string) $material->quantity_planned, $alreadyIssued, 2);
+            $stillNeeded = bccomp($stillNeeded, '0', 2) > 0 ? $stillNeeded : '0';
+            $stock = (string) $material->product->current_stock;
+            $shortage = bcsub($stillNeeded, $stock, 2);
+            $incoming = collect($this->incoming[$material->product_id] ?? [])
+                ->reduce(fn (string $carry, array $row) => bcadd($carry, $row['quantity'], 2), '0');
+
+            return [
+                'product' => $material->product,
+                'required' => (string) $material->quantity_planned,
+                'issued' => $alreadyIssued,
+                'stock' => $stock,
+                'shortage' => $checkShortage && bccomp($shortage, '0', 2) > 0 ? $shortage : null,
+                'incoming' => $incoming,
+                'status' => match (true) {
+                    ! $checkShortage => null,
+                    bccomp($shortage, '0', 2) <= 0 => 'enough',
+                    bccomp(bcadd($stock, $incoming, 2), $stillNeeded, 2) >= 0 => 'incoming',
+                    default => 'short',
+                },
+            ];
+        });
     }
 
     /**
-     * Planned materials with less stock than the plan needs — warned about before release, not
-     * blocked (decided 2026-10-09). Stock isn't reserved, so this is a snapshot of right now.
+     * @return array<int, list<array{source: string, number: string, party: string, quantity: string, date: ?\Carbon\CarbonInterface, note: string, ready: bool}>>
      */
+    #[Computed]
+    public function incoming(): array
+    {
+        return IncomingStock::forProducts($this->workOrder->materials->pluck('product_id'), exceptWorkOrderId: $this->workOrder->id);
+    }
+
     #[Computed]
     public function shortMaterials(): Collection
     {
@@ -99,16 +149,36 @@ new #[Title('Work Order Detail')] class extends Component {
     #[Computed]
     public function outputProgress(): array
     {
-        $target = (string) $this->workOrder->quantity_target;
-        $good = (string) $this->workOrder->quantity_good;
+        if ($this->workOrder->status === WorkOrderStatus::Completed) {
+            return ['percentage' => 100, 'barPercentage' => 100, 'stage' => __('Completed')];
+        }
 
-        $percentage = bccomp($target, '0', 2) > 0
-            ? (int) round((float) bcdiv(bcmul($good, '100', 4), $target, 4))
-            : 0;
+        $materials = $this->workOrder->materials;
+        if ($materials->isEmpty() || $this->workOrder->status === WorkOrderStatus::Cancelled) {
+            return ['percentage' => 0, 'barPercentage' => 0, 'stage' => $this->workOrder->status->label()];
+        }
+
+        $issued = $this->workOrder->issuedQuantities();
+        $shares = $materials->map(function ($material) use ($issued) {
+            $planned = (string) $material->quantity_planned;
+            if (bccomp($planned, '0', 2) <= 0) {
+                return '1';
+            }
+            $share = bcdiv($issued[$material->product_id] ?? '0', $planned, 4);
+
+            return bccomp($share, '1', 4) > 0 ? '1' : $share;
+        });
+
+        $average = bcdiv($shares->reduce(fn (string $carry, string $share) => bcadd($carry, $share, 4), '0'), (string) $shares->count(), 4);
+        $percentage = (int) floor((float) bcmul($average, '50', 4));
+        $fullyIssued = $shares->filter(fn ($share) => bccomp($share, '1', 4) === 0)->count();
 
         return [
             'percentage' => $percentage,
-            'barPercentage' => min(100, $percentage), // clamped so the bar never overflows its track
+            'barPercentage' => $percentage,
+            'stage' => $percentage === 0
+                ? __('Waiting for materials')
+                : __('Materials issued :done/:total', ['done' => $fullyIssued, 'total' => $shares->count()]),
         ];
     }
 
@@ -177,7 +247,6 @@ new #[Title('Work Order Detail')] class extends Component {
             </flux:button>
 
             @can('print', $workOrder)
-                {{-- new tab, no wire:navigate: it's a standalone print document --}}
                 <flux:button variant="primary" icon="printer" :href="route('production.work-orders.print', $workOrder)" target="_blank" class="active:scale-[0.95]">
                     {{ __('Print') }}
                 </flux:button>
@@ -201,6 +270,14 @@ new #[Title('Work Order Detail')] class extends Component {
                 </flux:button>
             @endcan
 
+            @can('cancel', $workOrder)
+                <flux:modal.trigger name="cancel-wo">
+                    <flux:button variant="ghost" icon="x-mark" class="text-red-600 hover:text-red-700 dark:text-red-400 active:scale-[0.95]">
+                        {{ __('Cancel Work Order') }}
+                    </flux:button>
+                </flux:modal.trigger>
+            @endcan
+
             @can('release', $workOrder)
                 <flux:modal.trigger name="release-wo">
                     <flux:button variant="primary" icon="play" class="active:scale-[0.95]">
@@ -210,6 +287,52 @@ new #[Title('Work Order Detail')] class extends Component {
             @endcan
         </div>
     </div>
+
+    @if ($workOrder->status === WorkOrderStatus::Cancelled)
+        <div class="mt-4 flex items-start gap-2.5 rounded-md border border-zinc-200 dark:border-white/10 bg-zinc-50 dark:bg-white/5 px-3.5 py-2.5 motion-safe:animate-fade-slide-up">
+            <flux:icon.x-circle variant="mini" class="size-4 mt-0.5 shrink-0 text-zinc-500 dark:text-zinc-400" />
+            <div class="text-xs">
+                <p class="font-semibold text-zinc-800 dark:text-zinc-200">
+                    {{ __('Cancelled by :name', ['name' => $workOrder->cancelledBy?->name ?? '—']) }}
+                    @if ($workOrder->cancelled_at) · <span class="font-data tabular-nums">{{ $workOrder->cancelled_at->format('d M Y H:i') }}</span> @endif
+                </p>
+                @if ($workOrder->cancel_reason)
+                    <p class="mt-0.5 text-zinc-600 dark:text-zinc-400">“{{ $workOrder->cancel_reason }}”</p>
+                @endif
+            </div>
+        </div>
+    @endif
+
+    @can('cancel', $workOrder)
+        <flux:modal name="cancel-wo" :show="$errors->has('cancelReason')" focusable class="max-w-lg">
+            <div class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Cancel this work order?') }}</flux:heading>
+                    <flux:subheading>
+                        {{ __('It will not be produced. A cancelled work order cannot be reopened — create a new one if it is needed later.') }}
+                    </flux:subheading>
+                    @if ($workOrder->status === WorkOrderStatus::Released)
+                        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Material issue drafts for it are cancelled too. Nothing has left the warehouse yet.') }}</p>
+                    @endif
+                </div>
+
+                <flux:field>
+                    <flux:label>{{ __('Reason') }}</flux:label>
+                    <flux:textarea wire:model="cancelReason" rows="3" :placeholder="__('e.g. customer order cancelled, plan merged into another WO')" />
+                    <flux:error name="cancelReason" />
+                </flux:field>
+
+                <div class="flex justify-end gap-2">
+                    <flux:modal.close>
+                        <flux:button variant="filled" class="active:scale-[0.95]">{{ __('Keep it') }}</flux:button>
+                    </flux:modal.close>
+                    <flux:button variant="danger" wire:click="cancelWorkOrder" wire:loading.attr="disabled" wire:target="cancelWorkOrder" class="active:scale-[0.95]">
+                        {{ __('Cancel Work Order') }}
+                    </flux:button>
+                </div>
+            </div>
+        </flux:modal>
+    @endcan
 
     @can('release', $workOrder)
         <flux:modal name="release-wo" focusable class="max-w-lg">
@@ -255,9 +378,7 @@ new #[Title('Work Order Detail')] class extends Component {
         </flux:modal>
     @endcan
 
-    {{-- Info cards --}}
     <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {{-- Product & formula --}}
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
             <h2 class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Product') }}</h2>
             <p class="mt-3 font-data text-xs text-accent">{{ $workOrder->product->product_code }}</p>
@@ -280,7 +401,6 @@ new #[Title('Work Order Detail')] class extends Component {
             </dl>
         </div>
 
-        {{-- Schedule --}}
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-5 motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
             <h2 class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Schedule') }}</h2>
             <dl class="mt-3 space-y-2.5 text-sm">
@@ -312,7 +432,6 @@ new #[Title('Work Order Detail')] class extends Component {
             </dl>
         </div>
 
-        {{-- Output --}}
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 flex flex-col h-full overflow-hidden motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
             <div class="p-5">
                 <h2 class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Output') }}</h2>
@@ -332,10 +451,15 @@ new #[Title('Work Order Detail')] class extends Component {
                         <span>{{ __('Progress') }}</span>
                         <span class="font-data tabular-nums">{{ $this->outputProgress['percentage'] }}%</span>
                     </div>
-                    <div class="mt-1.5 h-1.5 rounded-full bg-zinc-100 dark:bg-white/10 overflow-hidden"
-                         role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $this->outputProgress['barPercentage'] }}">
-                        <div class="h-full w-full origin-left rounded-full bg-accent transition-transform duration-500" style="transform: scaleX({{ $this->outputProgress['barPercentage'] / 100 }});"></div>
+                    @php($done = $this->outputProgress['percentage'] === 100)
+                    <div class="relative mt-1.5">
+                        <div class="h-1.5 rounded-full bg-zinc-100 dark:bg-white/10 overflow-hidden"
+                             role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $this->outputProgress['barPercentage'] }}" aria-valuetext="{{ $this->outputProgress['percentage'] }}% — {{ $this->outputProgress['stage'] }}">
+                            <div class="h-full w-full origin-left rounded-full {{ $done ? 'bg-green-500' : 'bg-accent' }} transition-transform duration-500 motion-reduce:transition-none" style="transform: scaleX({{ $this->outputProgress['barPercentage'] / 100 }});"></div>
+                        </div>
+                        <span class="absolute left-1/2 -top-0.5 h-2.5 w-px bg-zinc-300 dark:bg-white/25" aria-hidden="true"></span>
                     </div>
+                    <p class="mt-1.5 text-[11px] {{ $done ? 'text-green-600 dark:text-green-400' : 'text-zinc-500 dark:text-zinc-400' }}">{{ $this->outputProgress['stage'] }}</p>
                 </div>
             </div>
 
@@ -346,12 +470,10 @@ new #[Title('Work Order Detail')] class extends Component {
         </div>
     </div>
 
-    {{-- Workers --}}
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 120ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-1">{{ __('Workers') }}</h2>
         <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-3">{{ __('Hourly rates are copied from Accounting\'s labor rates at the time the work order was created.') }}</p>
 
-        {{-- Desktop --}}
         <div class="hidden sm:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <table class="w-full text-xs border-collapse">
                 <thead>
@@ -392,7 +514,6 @@ new #[Title('Work Order Detail')] class extends Component {
             </table>
         </div>
 
-        {{-- Mobile --}}
         <div class="sm:hidden rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
             @forelse ($workOrder->labors as $labor)
                 <div wire:key="labor-m-{{ $labor->id }}" class="px-4 py-3 flex items-start justify-between gap-3 text-xs">
@@ -414,7 +535,6 @@ new #[Title('Work Order Detail')] class extends Component {
         </div>
     </div>
 
-    {{-- Overhead --}}
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 125ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-1">{{ __('Machine & Overhead') }}</h2>
         <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-3">{{ __('Applied overhead (electricity, depreciation) at the work center\'s rate when the work order was created.') }}</p>
@@ -439,12 +559,10 @@ new #[Title('Work Order Detail')] class extends Component {
         </div>
     </div>
 
-    {{-- Planned materials --}}
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 130ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-1">{{ __('Planned Materials') }}</h2>
         <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-3">{{ __('Copied from the formula when this work order was created. Actual consumption is recorded when materials are issued.') }}</p>
 
-        {{-- Desktop --}}
         <div class="hidden sm:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <table class="w-full text-xs border-collapse">
                 <thead>
@@ -453,39 +571,122 @@ new #[Title('Work Order Detail')] class extends Component {
                         <th class="py-2 px-3">{{ __('Type') }}</th>
                         <th class="py-2 px-3 text-right">{{ __('Planned') }}</th>
                         <th class="py-2 px-3 text-right">{{ __('Already issued') }}</th>
+                        <th class="py-2 px-3 text-right">{{ __('In Stock') }}</th>
+                        <th class="py-2 px-3 text-right">{{ __('Incoming') }}</th>
+                        <th class="py-2 px-3">{{ __('Status') }}</th>
                     </tr>
                 </thead>
                 <tbody>
                     @foreach ($this->plannedMaterials as $row)
+                        @php($unitOfMeasure = $row['product']->unit_of_measure)
                         <tr wire:key="mat-{{ $row['product']->id }}" class="border-b border-zinc-100 dark:border-white/5 last:border-0 hover:bg-zinc-50/70 dark:hover:bg-white/[0.03] transition-colors">
                             <td class="py-2 px-3">
                                 <p class="font-data text-accent">{{ $row['product']->product_code }}</p>
                                 <p class="text-zinc-700 dark:text-zinc-300">{{ $row['product']->product_name }}</p>
                             </td>
                             <td class="py-2 px-3 text-zinc-500 dark:text-zinc-400">{{ __($row['product']->type->label()) }}</td>
-                            <td class="py-2 px-3 text-right font-data font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->formatQuantity($row['required']) }} {{ $row['product']->unit_of_measure }}</td>
-                            <td class="py-2 px-3 text-right font-data tabular-nums whitespace-nowrap {{ bccomp($row['issued'], $row['required'], 2) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-zinc-600 dark:text-zinc-400' }}">{{ $this->formatQuantity($row['issued']) }} {{ $row['product']->unit_of_measure }}</td>
+                            <td class="py-2 px-3 text-right font-data font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->formatQuantity($row['required']) }} {{ $unitOfMeasure }}</td>
+                            <td class="py-2 px-3 text-right font-data tabular-nums whitespace-nowrap {{ bccomp($row['issued'], $row['required'], 2) >= 0 ? 'text-green-600 dark:text-green-400' : 'text-zinc-600 dark:text-zinc-400' }}">{{ $this->formatQuantity($row['issued']) }} {{ $unitOfMeasure }}</td>
+                            <td class="py-2 px-3 text-right font-data tabular-nums whitespace-nowrap {{ $row['shortage'] ? 'text-red-600 dark:text-red-400 font-medium' : 'text-zinc-600 dark:text-zinc-400' }}">
+                                {{ $this->formatQuantity($row['stock']) }} {{ $unitOfMeasure }}
+                            </td>
+                            <td class="py-2 px-3 text-right whitespace-nowrap">
+                                @if (bccomp($row['incoming'], '0', 2) > 0)
+                                    <flux:modal.trigger name="incoming-{{ $row['product']->id }}">
+                                        <button type="button" class="group/in -my-1 inline-flex items-center gap-0.5 rounded px-1 py-1 font-data tabular-nums text-zinc-700 dark:text-zinc-300 underline decoration-dotted decoration-zinc-400 underline-offset-4 hover:text-accent hover:decoration-accent focus-visible:outline-2 focus-visible:outline-accent cursor-pointer transition-colors duration-150"
+                                            aria-label="{{ __('Incoming') }} {{ $row['product']->product_name }}: {{ $this->formatQuantity($row['incoming']) }} {{ $unitOfMeasure }}">
+                                            {{ $this->formatQuantity($row['incoming']) }} {{ $unitOfMeasure }}
+                                            <flux:icon.chevron-right variant="micro" class="size-3.5 text-zinc-400 group-hover/in:text-accent transition-transform duration-150 group-hover/in:translate-x-0.5" />
+                                        </button>
+                                    </flux:modal.trigger>
+                                @else
+                                    <span class="font-data text-zinc-400 dark:text-zinc-500">—</span>
+                                @endif
+                            </td>
+                            <td class="py-2 px-3 whitespace-nowrap">
+                                <x-material-status :status="$row['status']" :shortage="$row['shortage']" :unit="$unitOfMeasure" />
+                            </td>
                         </tr>
                     @endforeach
                 </tbody>
             </table>
         </div>
 
-        {{-- Mobile --}}
         <div class="sm:hidden rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
             @foreach ($this->plannedMaterials as $row)
-                <div wire:key="mat-m-{{ $row['product']->id }}" class="px-4 py-3 flex items-start justify-between gap-3 text-xs">
-                    <div>
-                        <p class="font-data text-accent">{{ $row['product']->product_code }}</p>
-                        <p class="text-sm text-zinc-700 dark:text-zinc-300">{{ $row['product']->product_name }}</p>
-                        <p class="text-zinc-500 dark:text-zinc-400 mt-0.5">{{ __($row['product']->type->label()) }}</p>
+                @php($unitOfMeasure = $row['product']->unit_of_measure)
+                <div wire:key="mat-m-{{ $row['product']->id }}" class="px-4 py-3 text-xs">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <p class="font-data text-accent">{{ $row['product']->product_code }}</p>
+                            <p class="text-sm text-zinc-700 dark:text-zinc-300">{{ $row['product']->product_name }}</p>
+                            <p class="text-zinc-500 dark:text-zinc-400 mt-0.5">{{ __($row['product']->type->label()) }}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="font-data font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->formatQuantity($row['required']) }} {{ $unitOfMeasure }}</p>
+                            <p class="font-data text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{{ __('Already issued') }} {{ $this->formatQuantity($row['issued']) }}</p>
+                        </div>
                     </div>
-                    <div class="text-right">
-                        <p class="font-data font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->formatQuantity($row['required']) }} {{ $row['product']->unit_of_measure }}</p>
-                        <p class="font-data text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{{ __('Already issued') }} {{ $this->formatQuantity($row['issued']) }}</p>
+                    <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
+                        <x-material-status :status="$row['status']" :shortage="$row['shortage']" :unit="$unitOfMeasure" />
+                        <div class="flex items-center gap-3 font-data tabular-nums">
+                            <span class="{{ $row['shortage'] ? 'text-red-600 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-400' }}">{{ __('In Stock') }} {{ $this->formatQuantity($row['stock']) }}</span>
+                            @if (bccomp($row['incoming'], '0', 2) > 0)
+                                <flux:modal.trigger name="incoming-{{ $row['product']->id }}">
+                                    <button type="button" class="-my-2 inline-flex items-center gap-0.5 py-2 text-zinc-700 dark:text-zinc-300 underline decoration-dotted underline-offset-4 cursor-pointer">
+                                        {{ __('Incoming') }} {{ $this->formatQuantity($row['incoming']) }}
+                                        <flux:icon.chevron-right variant="micro" class="size-3.5 text-zinc-400" />
+                                    </button>
+                                </flux:modal.trigger>
+                            @endif
+                        </div>
                     </div>
                 </div>
             @endforeach
         </div>
     </div>
+
+    @foreach ($this->plannedMaterials as $row)
+        @continue(bccomp($row['incoming'], '0', 2) <= 0)
+        @php($unitOfMeasure = $row['product']->unit_of_measure)
+        <flux:modal name="incoming-{{ $row['product']->id }}" class="max-w-xl">
+            <div class="space-y-4">
+                <div>
+                    <flux:heading size="lg">{{ __('Incoming') }} · {{ $row['product']->product_name }}</flux:heading>
+                    <flux:subheading>{{ __('Expected stock from open purchase orders and work orders still in production.') }}</flux:subheading>
+                </div>
+
+                <div class="rounded-md border border-zinc-200 dark:border-white/10 divide-y divide-zinc-100 dark:divide-white/5">
+                    @foreach ($this->incoming[$row['product']->id] ?? [] as $source)
+                        @php($late = ! $source['ready'] && $source['date'] && $source['date']->isPast() && ! $source['date']->isToday())
+                        <div class="flex items-start justify-between gap-3 px-3 py-2.5 text-xs">
+                            <div class="min-w-0">
+                                <p class="flex flex-wrap items-center gap-1.5">
+                                    <span class="inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium {{ $source['source'] === 'purchase' ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-500/20 dark:bg-blue-500/10 dark:text-blue-400' : 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-400' }}">
+                                        {{ $source['source'] === 'purchase' ? __('Purchase') : __('Production') }}
+                                    </span>
+                                    <span class="font-data text-zinc-800 dark:text-zinc-200">{{ $source['number'] }}</span>
+                                </p>
+                                <p class="mt-0.5 text-zinc-500 dark:text-zinc-400">{{ $source['party'] }} · {{ $source['note'] }}</p>
+                            </div>
+                            <div class="text-right shrink-0">
+                                <p class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatQuantity($source['quantity']) }} {{ $unitOfMeasure }}</p>
+                                <p class="font-data tabular-nums {{ $late ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400' }}">
+                                    @if ($source['date'])
+                                        {{ $source['ready'] ? __('finished') : __('expected') }} {{ $source['date']->format('d M Y') }}@if ($late) · {{ __('late') }}@endif
+                                    @else
+                                        {{ __('no date') }}
+                                    @endif
+                                </p>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+
+                <div class="flex justify-end">
+                    <flux:modal.close><flux:button variant="filled" class="active:scale-[0.95]">{{ __('Close') }}</flux:button></flux:modal.close>
+                </div>
+            </div>
+        </flux:modal>
+    @endforeach
 </section>

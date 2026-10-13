@@ -4,10 +4,6 @@ namespace App\Exceptions;
 
 use RuntimeException;
 
-/**
- * A draft line that breaks a business rule: no lines at all, a non-issuable product
- * (finished goods), or a material outside the WO plan without a note explaining why.
- */
 class InvalidMaterialIssueLineException extends RuntimeException
 {
     public const NO_LINES = 'no_lines';

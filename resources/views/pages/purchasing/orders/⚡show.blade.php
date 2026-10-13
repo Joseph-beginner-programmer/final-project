@@ -279,7 +279,6 @@ new #[Title('Purchase Order Details')] class extends Component {
     @php($isLate = $purchaseOrder->expected_delivery_date?->isPast() && !$purchaseOrder->status->isTerminal())
     @php($newItemProduct = $this->availableProducts->firstWhere('id', (int) ($newItem['product_id'] ?? 0)))
 
-    {{-- Header --}}
     <div class="mt-3 flex flex-wrap items-start justify-between gap-4 motion-safe:animate-fade-slide-up">
         <div>
             <div class="flex flex-wrap items-center gap-3">
@@ -388,7 +387,6 @@ new #[Title('Purchase Order Details')] class extends Component {
     @error('items') <flux:error class="mt-3" :message="$message" /> @enderror
     @error('newItem') <flux:error class="mt-3" :message="$message" /> @enderror
 
-    {{-- Info cards --}}
     <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{{ __('Supplier') }}</p>
@@ -466,13 +464,11 @@ new #[Title('Purchase Order Details')] class extends Component {
         </div>
     </div>
 
-    {{-- Line items --}}
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 130ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">
             {{ __('Line Items') }}
         </h2>
 
-        {{-- Desktop/tablet table --}}
         <div class="hidden lg:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <table class="w-full text-xs border-collapse">
                 <thead>
@@ -589,9 +585,6 @@ new #[Title('Purchase Order Details')] class extends Component {
             </table>
         </div>
 
-        {{-- Mobile/narrow-tablet card list — the table's inline-edit columns don't
-             fit below `lg` without horizontal scroll, so items stack vertically
-             with the same editable fields instead. --}}
         <div class="mt-4 lg:hidden rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
             @forelse ($purchaseOrder->items as $item)
                 <div wire:key="po-item-card-{{ $item->id }}" wire:transition class="p-4">

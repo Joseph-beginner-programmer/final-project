@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::table('work_orders', function (Blueprint $table) {
             $table->decimal('planned_machine_hours', 10, 2)->unsigned()->default(0)->after('planned_end_date');
-            $table->decimal('overhead_rate', 12, 2)->unsigned()->default(0)->after('planned_machine_hours'); // snapshot of overhead_rates at creation
+            $table->decimal('overhead_rate', 12, 2)->unsigned()->default(0)->after('planned_machine_hours');
             $table->decimal('planned_overhead_cost', 12, 2)->unsigned()->default(0)->after('overhead_rate');
         });
     }

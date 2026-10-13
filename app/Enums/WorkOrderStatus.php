@@ -15,7 +15,6 @@ enum WorkOrderStatus: string
         return match ($this) {
             self::Draft => in_array($target, [self::Released, self::Cancelled], true),
             self::Released => in_array($target, [self::InProgress, self::Cancelled], true),
-            // posting the production result completes the WO — under target is just a smaller batch
             self::InProgress => $target === self::Completed,
             self::Completed, self::Cancelled => false,
         };

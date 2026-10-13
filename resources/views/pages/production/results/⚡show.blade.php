@@ -31,7 +31,7 @@ new #[Title('Production Result')] class extends Component {
     {
         $this->productionResult->load([
             'workOrder.product', 'workOrder.workCenter', 'workOrder.materials', 'workOrder.labors.employee',
-            'materials', 'labors.employee', 'createdBy', 'postedBy',
+            'materials', 'labors.employee', 'createdBy', 'postedBy', 'materialReturns', 'productionReceipts.lot',
         ]);
     }
 
@@ -55,9 +55,6 @@ new #[Title('Production Result')] class extends Component {
         Flux::toast(variant: 'success', text: __('Posted — the work order is completed and its cost is fixed.'));
     }
 
-    /**
-     * Planned workers next to actual hours, plus any worker added on the day.
-     */
     #[Computed]
     public function workerRows(): Collection
     {
@@ -86,9 +83,6 @@ new #[Title('Production Result')] class extends Component {
         return $rows;
     }
 
-    /**
-     * Planned → issued → used → leftover per material, with the used cost once posted.
-     */
     #[Computed]
     public function materialRows(): Collection
     {
@@ -207,7 +201,6 @@ new #[Title('Production Result')] class extends Component {
         </div>
     </div>
 
-    {{-- Info --}}
     <div class="mt-6 grid grid-cols-2 sm:grid-cols-4 rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100 dark:divide-white/5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <div class="px-4 py-3">
             <p class="{{ $label }}">{{ __('Completion date') }}</p>
@@ -234,7 +227,6 @@ new #[Title('Production Result')] class extends Component {
         </div>
     </div>
 
-    {{-- Output & machine: plan vs actual --}}
     <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 motion-safe:animate-fade-slide-up" style="animation-delay: 60ms;">
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-5">
             <h2 class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Output') }}</h2>
@@ -281,7 +273,37 @@ new #[Title('Production Result')] class extends Component {
         </div>
     </div>
 
-    {{-- Workers --}}
+    @if ($posted)
+        @php($receipt = $result->productionReceipts->firstWhere('status', '!=', DocumentStatus::Cancelled))
+        @if ($receipt?->status === DocumentStatus::Posted)
+            @php($short = $receipt->shortageQuantity())
+            <div class="mt-4 flex items-start gap-2.5 rounded-md border {{ bccomp($short, '0', 2) > 0 ? 'border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10' : 'border-green-200 dark:border-green-500/20 bg-green-50 dark:bg-green-500/10' }} px-3.5 py-2.5 motion-safe:animate-fade-slide-up">
+                <flux:icon.check-circle variant="mini" class="size-4 mt-0.5 shrink-0 {{ bccomp($short, '0', 2) > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-green-600 dark:text-green-400' }}" />
+                <div class="text-xs">
+                    <p class="font-semibold {{ bccomp($short, '0', 2) > 0 ? 'text-amber-900 dark:text-amber-300' : 'text-green-800 dark:text-green-300' }}">
+                        {{ __('Output received by the warehouse') }}: {{ $this->formatQuantity((string) $receipt->quantity) }} {{ $unit }} · <span class="font-data">{{ $receipt->lot?->lot_number }}</span>
+                    </p>
+                    @if (bccomp($short, '0', 2) > 0)
+                        <p class="mt-0.5 text-amber-800 dark:text-amber-400">{{ __(':count :unit fewer than reported — recorded as a shortage.', ['count' => $this->formatQuantity($short), 'unit' => $unit]) }}</p>
+                    @endif
+                </div>
+            </div>
+        @else
+            <div class="mt-4 flex items-start gap-2.5 rounded-md border border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3.5 py-2.5 motion-safe:animate-fade-slide-up">
+                <flux:icon.exclamation-triangle variant="mini" class="size-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <p class="text-xs font-semibold text-amber-900 dark:text-amber-300">
+                    {{ __('Output receipt') }}:
+                    @if ($receipt)
+                        {{ __('draft at the warehouse') }} (<span class="font-data">{{ $receipt->receipt_number }}</span>)
+                    @else
+                        {{ __('waiting for the warehouse') }}
+                    @endif
+                    — {{ $this->formatQuantity((string) $result->quantity_good) }} {{ $unit }}
+                </p>
+            </div>
+        @endif
+    @endif
+
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 80ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">{{ __('Workers') }}</h2>
         <div class="overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
@@ -320,7 +342,6 @@ new #[Title('Production Result')] class extends Component {
         </div>
     </div>
 
-    {{-- Materials --}}
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">{{ __('Materials') }}</h2>
         <div class="overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
@@ -362,12 +383,47 @@ new #[Title('Production Result')] class extends Component {
                 </tbody>
             </table>
         </div>
-        @if ($this->materialRows->contains(fn ($row) => bccomp($row['leftover'], '0', 2) > 0))
-            <p class="mt-2 text-xs text-amber-700 dark:text-amber-400">{{ __('Leftover material goes back to the warehouse with a material return. Its cost is not charged to this work order.') }}</p>
+        @if ($posted)
+            @php($leftovers = $this->materialRows->filter(fn ($row) => bccomp($row['leftover'], '0', 2) > 0))
+            @php($materialReturn = $result->materialReturns->firstWhere('status', '!=', DocumentStatus::Cancelled))
+            @php($returned = $materialReturn?->status === DocumentStatus::Posted)
+
+            @if ($leftovers->isEmpty() || $returned)
+                <div class="mt-3 flex items-start gap-2.5 rounded-md border border-green-200 dark:border-green-500/20 bg-green-50 dark:bg-green-500/10 px-3.5 py-2.5">
+                    <flux:icon.check-circle variant="mini" class="size-4 mt-0.5 shrink-0 text-green-600 dark:text-green-400" />
+                    <div class="text-xs">
+                        @if ($leftovers->isEmpty())
+                            <p class="font-semibold text-green-800 dark:text-green-300">{{ __('All issued material was used — no material return needed.') }}</p>
+                        @else
+                            <p class="font-semibold text-green-800 dark:text-green-300">{{ __('Leftover returned to the warehouse') }}</p>
+                            <p class="mt-0.5 text-green-700 dark:text-green-400"><span class="font-data">{{ $materialReturn->return_number }}</span> · {{ $materialReturn->received_at?->format('d M Y H:i') }}</p>
+                        @endif
+                    </div>
+                </div>
+            @else
+                <div class="mt-3 flex items-start gap-2.5 rounded-md border border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 px-3.5 py-2.5">
+                    <flux:icon.exclamation-triangle variant="mini" class="size-4 mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                    <div class="text-xs flex-1">
+                        <p class="font-semibold text-amber-900 dark:text-amber-300">
+                            {{ __('Material return') }}:
+                            @if ($materialReturn)
+                                {{ __('draft at the warehouse') }} (<span class="font-data">{{ $materialReturn->return_number }}</span>)
+                            @else
+                                {{ __('waiting for the warehouse') }}
+                            @endif
+                        </p>
+                        <p class="mt-0.5 text-amber-800 dark:text-amber-400">
+                            {{ __('To bring back') }}:
+                            @foreach ($leftovers as $row)
+                                <span class="font-data tabular-nums">{{ $this->formatQuantity($row['leftover']) }} {{ $row['product']->unit_of_measure }}</span> {{ $row['product']->product_name }}@if (! $loop->last), @endif
+                            @endforeach
+                        </p>
+                    </div>
+                </div>
+            @endif
         @endif
     </div>
 
-    {{-- Cost summary --}}
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 120ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">{{ __('Production Cost') }}</h2>
         @if ($posted)

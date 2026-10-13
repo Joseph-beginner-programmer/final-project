@@ -5,10 +5,6 @@ namespace App\Exceptions;
 use Illuminate\Support\Carbon;
 use RuntimeException;
 
-/**
- * Shared by every effective-dated rate (labor rates, overhead rates): a new rate must start
- * after the most recent one, so periods never overlap.
- */
 class InvalidRateEffectiveDateException extends RuntimeException
 {
     public function __construct(

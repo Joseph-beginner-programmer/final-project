@@ -68,18 +68,12 @@ Enum work_order_status {
   cancelled
 }
 
-Enum discrepancy_resolution {
-  none
-  loss
-  found
-  production_correction
-}
-
-Enum production_receipt_status {
-  pending
-  received
-  discrepancy_open
-  completed
+Enum payment_term {
+  cash
+  net_7
+  net_14
+  net_30
+  net_60
 }
 
 Enum so_status {
@@ -412,6 +406,9 @@ Table work_orders [headercolor: #C62828] {
   status work_order_status [default: 'draft']
   printed_at timestamp [null, note: '<<extend>> Mencetak Perintah Kerja']
   created_by bigint [ref: > users.id]
+  cancelled_by bigint [ref: > users.id, null, note: 'Hanya dari draft atau released']
+  cancelled_at timestamp [null]
+  cancel_reason text [null, note: 'Wajib saat membatalkan']
   created_at timestamp
   updated_at timestamp
 }
@@ -488,7 +485,7 @@ Table material_issue_items [headercolor: #C62828] {
 //   lebih:  Dr Persediaan / Cr Selisih Bahan
 Table material_returns [headercolor: #C62828] {
   id bigint [pk, increment]
-  return_number varchar [unique]
+  return_number varchar [unique, note: 'MR-{tahun}-{id}']
   work_order_id bigint [ref: > work_orders.id]
   production_result_id bigint [ref: > production_results.id, note: 'Hasil produksi yang melaporkan sisa bahan']
   created_by bigint [ref: > users.id, note: 'Pembuat draf']
@@ -569,21 +566,26 @@ Table production_result_labors [headercolor: #C62828] {
   }
 }
 
+// Gudang — Penerimaan Produksi: SATU penerimaan per hasil produksi (dokumen terpisah, draf -> posting
+// oleh gudang, seperti retur bahan). Diisi otomatis dengan quantity_good; gudang mencatat jumlah aktual.
+// Posting membuat SATU lot (source_type production_receipt) pada unit_cost hasil produksi; jika semua diterima,
+// lot membawa total_cost hasil secara utuh. Kekurangan = total_cost - nilai lot (kerugian). Tidak boleh lebih.
+// Jurnal (nanti): Dr Persediaan (Setengah) Jadi, Dr Kerugian (kekurangan) / Cr Barang (Setengah) Jadi Belum Diterima
 Table production_receipts [headercolor: #C62828] {
   id bigint [pk, increment]
-  receipt_number varchar [unique]
-  production_result_id bigint [ref: - production_results.id]
+  receipt_number varchar [unique, note: 'PRC-{tahun}-{id}']
+  production_result_id bigint [ref: > production_results.id, note: 'Satu penerimaan aktif per hasil; draf yang dibatalkan membebaskannya']
   product_id bigint [ref: > products.id, note: 'wip atau finished_goods']
-  quantity_handed_over decimal(18,4) [note: '= production_results.quantity_good']
-  quantity_received decimal(18,4) [null]
-  quantity_discrepancy decimal(18,4) [default: 0, note: 'handed_over - received']
-  discrepancy_reason text [null]
-  discrepancy_resolution discrepancy_resolution [default: 'none']
-  status production_receipt_status [default: 'pending']
-  received_by bigint [ref: > users.id, null]
+  quantity_expected decimal(18,4) [note: '= production_results.quantity_good']
+  quantity decimal(18,4) [note: 'Jumlah aktual yang diterima gudang; 0 < quantity <= quantity_expected']
+  unit_cost decimal(18,2) [note: 'Diisi saat posting: production_results.unit_cost']
+  total_value decimal(18,2) [note: 'Nilai lot yang dibuat']
+  shortage_value decimal(18,2) [default: 0, note: 'production_results.total_cost - total_value (kerugian)']
+  notes text [null]
+  status document_status [default: 'draft']
+  created_by bigint [ref: > users.id]
+  received_by bigint [ref: > users.id, null, note: 'Diisi saat posting']
   received_at timestamp [null]
-  resolved_by bigint [ref: > users.id, null]
-  resolved_at timestamp [null]
   created_at timestamp
   updated_at timestamp
 }
@@ -595,9 +597,10 @@ Table production_receipts [headercolor: #C62828] {
 //           Melihat Laporan Penjualan
 // ======================================================================
 
+// Mengelola Data Pelanggan: Penjualan dan Manajemen (tidak ada kepala penjualan terpisah)
 Table customers [headercolor: #6A1B9A] {
   id bigint [pk, increment]
-  customer_code varchar [unique]
+  customer_code varchar [unique, note: 'CUS-{id}, data master tanpa tahun']
   customer_name varchar
   contact_person varchar
   phone varchar
@@ -607,15 +610,31 @@ Table customers [headercolor: #6A1B9A] {
   updated_at timestamp
 }
 
+// Menyusun Pesanan Penjualan: draf -> dikonfirmasi oleh Penjualan sendiri (tanpa persetujuan).
+// Stok kurang hanya diperingatkan (make-to-order), menampilkan stok yang akan datang dari produksi.
+// Harga belum termasuk pajak; pajak di faktur.
 Table sales_orders [headercolor: #6A1B9A] {
   id bigint [pk, increment]
-  so_number varchar [unique]
+  so_number varchar [unique, note: 'SO-{tahun}-{id}']
   customer_id bigint [ref: > customers.id]
-  order_date date
-  expected_delivery_date date [null]
+  salesperson_id bigint [ref: > users.id, note: 'Nama Penjual: otomatis user yang membuat SO, tetap saat draf diubah orang lain']
+  order_date date [note: 'Tanggal buat, selalu hari ini']
+  expected_delivery_date date [null, note: 'Tanggal pengiriman']
+  delivery_address text [null, note: 'Terisi dari alamat pelanggan, bisa diubah per pesanan (salinan, bukan referensi)']
+  contact_person varchar [null, note: 'Narahubung: terisi dari pelanggan, bisa diubah (salinan)']
+  contact_phone varchar [null, note: 'No. telepon: terisi dari pelanggan, bisa diubah (salinan)']
+  payment_terms payment_term [default: 'cash', note: 'Syarat pembayaran; jatuh tempo dihitung di faktur']
+  discount_percent decimal(5,2) [default: 0, note: 'Diskon untuk seluruh pesanan, 0-100%']
+  discount_amount decimal(18,2) [default: 0, note: 'Rupiah hasil diskon % x subtotal produk, dihitung sistem']
   status so_status [default: 'draft']
-  total_amount decimal(18,2)
+  total_amount decimal(18,2) [note: 'Subtotal produk - diskon + biaya lainnya, dihitung sistem; tanpa pajak']
+  notes text [null]
   created_by bigint [ref: > users.id]
+  confirmed_by bigint [ref: > users.id, null]
+  confirmed_at timestamp [null]
+  cancelled_by bigint [ref: > users.id, null, note: 'Hanya selama belum ada yang dikirim']
+  cancelled_at timestamp [null]
+  cancel_reason text [null, note: 'Wajib saat membatalkan']
   created_at timestamp
   updated_at timestamp
 }
@@ -627,18 +646,34 @@ Table sales_order_items [headercolor: #6A1B9A] {
   quantity_ordered decimal(18,4)
   quantity_delivered decimal(18,4) [default: 0]
   quantity_returned decimal(18,4) [default: 0]
-  unit_price decimal(18,2)
+  unit_price decimal(18,2) [note: 'Terisi dari products.selling_price, bisa diubah']
   subtotal decimal(18,2)
+
+  indexes {
+    (sales_order_id, product_id) [unique]
+  }
 }
 
-// Gudang: Mencatat Pengiriman Penjualan
+// Biaya lainnya pada SO (mis. ongkos kirim, pengemasan), beberapa baris
+Table sales_order_charges [headercolor: #6A1B9A] {
+  id bigint [pk, increment]
+  sales_order_id bigint [ref: > sales_orders.id]
+  description varchar
+  amount decimal(18,2)
+}
+
+// Gudang: Mencatat Pengiriman Penjualan — beberapa pengiriman per SO, satu draf terbuka sekaligus.
+// Draf -> Posting: barang keluar FIFO (DrawStockFifoAction, sama dengan pengeluaran barang),
+// nilai yang ditarik = HPP. Tidak boleh melebihi sisa pesanan; stok kurang memblokir posting.
 // Jurnal: Dr Harga Pokok Penjualan / Cr Persediaan Barang Jadi
 Table sales_deliveries [headercolor: #6A1B9A] {
   id bigint [pk, increment]
-  delivery_number varchar [unique]
+  delivery_number varchar [unique, note: 'DO-{tahun}-{id} (surat jalan)']
   sales_order_id bigint [ref: > sales_orders.id]
-  delivered_at timestamp
-  delivered_by bigint [ref: > users.id]
+  notes text [null]
+  created_by bigint [ref: > users.id]
+  delivered_at timestamp [null, note: 'Diisi saat posting']
+  delivered_by bigint [ref: > users.id, null, note: 'Diisi saat posting']
   status document_status [default: 'draft']
   created_at timestamp
   updated_at timestamp
@@ -651,6 +686,10 @@ Table sales_delivery_items [headercolor: #6A1B9A] {
   product_id bigint [ref: > products.id, note: 'Hanya finished_goods']
   quantity decimal(18,4)
   cogs_total decimal(18,2) [note: 'HPP dari lot FIFO yang dipakai']
+
+  indexes {
+    (sales_delivery_id, sales_order_item_id) [unique]
+  }
 }
 
 // Jurnal: Dr Retur Penjualan / Cr Piutang Usaha

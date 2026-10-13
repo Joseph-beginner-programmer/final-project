@@ -25,7 +25,6 @@ use Livewire\Attributes\Title;
 use Livewire\Component;
 
 new #[Title('Create Work Order')] class extends Component {
-    /** set when editing a Draft WO — the same form serves create and edit */
     #[Locked]
     public ?int $workOrderId = null;
 
@@ -85,10 +84,6 @@ new #[Title('Create Work Order')] class extends Component {
         $this->labors = array_values($this->labors);
     }
 
-    /**
-     * Active employees, each with only the rate in effect today eager-loaded
-     * (one query for all rates instead of one per employee).
-     */
     #[Computed]
     public function employees(): Collection
     {
@@ -103,11 +98,6 @@ new #[Title('Create Work Order')] class extends Component {
             ->get();
     }
 
-    /**
-     * Option rows for one labor row's <x-picker> (a Blade component can't call this component's
-     * methods, so everything it shows is prepared here). Workers already chosen in another row,
-     * or without an hourly rate, are listed but unavailable — with the reason.
-     */
     public function workerOptions(int $index): array
     {
         $taken = collect($this->labors)->except($index)->pluck('employee_id')->filter()->map(fn ($id) => (int) $id)->all();
@@ -167,9 +157,6 @@ new #[Title('Create Work Order')] class extends Component {
             ->get();
     }
 
-    /**
-     * Formulas grouped by the work center that runs them — how production thinks about recipes.
-     */
     #[Computed]
     public function formulasByWorkCenter(): Collection
     {
@@ -193,9 +180,6 @@ new #[Title('Create Work Order')] class extends Component {
             : null;
     }
 
-    /**
-     * The selected formula's work-center overhead rate in effect today — what the WO will copy.
-     */
     #[Computed]
     public function overheadRate(): ?string
     {
@@ -217,10 +201,6 @@ new #[Title('Create Work Order')] class extends Component {
         return is_numeric($this->plannedMachineHours) && $this->plannedMachineHours > 0;
     }
 
-    /**
-     * The formula's recipe scaled to the typed target. Read-only preview: the BOM is a
-     * template — what's actually consumed gets recorded later on material issues.
-     */
     #[Computed]
     public function materialRequirements(): Collection
     {
@@ -278,11 +258,9 @@ new #[Title('Create Work Order')] class extends Component {
     {
         return [
             'productionFormulaId' => ['required', 'exists:production_formulas,id'],
-            // production output is always whole units (Session 14) — fractional quantities live on the material side only
             'quantityTarget' => ['required', 'integer', 'min:1'],
             'plannedStartDate' => ['required', 'date', 'after_or_equal:today'],
             'plannedEndDate' => ['required', 'date', 'after_or_equal:plannedStartDate'],
-            // <<include>> Mengalokasi Biaya Tenaga Kerja — at least one worker, each listed once
             'labors' => ['required', 'array', 'min:1'],
             'labors.*.employee_id' => ['required', 'distinct', 'exists:employees,id'],
             'labors.*.planned_hours' => ['required', 'numeric', 'gt:0', 'max:1000'],
@@ -295,7 +273,6 @@ new #[Title('Create Work Order')] class extends Component {
         return [
             'labors.required' => __('Assign at least one worker to this work order.'),
             'labors.*.employee_id.distinct' => __('This worker is already listed.'),
-            // the rule's default message would print the literal word "today"
             'plannedStartDate.after_or_equal' => __('The planned start date cannot be in the past.'),
         ];
     }
@@ -319,7 +296,6 @@ new #[Title('Create Work Order')] class extends Component {
         $existing = $this->workOrderId ? WorkOrder::findOrFail($this->workOrderId) : null;
         $existing ? Gate::authorize('update', $existing) : Gate::authorize('create', WorkOrder::class);
 
-        // drop untouched blank rows, but keep half-filled ones so they hit a real validation error
         $this->labors = array_values(array_filter(
             $this->labors,
             fn (array $row): bool => filled($row['employee_id']) || filled($row['planned_hours'])
@@ -413,9 +389,7 @@ new #[Title('Create Work Order')] class extends Component {
 
     <div class="mt-6 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-md shadow-zinc-900/4 dark:shadow-none p-6 sm:p-8 lg:p-10 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-x-10 gap-y-10">
-            {{-- Main column --}}
             <div class="lg:col-span-2 space-y-10">
-                {{-- Step 1: Formula & target --}}
                 <section class="motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
                     <div class="flex items-center gap-2.5 pb-2.5 mb-5 border-b border-zinc-200 dark:border-white/10">
                         <span class="flex items-center justify-center size-5">
@@ -434,12 +408,7 @@ new #[Title('Create Work Order')] class extends Component {
 
                     <div class="grid grid-cols-1 md:grid-cols-5 items-start gap-5">
                         <div class="md:col-span-3">
-                            {{-- Custom listbox instead of a native <select>: a native option can't carry
-                                 separate fonts/colours per part, so code, product, type and work center
-                                 all collapsed into one grey line. Same pattern as the item-receipt PO picker. --}}
                             @php($selected = $this->selectedFormula)
-                            {{-- flux:field + flux:label so the label gets exactly the same spacing as the
-                                 neighbouring flux:input's label — a plain <label> sat ~2px off. --}}
                             <flux:field>
                             <flux:label id="formula-label">{{ __('Formula') }}</flux:label>
                             <div x-data="{ open: false }" x-on:keydown.escape="open = false; $refs.trigger.focus()" class="relative">
@@ -552,7 +521,6 @@ new #[Title('Create Work Order')] class extends Component {
                     </div>
                 </section>
 
-                {{-- Step 2: Schedule --}}
                 <section class="motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
                     <div class="flex items-center gap-2.5 pb-2.5 mb-5 border-b border-zinc-200 dark:border-white/10">
                         <span class="flex items-center justify-center size-5">
@@ -575,7 +543,6 @@ new #[Title('Create Work Order')] class extends Component {
                     </div>
                 </section>
 
-                {{-- Step 3: Workers (<<include>> Mengalokasi Biaya Tenaga Kerja) --}}
                 <section class="motion-safe:animate-fade-slide-up" style="animation-delay: 115ms;">
                     <div class="flex items-center justify-between pb-2.5 mb-5 border-b border-zinc-200 dark:border-white/10">
                         <div class="flex items-center gap-2.5">
@@ -606,9 +573,6 @@ new #[Title('Create Work Order')] class extends Component {
                             <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('No active employees yet. Management needs to add employees first.') }}</p>
                         </div>
                     @else
-                        {{-- Desktop: a grid instead of a <table>, so the worker column absorbs
-                             the leftover width (minmax(0,1fr)) and nothing forces horizontal scroll.
-                             Rate rides under the cost as its explanation instead of taking a column. --}}
                         <div class="hidden sm:block rounded-md border border-zinc-200 dark:border-white/10" role="table" aria-label="{{ __('Workers') }}">
                             <div role="row" class="grid grid-cols-[minmax(0,1fr)_6.5rem_9rem_2rem] gap-x-3 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10 rounded-t-md">
                                 <span role="columnheader">{{ __('Worker') }}</span>
@@ -656,7 +620,6 @@ new #[Title('Create Work Order')] class extends Component {
                             @endforeach
                         </div>
 
-                        {{-- Mobile --}}
                         <div class="sm:hidden space-y-3">
                             @foreach ($labors as $index => $row)
                                 @php($rate = $this->currentRateFor($row['employee_id']))
@@ -690,7 +653,6 @@ new #[Title('Create Work Order')] class extends Component {
                     @endif
                 </section>
 
-                {{-- Step 4: Machine hours → applied overhead (BOP dibebankan) --}}
                 <section class="motion-safe:animate-fade-slide-up" style="animation-delay: 125ms;">
                     <div class="flex items-center gap-2.5 pb-2.5 mb-5 border-b border-zinc-200 dark:border-white/10">
                         <span class="flex items-center justify-center size-5">
@@ -712,11 +674,8 @@ new #[Title('Create Work Order')] class extends Component {
                             <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Select a formula first — it decides which work center runs this order.') }}</p>
                         </div>
                     @else
-                        {{-- One panel that reads as the calculation it is: rate × machine hours = overhead.
-                             Every cell shares the same eyebrow label + value rhythm, so nothing floats. --}}
                         @php($hasOverhead = bccomp($this->plannedOverheadCost, '0', 2) > 0)
                         <div class="rounded-md border border-zinc-200 dark:border-white/10 overflow-hidden grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_1.5rem_9rem_1.5rem_minmax(0,1fr)] divide-y sm:divide-y-0 divide-zinc-200 dark:divide-white/10">
-                            {{-- Rate --}}
                             <div class="px-4 py-3">
                                 <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Work Center') }}</p>
                                 <p class="mt-1.5 text-sm font-medium text-zinc-900 dark:text-white">{{ __($this->selectedFormula->workCenter->name) }}</p>
@@ -732,7 +691,6 @@ new #[Title('Create Work Order')] class extends Component {
 
                             <div class="hidden sm:flex items-center justify-center font-data text-lg text-zinc-300 dark:text-zinc-600" aria-hidden="true">&times;</div>
 
-                            {{-- Machine hours --}}
                             <div class="px-4 sm:px-0 py-3">
                                 <label for="planned-machine-hours" class="block text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Machine Hours') }}</label>
                                 <div class="mt-1">
@@ -744,7 +702,6 @@ new #[Title('Create Work Order')] class extends Component {
 
                             <div class="hidden sm:flex items-center justify-center font-data text-lg text-zinc-300 dark:text-zinc-600" aria-hidden="true">=</div>
 
-                            {{-- Result --}}
                             <div class="px-4 py-3 bg-zinc-50 dark:bg-white/[0.03] sm:text-right">
                                 <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Planned Overhead') }}</p>
                                 <p wire:key="oh-{{ $this->plannedOverheadCost }}" wire:transition.duration.200ms
@@ -756,7 +713,6 @@ new #[Title('Create Work Order')] class extends Component {
                     @endif
                 </section>
 
-                {{-- Material requirements preview --}}
                 <section class="motion-safe:animate-fade-slide-up" style="animation-delay: 130ms;">
                     <div class="flex items-center justify-between gap-3 pb-2.5 mb-5 border-b border-zinc-200 dark:border-white/10">
                         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300">
@@ -773,7 +729,6 @@ new #[Title('Create Work Order')] class extends Component {
                         </div>
                     @else
                         <div wire:loading.class="opacity-50" wire:target="productionFormulaId,quantityTarget" class="transition-opacity">
-                            {{-- Desktop --}}
                             <div class="hidden sm:block overflow-x-auto rounded-md border border-zinc-200 dark:border-white/10">
                                 <table class="w-full text-xs border-collapse">
                                     <thead>
@@ -813,7 +768,6 @@ new #[Title('Create Work Order')] class extends Component {
                                 </table>
                             </div>
 
-                            {{-- Mobile --}}
                             <div class="sm:hidden space-y-2">
                                 @foreach ($this->materialRequirements as $row)
                                     <div wire:key="req-m-{{ $row['product']->id }}" class="rounded-md border border-zinc-200 dark:border-white/10 p-3 text-xs">
@@ -850,7 +804,6 @@ new #[Title('Create Work Order')] class extends Component {
                 </section>
             </div>
 
-            {{-- Summary rail --}}
             <div class="lg:col-span-1">
                 <div class="lg:sticky lg:top-6 motion-safe:animate-fade-slide-up" style="animation-delay: 160ms;">
                     <div class="rounded-md border border-zinc-200 dark:border-white/10 overflow-hidden">

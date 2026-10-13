@@ -5,10 +5,6 @@ use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-/**
- * A work order's plan is copied from its formula at creation (work center + scaled materials),
- * so editing a formula later can never change an existing WO — same idea as the copied rates.
- */
 return new class extends Migration
 {
     public function up(): void
@@ -17,7 +13,6 @@ return new class extends Migration
             $table->foreignId('work_center_id')->nullable()->after('product_id')->constrained()->restrictOnDelete();
         });
 
-        // backfill any existing WOs from their formula, then require it
         DB::table('work_orders')
             ->join('production_formulas', 'production_formulas.id', '=', 'work_orders.production_formula_id')
             ->orderBy('work_orders.id')

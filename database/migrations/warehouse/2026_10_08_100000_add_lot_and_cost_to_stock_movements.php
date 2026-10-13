@@ -7,10 +7,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
-/**
- * FIFO costing: every stock movement belongs to exactly one inventory lot and carries its cost.
- * An OUT that spans several lots becomes several movement rows (ERD: "satu baris OUT untuk setiap lot").
- */
 return new class extends Migration
 {
     public function up(): void
@@ -18,7 +14,7 @@ return new class extends Migration
         $this->createMissingPurchaseLots();
 
         Schema::table('stock_movements', function (Blueprint $table) {
-            $table->renameColumn('amount', 'quantity'); // match the ERD's name
+            $table->renameColumn('amount', 'quantity');
         });
 
         Schema::table('stock_movements', function (Blueprint $table) {
@@ -27,7 +23,6 @@ return new class extends Migration
             $table->decimal('total_value', 12, 2)->unsigned()->default(0)->after('unit_cost');
         });
 
-        // every existing movement is a purchase receipt; its lot is the one sourced from that receipt
         DB::table('stock_movements as m')
             ->join('inventory_lots as l', function ($join) {
                 $join->on('l.source_id', '=', 'm.reference_id')
@@ -49,11 +44,6 @@ return new class extends Migration
         });
     }
 
-    /**
-     * Purchase receipts recorded before lots existed (Sessions 8–12) never got a lot, so their quantity
-     * sat in products.current_stock but was invisible to FIFO. Recreate each lot exactly as receiving
-     * would have. Safe only while nothing has been issued yet — guarded below; finds nothing on a fresh DB.
-     */
     private function createMissingPurchaseLots(): void
     {
         $missing = DB::table('purchase_order_receipts as r')
@@ -108,6 +98,5 @@ return new class extends Migration
         Schema::table('stock_movements', function (Blueprint $table) {
             $table->renameColumn('quantity', 'amount');
         });
-        // recreated lots are kept: they're correct data, not schema
     }
 };

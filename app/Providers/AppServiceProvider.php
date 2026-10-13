@@ -7,6 +7,9 @@ use App\Http\Responses\LoginResponse;
 use Carbon\CarbonImmutable;
 use App\Enums\UserRole;
 use App\Models\MaterialIssueItem;
+use App\Models\MaterialReturnItem;
+use App\Models\ProductionReceipt;
+use App\Models\SalesDeliveryItem;
 use App\Models\PurchaseOrderReceipt;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Gate;
@@ -17,17 +20,11 @@ use Illuminate\Validation\Rules\Password;
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
     public function register(): void
     {
         $this->app->singleton(LoginResponseContract::class, LoginResponse::class);
     }
 
-    /**
-     * Bootstrap any application services. 
-     */
     public function boot(): void
     {
         Gate::define('view-dashboard', function ($user, UserRole $dashboardRole) {
@@ -59,40 +56,43 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('warehouse.issue', function ($user) {
             return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
         });
+        Gate::define('warehouse.return', function ($user) {
+            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
+        });
         Gate::define('production.view', function ($user) {
             return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
         });
         Gate::define('production.create', function ($user) {
             return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
         });
-        // use case: Manajemen — Mengelola Data Karyawan
         Gate::define('employees.manage', function ($user) {
             return in_array($user->role, [UserRole::Manager], true);
         });
-        // use case: Akuntansi — Mengelola Biaya Tenaga Kerja
         Gate::define('labor-rates.manage', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
-        // use case: Akuntansi — Mengelola Biaya Overhead
         Gate::define('overhead.manage', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
-        // need-to-know: rupiah amounts (purchase prices, FIFO costs) on operational pages
-        // such as the warehouse ones; staff there work with quantities only
+        Gate::define('sales.manage', function ($user) {
+            return in_array($user->role, [UserRole::Sales, UserRole::Manager], true);
+        });
+        Gate::define('warehouse.deliver', function ($user) {
+            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
+        });
         Gate::define('costs.view', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
 
-        //morph
         Relation::morphMap([
             'purchase_order_receipt' => PurchaseOrderReceipt::class,
             'material_issue_item' => MaterialIssueItem::class,
+            'material_return_item' => MaterialReturnItem::class,
+            'production_receipt' => ProductionReceipt::class,
+            'sales_delivery_item' => SalesDeliveryItem::class,
         ]);
     }
 
-    /**
-     * Configure default behaviors for production-ready applications.
-     */
     protected function configureDefaults(): void
     {
         Date::use(CarbonImmutable::class);

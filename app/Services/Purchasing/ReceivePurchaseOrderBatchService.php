@@ -34,7 +34,7 @@ class ReceivePurchaseOrderBatchService
                 'received_at' => now(),
                 'attachment_path' => $data->attachmentPath,
             ]);
-            $batch->receipt_number = (string) Str::uuid(); // placeholder; real number needs this row's own id, set below
+            $batch->receipt_number = (string) Str::uuid();
             $batch->save();
 
             $batch->receipt_number = sprintf('RCV-%s-%06d', $batch->received_at->format('Y'), $batch->id);

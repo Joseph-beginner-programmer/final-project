@@ -81,10 +81,6 @@ new #[Title('Work Orders')] class extends Component {
             ->paginate(10);
     }
 
-    /**
-     * Counts per status for the filter tabs — scoped to the search term only (not the
-     * selected status), so every tab shows what it would contain if clicked.
-     */
     #[Computed]
     public function statusCounts(): array
     {
@@ -156,7 +152,6 @@ new #[Title('Work Orders')] class extends Component {
         @endcan
     </div>
 
-    {{-- Status tabs --}}
     <div class="mt-6 flex items-center gap-1.5 overflow-x-auto pb-1 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <button type="button" wire:click="$set('status', '')" wire:loading.attr="disabled"
             class="shrink-0 inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium whitespace-nowrap cursor-pointer transition-colors duration-150 active:scale-[0.97]
@@ -177,7 +172,6 @@ new #[Title('Work Orders')] class extends Component {
 
     <div class="mt-1 border-b border-zinc-200 dark:border-white/10"></div>
 
-    {{-- Toolbar --}}
     <div class="mt-4 flex flex-wrap items-end gap-3 motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
         <div class="flex-1 min-w-48">
             <flux:input size="sm" icon="magnifying-glass" wire:model.live.debounce.400ms="search" :placeholder="__('Search WO number or product...')" />
@@ -207,7 +201,6 @@ new #[Title('Work Orders')] class extends Component {
             {{ __('Updating...') }}
         </div>
 
-        {{-- Desktop Table --}}
         <div class="mt-4 hidden lg:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <table class="w-full text-xs border-collapse">
                 <thead class="sticky top-0 z-10">
@@ -273,7 +266,6 @@ new #[Title('Work Orders')] class extends Component {
             </table>
         </div>
 
-        {{-- Mobile List --}}
         <div class="mt-4 lg:hidden rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
             @forelse ($this->workOrders as $workOrder)
                 @php($isLate = $workOrder->planned_end_date->isPast() && !$workOrder->status->isTerminal())

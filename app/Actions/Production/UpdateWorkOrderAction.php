@@ -9,10 +9,6 @@ use App\Exceptions\WorkOrderNotEditableException;
 use App\Models\WorkOrder;
 use Illuminate\Support\Facades\DB;
 
-/**
- * A Draft WO is still only a plan (not printed, nothing issued), so it can be changed freely:
- * formula, target, dates, workers, machine hours. The copied recipe and rates are rebuilt.
- */
 class UpdateWorkOrderAction
 {
     use BuildsWorkOrderPlan;
@@ -22,7 +18,6 @@ class UpdateWorkOrderAction
         [$formula, $overheadRate] = $this->validatePlan($data);
 
         return DB::transaction(function () use ($workOrder, $data, $formula, $overheadRate) {
-            // re-read under a lock: it may have been released since the edit page was opened
             $workOrder = WorkOrder::whereKey($workOrder->id)->lockForUpdate()->firstOrFail();
 
             if ($workOrder->status !== WorkOrderStatus::Draft) {

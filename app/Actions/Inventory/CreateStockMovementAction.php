@@ -17,7 +17,6 @@ class CreateStockMovementAction
             $product = Product::where('id', '=', $data->productId, 'and')->lockForUpdate()->firstOrFail();
             $newStock = $data->direction === Direction::In ? bcadd($product->current_stock, $data->quantity, 2) : bcsub($product->current_stock, $data->quantity, 2);
 
-
             if($data->direction === Direction::Out && bccomp($newStock, '0', 2) < 0) throw new InsufficientStockException($product, $data->quantity, $product->current_stock);
 
             $product->current_stock = $newStock;

@@ -2,10 +2,6 @@
 
 namespace App\Enums;
 
-/**
- * The ERD's `document_status` (draft → posted, or cancelled), shared by documents that move stock:
- * material issues now; purchase returns and sales deliveries later.
- */
 enum DocumentStatus: string
 {
     case Draft = 'draft';

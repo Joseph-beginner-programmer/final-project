@@ -11,5 +11,6 @@ enum StockMovementType: string
     case ProductionOutput = 'production_output';
     case ProductionInput = 'production_input';
     case StockAdjustment = 'stock_adjustment';
+    case MaterialReturn = 'material_return';
 
 }

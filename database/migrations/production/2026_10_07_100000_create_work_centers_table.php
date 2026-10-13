@@ -16,8 +16,6 @@ return new class extends Migration
             $table->timestamps();
         });
 
-        // reference data the schema itself depends on (formulas get a required FK to these in the next
-        // migration), so it ships with the migration rather than an optional seeder
         DB::table('work_centers')->insert([
             ['code' => 'MOLDING', 'name' => 'Molding', 'created_at' => now(), 'updated_at' => now()],
             ['code' => 'ASSEMBLY', 'name' => 'Assembly Line', 'created_at' => now(), 'updated_at' => now()],

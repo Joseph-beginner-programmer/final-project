@@ -16,7 +16,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('purchase_order_receipts', function (Blueprint $table) {
-            // nullable: the original values are gone once up() has run, so a rollback can't refill them
             $table->string('receipt_condition')->nullable()->after('quantity_received');
         });
     }

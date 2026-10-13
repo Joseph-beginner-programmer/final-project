@@ -4,9 +4,6 @@ namespace App\Exceptions;
 
 use RuntimeException;
 
-/**
- * A production result that breaks a business rule — checked when saving the draft and again on posting.
- */
 class InvalidProductionResultException extends RuntimeException
 {
     public const NO_GOOD_OUTPUT = 'no_good_output';

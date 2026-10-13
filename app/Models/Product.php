@@ -22,6 +22,7 @@ class Product extends Model
             'current_stock' => 'decimal:2',
             'safety_stock' => 'decimal:2',
             'reorder_point' => 'decimal:2',
+            'selling_price' => 'decimal:2',
         ];
     }
 
@@ -58,7 +59,6 @@ class Product extends Model
             ->withTimestamps();
     }
 
-    // Local Query Scope
     public function scopePurchasable(Builder $query): Builder
     {
         return $query->where('type', ProductType::RawMaterial->value);

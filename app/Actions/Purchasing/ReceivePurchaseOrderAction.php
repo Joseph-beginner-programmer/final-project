@@ -21,7 +21,6 @@ class ReceivePurchaseOrderAction
         return DB::transaction(function () use ($data) {
             $poItem = PurchaseOrderItem::where('id', $data->purchaseOrderItemId)->lockForUpdate()->firstOrFail();
 
-            // checks
             if(bccomp($data->quantityReceived, "0", 2) <= 0) throw new InvalidReceiptQuantityException($data->quantityReceived);
             $poItem->purchaseOrder->ensureCanReceive();
 
@@ -32,7 +31,7 @@ class ReceivePurchaseOrderAction
             ]);
 
             $lot = InventoryLot::create([
-                'lot_number' => (string) Str::uuid(), // placeholder; real number needs this row's own id, set below
+                'lot_number' => (string) Str::uuid(),
                 'product_id' => $poItem->product->id,
                 'source_type' => 'purchase_order_receipt',
                 'source_id' => $receipt->id,

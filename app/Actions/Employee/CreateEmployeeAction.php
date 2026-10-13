@@ -18,10 +18,9 @@ class CreateEmployeeAction
                 'status' => $data->status,
             ]);
 
-            $employee->employee_code = (string) Str::uuid(); // placeholder; real code needs this row's own id, set below
+            $employee->employee_code = (string) Str::uuid();
             $employee->save();
 
-            // master record, not a dated document — so no year segment, unlike PO/WO/RCV numbers
             $employee->employee_code = sprintf('EMP-%06d', $employee->id);
             $employee->save();
 

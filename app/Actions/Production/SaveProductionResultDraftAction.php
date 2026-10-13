@@ -12,10 +12,6 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-/**
- * Creates the WO's (single) draft result, or replaces the reported figures of the existing draft.
- * Nothing is costed here — costs are fixed only in PostProductionResultAction.
- */
 class SaveProductionResultDraftAction
 {
     public function __construct(
@@ -51,8 +47,8 @@ class SaveProductionResultDraftAction
                     'work_order_id' => $workOrder->id,
                     'created_by' => $userId,
                 ]);
-                $result->status = DocumentStatus::Draft; // explicit, so the returned model knows its status
-                $result->result_number = (string) Str::uuid(); // placeholder; real number needs this row's own id
+                $result->status = DocumentStatus::Draft;
+                $result->result_number = (string) Str::uuid();
                 $result->save();
 
                 $result->result_number = sprintf('RES-%s-%06d', $result->created_at->format('Y'), $result->id);
@@ -61,7 +57,6 @@ class SaveProductionResultDraftAction
                 $result->update($fields);
             }
 
-            // a draft's lines are a working copy — replace them wholesale
             $result->materials()->delete();
             foreach (self::allocate($workOrder->postedIssueItems(), $data->materialsUsed) as [$item, $quantity]) {
                 $result->materials()->create([
@@ -83,9 +78,6 @@ class SaveProductionResultDraftAction
     }
 
     /**
-     * Spread each product's reported use over its issue lines, oldest issue first, each line up to
-     * what it issued. Lines given nothing keep their whole quantity as leftover.
-     *
      * @param  Collection<int, MaterialIssueItem>  $issueLines  ordered oldest issue first
      * @param  array<int, string>  $usedByProduct
      * @return list<array{0: MaterialIssueItem, 1: string}>

@@ -13,7 +13,6 @@ return new class extends Migration
             $table->foreignId('production_formula_id')->constrained()->cascadeOnDelete();
             $table->foreignId('material_product_id')->constrained('products')->restrictOnDelete();
             $table->decimal('quantity', 12, 2)->unsigned();
-            // explicit name: the auto-generated one exceeds MySQL's 64-char identifier limit
             $table->unique(['production_formula_id', 'material_product_id'], 'formula_items_formula_material_unique');
         });
     }

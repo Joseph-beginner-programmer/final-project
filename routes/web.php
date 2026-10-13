@@ -57,14 +57,12 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/warehouse/inbound/item-receipts/{purchaseOrder}', 'pages::warehouse.inbound.item-receipts.detail')
         ->name('warehouse.inbound.item-receipts.detail');
 
-    // literal /create must stay above the {workOrder} wildcard, or it would be captured as an id
     Route::livewire('/production/work-orders', 'pages::production.work-orders.list')
         ->name('production.work-orders.list');
 
     Route::livewire('/production/work-orders/create', 'pages::production.work-orders.create')
         ->name('production.work-orders.create');
 
-    // the create page doubles as the edit page for a Draft WO
     Route::livewire('/production/work-orders/{workOrder}/edit', 'pages::production.work-orders.create')
         ->name('production.work-orders.edit');
 
@@ -74,7 +72,6 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/production/work-orders/{workOrder}/print', \App\Http\Controllers\Production\PrintWorkOrderController::class)
         ->name('production.work-orders.print');
 
-    // literal /create/... and /{result}/edit are declared before the bare {productionResult} wildcard
     Route::livewire('/production/results', 'pages::production.results.list')
         ->name('production.results.list');
 
@@ -87,7 +84,6 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/production/results/{productionResult}', 'pages::production.results.show')
         ->name('production.results.show');
 
-    // literal /create/... and /{issue}/edit are declared before the bare {materialIssue} wildcard
     Route::livewire('/warehouse/outbound/material-issues', 'pages::warehouse.outbound.material-issues.list')
         ->name('warehouse.outbound.material-issues.list');
 
@@ -99,6 +95,57 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/warehouse/outbound/material-issues/{materialIssue}', 'pages::warehouse.outbound.material-issues.show')
         ->name('warehouse.outbound.material-issues.show');
+
+    Route::livewire('/warehouse/inbound/material-returns', 'pages::warehouse.inbound.material-returns.list')
+        ->name('warehouse.inbound.material-returns.list');
+
+    Route::livewire('/warehouse/inbound/material-returns/create/{productionResult}', 'pages::warehouse.inbound.material-returns.form')
+        ->name('warehouse.inbound.material-returns.create');
+
+    Route::livewire('/warehouse/inbound/material-returns/{materialReturn}/edit', 'pages::warehouse.inbound.material-returns.form')
+        ->name('warehouse.inbound.material-returns.edit');
+
+    Route::livewire('/warehouse/inbound/material-returns/{materialReturn}', 'pages::warehouse.inbound.material-returns.show')
+        ->name('warehouse.inbound.material-returns.show');
+
+    Route::livewire('/warehouse/inbound/production-receipts', 'pages::warehouse.inbound.production-receipts.list')
+        ->name('warehouse.inbound.production-receipts.list');
+
+    Route::livewire('/warehouse/inbound/production-receipts/create/{productionResult}', 'pages::warehouse.inbound.production-receipts.form')
+        ->name('warehouse.inbound.production-receipts.create');
+
+    Route::livewire('/warehouse/inbound/production-receipts/{productionReceipt}/edit', 'pages::warehouse.inbound.production-receipts.form')
+        ->name('warehouse.inbound.production-receipts.edit');
+
+    Route::livewire('/warehouse/inbound/production-receipts/{productionReceipt}', 'pages::warehouse.inbound.production-receipts.show')
+        ->name('warehouse.inbound.production-receipts.show');
+
+    Route::livewire('/sales/customers', 'pages::sales.customers.list')
+        ->name('sales.customers.list');
+
+    Route::livewire('/sales/orders', 'pages::sales.orders.list')
+        ->name('sales.orders.list');
+
+    Route::livewire('/sales/orders/create', 'pages::sales.orders.form')
+        ->name('sales.orders.create');
+
+    Route::livewire('/sales/orders/{salesOrder}/edit', 'pages::sales.orders.form')
+        ->name('sales.orders.edit');
+
+    Route::livewire('/sales/orders/{salesOrder}', 'pages::sales.orders.show')
+        ->name('sales.orders.show');
+
+    Route::livewire('/warehouse/outbound/sales-deliveries', 'pages::warehouse.outbound.sales-deliveries.list')
+        ->name('warehouse.outbound.sales-deliveries.list');
+
+    Route::livewire('/warehouse/outbound/sales-deliveries/create/{salesOrder}', 'pages::warehouse.outbound.sales-deliveries.form')
+        ->name('warehouse.outbound.sales-deliveries.create');
+
+    Route::livewire('/warehouse/outbound/sales-deliveries/{salesDelivery}/edit', 'pages::warehouse.outbound.sales-deliveries.form')
+        ->name('warehouse.outbound.sales-deliveries.edit');
+
+    Route::livewire('/warehouse/outbound/sales-deliveries/{salesDelivery}', 'pages::warehouse.outbound.sales-deliveries.show')
+        ->name('warehouse.outbound.sales-deliveries.show');
 
     Route::livewire('/management/employees', 'pages::management.employees.list')
         ->name('management.employees.list');

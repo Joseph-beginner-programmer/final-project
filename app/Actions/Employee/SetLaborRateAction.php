@@ -8,16 +8,11 @@ use App\Models\LaborRate;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
-/**
- * Rates are never edited in place: a new rate closes the previous one the day before it starts,
- * so every work order can still look up the rate that applied when it was planned.
- */
 class SetLaborRateAction
 {
     public function handle(Employee $employee, string $hourlyRate, string $effectiveFrom, int $createdBy): LaborRate
     {
         return DB::transaction(function () use ($employee, $hourlyRate, $effectiveFrom, $createdBy) {
-            // serialize rate changes per employee, so two concurrent submissions can't both close the same open rate
             Employee::whereKey($employee->id)->lockForUpdate()->first();
 
             $latest = $employee->laborRates()->orderByDesc('effective_from')->first();

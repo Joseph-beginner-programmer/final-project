@@ -5,9 +5,6 @@ namespace App\Exceptions;
 use App\Models\WorkOrder;
 use RuntimeException;
 
-/**
- * A result can only be recorded for a WO that is in progress, and only once (one result per WO).
- */
 class WorkOrderNotRecordableException extends RuntimeException
 {
     public const NOT_IN_PROGRESS = 'not_in_progress';
