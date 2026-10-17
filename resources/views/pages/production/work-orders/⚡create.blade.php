@@ -3,7 +3,6 @@
 use App\Actions\Production\CreateWorkOrderAction;
 use App\Actions\Production\UpdateWorkOrderAction;
 use App\DTO\Production\CreateWorkOrderData;
-use App\Enums\ProductType;
 use App\Exceptions\InactiveEmployeeException;
 use App\Exceptions\InactiveProductionFormulaException;
 use App\Exceptions\InvalidPlannedDateRangeException;
@@ -161,15 +160,6 @@ new #[Title('Create Work Order')] class extends Component {
     public function formulasByWorkCenter(): Collection
     {
         return $this->formulas->groupBy(fn (ProductionFormula $formula) => $formula->workCenter->name);
-    }
-
-    public function productTypeChipClasses(ProductType $type): string
-    {
-        return match ($type) {
-            ProductType::Wip => 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20',
-            ProductType::FinishedGoods => 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20',
-            ProductType::RawMaterial => 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-white/5 dark:text-zinc-400 dark:border-white/10',
-        };
     }
 
     #[Computed]
@@ -432,7 +422,7 @@ new #[Title('Create Work Order')] class extends Component {
                                     @if ($selected)
                                         <span class="flex items-center gap-2 min-w-0">
                                             <span class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $selected->product->product_name }}</span>
-                                            <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium {{ $this->productTypeChipClasses($selected->product->type) }}">{{ __($selected->product->type->label()) }}</span>
+                                            <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium {{ $selected->product->type->badgeClasses() }}">{{ __($selected->product->type->label()) }}</span>
                                         </span>
                                     @else
                                         <span class="text-sm text-zinc-400 dark:text-zinc-500">{{ __('Select a production formula...') }}</span>
@@ -481,10 +471,10 @@ new #[Title('Create Work Order')] class extends Component {
                                                 <span class="flex min-w-0 flex-1 flex-col">
                                                     <span class="flex items-center gap-2 min-w-0">
                                                         <span class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $formula->product->product_name }}</span>
-                                                        <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium {{ $this->productTypeChipClasses($formula->product->type) }}">{{ __($formula->product->type->label()) }}</span>
+                                                        <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium {{ $formula->product->type->badgeClasses() }}">{{ __($formula->product->type->label()) }}</span>
                                                     </span>
                                                     <span class="font-data text-[11px] text-zinc-500 dark:text-zinc-400">
-                                                        <span class="text-accent">{{ $formula->formula_code }} v{{ $formula->version }}</span>
+                                                        <span class="text-accent">{{ $formula->formula_code }}</span>
                                                         &middot; {{ trans_choice(':count material|:count materials', $formula->items_count) }}
                                                     </span>
                                                 </span>

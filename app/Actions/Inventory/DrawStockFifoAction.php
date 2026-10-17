@@ -19,13 +19,7 @@ class DrawStockFifoAction
      */
     public function lockAvailableLots(int $productId): Collection
     {
-        return InventoryLot::query()
-            ->where('product_id', $productId)
-            ->where('quantity_remaining', '>', 0)
-            ->orderBy('received_at')
-            ->orderBy('id')
-            ->lockForUpdate()
-            ->get();
+        return InventoryLot::availableFifo($productId)->lockForUpdate()->get();
     }
 
     public function available(Collection $lots): string

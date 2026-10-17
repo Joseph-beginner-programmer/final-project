@@ -30,6 +30,10 @@
                                 :current="request()->routeIs('purchasing.orders.list', 'purchasing.orders.create')" wire:navigate>
                                 {{ __('Purchase Order') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="truck" :href="route('purchasing.suppliers.list')"
+                                :current="request()->routeIs('purchasing.suppliers.*')" wire:navigate>
+                                {{ __('Suppliers') }}
+                            </flux:sidebar.item>
                         @endif
 
                         @if ($role === UserRole::Sales)
@@ -59,6 +63,10 @@
                                 :current="request()->routeIs('management.employees.*')" wire:navigate>
                                 {{ __('Employees') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="cube" :href="route('management.products.list')"
+                                :current="request()->routeIs('management.products.*')" wire:navigate>
+                                {{ __('Products') }}
+                            </flux:sidebar.item>
                         @endif
 
                         @if ($role === UserRole::Production)
@@ -69,6 +77,10 @@
                             <flux:sidebar.item icon="clipboard-document-check" :href="route('production.results.list')"
                                 :current="request()->routeIs('production.results.*')" wire:navigate>
                                 {{ __('Production Results') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="beaker" :href="route('production.formulas.list')"
+                                :current="request()->routeIs('production.formulas.*')" wire:navigate>
+                                {{ __('Production Formulas') }}
                             </flux:sidebar.item>
                         @endif
 

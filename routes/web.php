@@ -47,6 +47,9 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/purchasing/orders/{purchaseOrder}', 'pages::purchasing.orders.show')
         ->name('purchasing.orders.show');
+
+    Route::get('/purchasing/orders/{purchaseOrder}/pdf', \App\Http\Controllers\Purchasing\DownloadPurchaseOrderPdfController::class)
+        ->name('purchasing.orders.pdf');
     
     Route::livewire('/warehouse/inbound/item-receipts', 'pages::warehouse.inbound.item-receipts.list')
         ->name('warehouse.inbound.item-receipts.list');
@@ -146,6 +149,24 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/warehouse/outbound/sales-deliveries/{salesDelivery}', 'pages::warehouse.outbound.sales-deliveries.show')
         ->name('warehouse.outbound.sales-deliveries.show');
+
+    Route::livewire('/management/products', 'pages::management.products.list')
+        ->name('management.products.list');
+
+    Route::livewire('/purchasing/suppliers', 'pages::purchasing.suppliers.list')
+        ->name('purchasing.suppliers.list');
+
+    Route::livewire('/purchasing/suppliers/{supplier}', 'pages::purchasing.suppliers.show')
+        ->name('purchasing.suppliers.show');
+
+    Route::livewire('/production/formulas', 'pages::production.formulas.list')
+        ->name('production.formulas.list');
+
+    Route::livewire('/production/formulas/create', 'pages::production.formulas.form')
+        ->name('production.formulas.create');
+
+    Route::livewire('/production/formulas/{formula}/edit', 'pages::production.formulas.form')
+        ->name('production.formulas.edit');
 
     Route::livewire('/management/employees', 'pages::management.employees.list')
         ->name('management.employees.list');

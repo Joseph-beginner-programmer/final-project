@@ -13,7 +13,7 @@ class IncomingStock
 {
     /**
      * @param  iterable<int>  $productIds
-     * @return array<int, list<array{source: string, number: string, party: string, quantity: string, date: ?\Carbon\CarbonInterface, note: string, ready: bool}>>
+     * @return array<int, list<array{source: string, number: string, party: string, quantity: string, date: ?\Carbon\CarbonInterface, note: string, ready: bool, document: \Illuminate\Database\Eloquent\Model}>>
      */
     public static function forProducts(iterable $productIds, ?int $exceptWorkOrderId = null): array
     {
@@ -36,6 +36,7 @@ class IncomingStock
                     'date' => $item->purchaseOrder->expected_delivery_date,
                     'note' => $item->purchaseOrder->status->label(),
                     'ready' => false,
+                    'document' => $item->purchaseOrder,
                 ];
             }
         }
@@ -55,6 +56,7 @@ class IncomingStock
                 'date' => $wo->planned_end_date,
                 'note' => $wo->status->label(),
                 'ready' => false,
+                'document' => $wo,
             ];
         }
 
@@ -73,6 +75,7 @@ class IncomingStock
                 'date' => $result->production_date,
                 'note' => __('Finished, waiting for the warehouse'),
                 'ready' => true,
+                'document' => $result->workOrder,
             ];
         }
 

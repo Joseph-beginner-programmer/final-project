@@ -74,6 +74,15 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('overhead.manage', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
+        Gate::define('products.manage', function ($user) {
+            return in_array($user->role, [UserRole::Manager], true);
+        });
+        Gate::define('suppliers.manage', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+        });
+        Gate::define('formulas.manage', function ($user) {
+            return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
+        });
         Gate::define('sales.manage', function ($user) {
             return in_array($user->role, [UserRole::Sales, UserRole::Manager], true);
         });
@@ -81,7 +90,7 @@ class AppServiceProvider extends ServiceProvider
             return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
         });
         Gate::define('costs.view', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::Sales], true);
         });
 
         Relation::morphMap([

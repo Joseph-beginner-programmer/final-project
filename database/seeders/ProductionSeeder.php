@@ -30,9 +30,14 @@ class ProductionSeeder extends Seeder
 
         $workCenter = fn (string $code) => WorkCenter::where('code', $code)->firstOrFail();
 
-        foreach (['MOLDING' => '15000', 'ASSEMBLY' => '40000'] as $code => $rate) {
+        $estimates = [
+            'MOLDING' => ['hours' => '1800', 'components' => ['electricity' => '14000000', 'machine_depreciation' => '7200000', 'mold_depreciation' => '2800000', 'maintenance' => '2000000', 'other' => '1000000']],
+            'ASSEMBLY' => ['hours' => '200', 'components' => ['electricity' => '3000000', 'machine_depreciation' => '3500000', 'maintenance' => '1000000', 'other' => '500000']],
+        ];
+
+        foreach ($estimates as $code => $estimate) {
             if ($workCenter($code)->overheadRates()->doesntExist()) {
-                app(SetOverheadRateAction::class)->handle($workCenter($code), $rate, '2026-01-01', $creator->id);
+                app(SetOverheadRateAction::class)->handle($workCenter($code), $estimate['components'], $estimate['hours'], '2026-01-01', $creator->id);
             }
         }
 
@@ -55,7 +60,6 @@ class ProductionSeeder extends Seeder
             $model = ProductionFormula::firstOrCreate(['formula_code' => $code], [
                 'product_id' => $id($formula['product']),
                 'work_center_id' => $workCenter($formula['work_center'])->id,
-                'version' => 1,
                 'output_quantity' => $formula['output_quantity'],
                 'is_active' => true,
                 'created_by' => $creator->id,

@@ -10,6 +10,7 @@ use App\Exceptions\SalesOrderNotEditableException;
 use App\Models\SalesOrder;
 use App\Models\SalesOrderItem;
 use App\Support\IncomingStock;
+use App\Support\SalesAvailability;
 use Flux\Flux;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -90,21 +91,14 @@ new #[Title('Sales Order')] class extends Component {
         $order = $this->salesOrder;
         $open = in_array($order->status, [SalesOrderStatus::Draft, SalesOrderStatus::Confirmed, SalesOrderStatus::PartiallyDelivered], true);
 
-        $promised = SalesOrderItem::query()
-            ->whereIn('product_id', $order->items->pluck('product_id'))
-            ->whereHas('salesOrder', fn ($q) => $q->whereKeyNot($order->id)->whereIn('status', [SalesOrderStatus::Confirmed->value, SalesOrderStatus::PartiallyDelivered->value]))
-            ->get()
-            ->groupBy('product_id')
-            ->map(fn ($items) => $items->reduce(fn (string $carry, SalesOrderItem $item) => bcadd($carry, $item->remainingQuantity(), 2), '0'));
+        $promised = SalesAvailability::reserved($order->items->pluck('product_id'), $order->id);
 
         return $order->items->map(function (SalesOrderItem $item) use ($open, $promised) {
             $stillToDeliver = $item->remainingQuantity();
             $stock = (string) $item->product->current_stock;
             $otherOrders = $promised[$item->product_id] ?? '0';
-            $available = bcsub($stock, $otherOrders, 2);
-            $available = bccomp($available, '0', 2) > 0 ? $available : '0';
             $incoming = IncomingStock::total($this->incoming[$item->product_id] ?? []);
-            $shortage = bcsub($stillToDeliver, $available, 2);
+            $check = SalesAvailability::check($stillToDeliver, $stock, $otherOrders, $incoming);
 
             return [
                 'item' => $item,
@@ -112,13 +106,8 @@ new #[Title('Sales Order')] class extends Component {
                 'stock' => $stock,
                 'promised' => $otherOrders,
                 'incoming' => $incoming,
-                'shortage' => bccomp($shortage, '0', 2) > 0 ? $shortage : null,
-                'status' => match (true) {
-                    ! $open || bccomp($stillToDeliver, '0', 2) <= 0 => null,
-                    bccomp($shortage, '0', 2) <= 0 => 'enough',
-                    bccomp(bcadd($available, $incoming, 2), $stillToDeliver, 2) >= 0 => 'incoming',
-                    default => 'short',
-                },
+                'shortage' => $check['shortage'],
+                'status' => $open ? $check['status'] : null,
             ];
         });
     }
@@ -270,6 +259,7 @@ new #[Title('Sales Order')] class extends Component {
             <div class="px-5 py-4 bg-accent">
                 <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Total') }}</p>
                 <p class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah((string) $order->total_amount) }}</p>
+                <x-tax-estimate :amount="(string) $order->total_amount" />
             </div>
         </div>
     </div>
@@ -392,23 +382,7 @@ new #[Title('Sales Order')] class extends Component {
                     <flux:heading size="lg">{{ __('Incoming') }} · {{ $line['item']->product->product_name }}</flux:heading>
                     <flux:subheading>{{ __('Expected stock from work orders still in production.') }}</flux:subheading>
                 </div>
-                <div class="rounded-md border border-zinc-200 dark:border-white/10 divide-y divide-zinc-100 dark:divide-white/5">
-                    @foreach ($this->incoming[$line['item']->product_id] ?? [] as $source)
-                        @php($late = ! $source['ready'] && $source['date'] && $source['date']->isPast() && ! $source['date']->isToday())
-                        <div class="flex items-start justify-between gap-3 px-3 py-2.5 text-xs">
-                            <div class="min-w-0">
-                                <p class="font-data text-zinc-800 dark:text-zinc-200">{{ $source['number'] }}</p>
-                                <p class="mt-0.5 text-zinc-500 dark:text-zinc-400">{{ $source['party'] }} · {{ $source['note'] }}</p>
-                            </div>
-                            <div class="text-right shrink-0">
-                                <p class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatQuantity($source['quantity']) }} {{ $unit }}</p>
-                                <p class="font-data tabular-nums {{ $late ? 'text-red-600 dark:text-red-400' : 'text-zinc-500 dark:text-zinc-400' }}">
-                                    {{ $source['ready'] ? __('finished') : __('expected') }} {{ $source['date']?->format('d M Y') ?? __('no date') }}@if ($late) · {{ __('late') }}@endif
-                                </p>
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
+                <x-stock-source-list :rows="$this->incoming[$line['item']->product_id] ?? []" :unit="$unit" />
                 <div class="flex justify-end">
                     <flux:modal.close><flux:button variant="filled" class="active:scale-[0.95]">{{ __('Close') }}</flux:button></flux:modal.close>
                 </div>

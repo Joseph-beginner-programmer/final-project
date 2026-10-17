@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\OverheadCategory;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -13,6 +14,24 @@ use Illuminate\Support\Carbon;
 class WorkCenter extends Model
 {
     use HasFactory;
+
+    protected function casts(): array
+    {
+        return [
+            'uses_molds' => 'boolean',
+        ];
+    }
+
+    /**
+     * @return list<OverheadCategory>
+     */
+    public function overheadCategories(): array
+    {
+        return array_values(array_filter(
+            OverheadCategory::cases(),
+            fn (OverheadCategory $category) => $category !== OverheadCategory::MoldDepreciation || $this->uses_molds,
+        ));
+    }
 
     public function overheadRates(): HasMany
     {

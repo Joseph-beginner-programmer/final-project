@@ -183,9 +183,6 @@ new #[Title('Production Result')] class extends Component {
                 <span wire:key="status-{{ $result->status->value }}" wire:transition class="inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium {{ $this->documentBadgeClasses($result->status) }}">{{ $result->status->label() }}</span>
             </div>
             <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
-            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">
-                {{ __('For') }} <a href="{{ route('production.work-orders.show', $wo) }}" wire:navigate class="font-data text-accent hover:underline">{{ $wo->wo_number }}</a> · {{ $wo->product->product_name }} · {{ __($wo->workCenter->name) }}
-            </p>
         </div>
 
         <div class="flex flex-wrap items-center gap-2">
@@ -201,7 +198,9 @@ new #[Title('Production Result')] class extends Component {
         </div>
     </div>
 
-    <div class="mt-6 grid grid-cols-2 sm:grid-cols-4 rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100 dark:divide-white/5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
+    <x-produced-product :work-order="$wo" class="mt-6 motion-safe:animate-fade-slide-up" style="animation-delay: 20ms;" />
+
+    <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100 dark:divide-white/5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <div class="px-4 py-3">
             <p class="{{ $label }}">{{ __('Completion date') }}</p>
             <p class="mt-1 font-data text-sm text-zinc-800 dark:text-zinc-200">{{ $result->production_date->format('d M Y') }}</p>

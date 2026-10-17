@@ -60,7 +60,8 @@ new #[Title('Create Purchase Order')] class extends Component {
     public function suppliers(): Collection
     {
         return Supplier::query()
-            ->withCount(['products as purchasable_products_count' => fn ($query) => $query->purchasable()])
+            ->where('is_active', true)
+            ->withCount(['products as purchasable_products_count' => fn ($query) => $query->purchasable()->where('products.is_active', true)])
             ->orderBy('supplier_name')
             ->get();
     }
@@ -95,22 +96,19 @@ new #[Title('Create Purchase Order')] class extends Component {
     #[Computed]
     public function availableProducts(): Collection
     {
-        return $this->selectedSupplier?->products()->purchasable()->get() ?? collect();
+        return $this->selectedSupplier?->products()->purchasable()->where('products.is_active', true)->get() ?? collect();
     }
 
     public function productOptions(int $index): array
     {
         $taken = collect($this->items)->except($index)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all();
 
-        return $this->availableProducts->map(fn ($product) => [
-            'id' => $product->id,
-            'title' => $product->product_name,
-            'subtitle' => $product->product_code,
-            'meta' => $product->pivot->price !== null
+        return $this->availableProducts->map(fn ($product) => $product->toPickerOption(
+            $product->pivot->price !== null
                 ? $this->formatRupiah((string) $product->pivot->price).'/'.$product->unit_of_measure
                 : null,
-            'disabled_reason' => in_array($product->id, $taken, true) ? __('Already chosen') : null,
-        ])->all();
+            in_array($product->id, $taken, true) ? __('Already chosen') : null,
+        ))->all();
     }
 
     public function rowSubtotal(array $item): string
@@ -542,6 +540,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                         <div class="px-4 py-4 bg-accent">
                             <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Est. Total') }}</p>
                             <p wire:key="est-total-{{ $this->estimatedTotal }}" wire:transition.duration.300ms class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah($this->estimatedTotal) }}</p>
+                            <x-tax-estimate :amount="$this->estimatedTotal" />
                         </div>
                     </div>
 

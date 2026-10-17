@@ -305,10 +305,6 @@ new #[Title('Production Result')] class extends Component {
                 {{ $productionResultId ? __('Edit Production Result') : __('Record Production Result') }}
             </h1>
             <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
-            <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">
-                {{ __('For') }} <a href="{{ route('production.work-orders.show', $wo) }}" wire:navigate class="font-data text-accent hover:underline">{{ $wo->wo_number }}</a> · {{ $wo->product->product_name }}
-                · {{ __('Work Center') }} {{ __($wo->workCenter->name) }}
-            </p>
         </div>
 
         <flux:button variant="primary" icon="document-check" wire:click="save" wire:loading.attr="disabled" wire:target="save" class="active:scale-[0.95]">
@@ -316,7 +312,9 @@ new #[Title('Production Result')] class extends Component {
         </flux:button>
     </div>
 
-    <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4 items-start motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
+    <x-produced-product :work-order="$wo" class="mt-6 motion-safe:animate-fade-slide-up" style="animation-delay: 20ms;" />
+
+    <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4 items-start motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <div class="lg:col-span-2 rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-5">
             <h2 class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Output') }}</h2>
             <div class="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Attributes\Guarded;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -23,6 +24,14 @@ class InventoryLot extends Model
             'value_remaining' => 'decimal:2',
             'received_at' => 'datetime',
         ];
+    }
+
+    public function scopeAvailableFifo(Builder $query, int $productId): Builder
+    {
+        return $query->where('product_id', $productId)
+            ->where('quantity_remaining', '>', 0)
+            ->orderBy('received_at')
+            ->orderBy('id');
     }
 
     public function product(): BelongsTo

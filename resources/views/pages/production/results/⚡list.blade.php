@@ -146,12 +146,16 @@ new #[Title('Production Results')] class extends Component {
                     <div wire:key="wo-{{ $workOrder->id }}" class="flex flex-col sm:flex-row sm:items-center gap-3 px-4 py-3.5 hover:bg-zinc-50/70 dark:hover:bg-white/[0.03] transition-colors">
                         <div class="min-w-0 flex-1">
                             <div class="flex flex-wrap items-center gap-2">
-                                <a href="{{ route('production.work-orders.show', $workOrder) }}" wire:navigate class="font-data text-sm font-medium text-accent hover:underline">{{ $workOrder->wo_number }}</a>
+                                <p class="font-display text-base font-semibold text-zinc-900 dark:text-white">{{ $workOrder->product->product_name }}</p>
+                                <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ $workOrder->product->type->badgeClasses() }}">{{ $workOrder->product->type->label() }}</span>
                                 @if ($draft)
                                     <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ $this->documentBadgeClasses($draft->status) }}">{{ __('Draft') }} {{ $draft->result_number }}</span>
                                 @endif
                             </div>
-                            <p class="mt-0.5 text-sm text-zinc-800 dark:text-zinc-200">{{ $workOrder->product->product_name }}</p>
+                            <p class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+                                <span class="font-data">{{ $workOrder->product->product_code }}</span> ·
+                                <a href="{{ route('production.work-orders.show', $workOrder) }}" wire:navigate class="font-data text-accent hover:underline">{{ $workOrder->wo_number }}</a>
+                            </p>
                         </div>
 
                         <div class="sm:w-56 grid grid-cols-2 gap-3 text-xs">
@@ -188,6 +192,7 @@ new #[Title('Production Results')] class extends Component {
                 <table class="w-full text-xs border-collapse">
                     <thead>
                         <tr class="text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10">
+                            <th class="py-2 px-3">{{ __('Product made') }}</th>
                             <th class="py-2 px-3">{{ __('Result Number') }}</th>
                             <th class="py-2 px-3">{{ __('Work Order') }}</th>
                             <th class="py-2 px-3">{{ __('Completion date') }}</th>
@@ -201,13 +206,18 @@ new #[Title('Production Results')] class extends Component {
                         @forelse ($this->results as $result)
                             @php($unit = $result->workOrder->product->unit_of_measure)
                             <tr wire:key="res-{{ $result->id }}" class="border-b border-zinc-100 dark:border-white/5 last:border-0 hover:bg-zinc-50/70 dark:hover:bg-white/[0.03] transition-colors">
+                                @php($made = $result->workOrder->product)
+                                <td class="py-2.5 px-3">
+                                    <div class="flex flex-wrap items-center gap-1.5">
+                                        <span class="text-sm font-semibold text-zinc-900 dark:text-white">{{ $made->product_name }}</span>
+                                        <span class="inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium whitespace-nowrap {{ $made->type->badgeClasses() }}">{{ $made->type->label() }}</span>
+                                    </div>
+                                    <p class="font-data text-[11px] text-zinc-500 dark:text-zinc-400">{{ $made->product_code }}</p>
+                                </td>
                                 <td class="py-2 px-3 whitespace-nowrap">
                                     <a href="{{ route('production.results.show', $result) }}" wire:navigate class="font-data text-accent hover:underline">{{ $result->result_number }}</a>
                                 </td>
-                                <td class="py-2 px-3">
-                                    <p class="font-data text-zinc-700 dark:text-zinc-300">{{ $result->workOrder->wo_number }}</p>
-                                    <p class="text-zinc-500 dark:text-zinc-400">{{ $result->workOrder->product->product_name }}</p>
-                                </td>
+                                <td class="py-2 px-3 whitespace-nowrap font-data text-zinc-700 dark:text-zinc-300">{{ $result->workOrder->wo_number }}</td>
                                 <td class="py-2 px-3 font-data tabular-nums text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{ $result->production_date->format('d M Y') }}</td>
                                 <td class="py-2 px-3 text-right font-data tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->formatQuantity((string) $result->quantity_good) }} {{ $unit }}</td>
                                 <td class="py-2 px-3 text-right font-data tabular-nums text-zinc-600 dark:text-zinc-400 whitespace-nowrap">{{ $this->formatQuantity((string) $result->quantity_reject) }} {{ $unit }}</td>
@@ -217,7 +227,7 @@ new #[Title('Production Results')] class extends Component {
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="7" class="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No production results yet.') }}</td></tr>
+                            <tr><td colspan="8" class="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No production results yet.') }}</td></tr>
                         @endforelse
                     </tbody>
                 </table>

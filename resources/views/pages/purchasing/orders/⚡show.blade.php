@@ -62,7 +62,24 @@ new #[Title('Purchase Order Details')] class extends Component {
     #[Computed]
     public function availableProducts(): Collection
     {
-        return $this->purchaseOrder->supplier->products()->purchasable()->get();
+        $onOrder = $this->purchaseOrder->items()->pluck('product_id')->all();
+
+        return $this->purchaseOrder->supplier->products()->purchasable()
+            ->where(fn ($query) => $query->where('products.is_active', true)->orWhereIn('products.id', $onOrder))
+            ->get();
+    }
+
+    #[Computed]
+    public function newItemOptions(): array
+    {
+        $onOrder = $this->purchaseOrder->items->pluck('product_id')->all();
+
+        return $this->availableProducts->map(fn ($product) => $product->toPickerOption(
+            $product->pivot->price !== null
+                ? $this->formatRupiah((string) $product->pivot->price).'/'.$product->unit_of_measure
+                : null,
+            in_array($product->id, $onOrder, true) ? __('Already chosen') : null,
+        ))->all();
     }
 
     public function updated(string $name, mixed $value): void
@@ -293,7 +310,13 @@ new #[Title('Purchase Order Details')] class extends Component {
             <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">{{ $purchaseOrder->supplier->supplier_name }}</p>
         </div>
 
-        <div class="flex items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+            @can('export', $purchaseOrder)
+                <flux:button variant="filled" icon="arrow-down-tray" :href="route('purchasing.orders.pdf', $purchaseOrder)" class="active:scale-[0.95]">
+                    {{ __('Download PDF') }}
+                </flux:button>
+            @endcan
+
             @can('reject', $purchaseOrder)
                 <flux:modal.trigger name="reject-po">
                     <flux:button
@@ -460,6 +483,7 @@ new #[Title('Purchase Order Details')] class extends Component {
             <div class="px-4 py-3.5 bg-accent mt-auto">
                 <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Total') }}</p>
                 <p wire:key="po-total-{{ $purchaseOrder->total_amount }}" wire:transition.duration.300ms class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah((string) $purchaseOrder->total_amount) }}</p>
+                <x-tax-estimate :amount="(string) $purchaseOrder->total_amount" />
             </div>
         </div>
     </div>
@@ -541,11 +565,7 @@ new #[Title('Purchase Order Details')] class extends Component {
                     @can('update', $purchaseOrder)
                         <tr class="bg-zinc-50/70 dark:bg-white/[0.02]">
                             <td class="py-2 px-3 align-top">
-                                <flux:select size="sm" wire:model.live="newItem.product_id" :placeholder="__('Select product...')">
-                                    @foreach ($this->availableProducts as $option)
-                                        <option value="{{ $option->id }}">{{ $option->product_code }} — {{ $option->product_name }}</option>
-                                    @endforeach
-                                </flux:select>
+                                <x-picker model="newItem.product_id" :options="$this->newItemOptions" :selected="(string) ($newItem['product_id'] ?? '')" :placeholder="__('Select product...')" :label="__('Product')" :invalid="$errors->has('newItem.product_id')" />
                                 @if ($newItemProduct)
                                     <p class="mt-1 pl-0.5 flex items-center justify-between gap-1.5 text-zinc-500 dark:text-zinc-400">
                                         <span>
@@ -659,11 +679,7 @@ new #[Title('Purchase Order Details')] class extends Component {
                 <div class="p-4 bg-zinc-50/70 dark:bg-white/[0.02]">
                     <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{{ __('Add Item') }}</p>
 
-                    <flux:select size="sm" wire:model.live="newItem.product_id" :placeholder="__('Select product...')">
-                        @foreach ($this->availableProducts as $option)
-                            <option value="{{ $option->id }}">{{ $option->product_code }} — {{ $option->product_name }}</option>
-                        @endforeach
-                    </flux:select>
+                    <x-picker model="newItem.product_id" :options="$this->newItemOptions" :selected="(string) ($newItem['product_id'] ?? '')" :placeholder="__('Select product...')" :label="__('Product')" :invalid="$errors->has('newItem.product_id')" />
                     @if ($newItemProduct)
                         <p class="mt-1 pl-0.5 flex items-center justify-between gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
                             <span class="font-data text-accent">{{ $newItemProduct->product_code }} {{ $newItemProduct->unit_of_measure }}</span>

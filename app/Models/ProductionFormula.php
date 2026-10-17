@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Guarded(['id'])]
+#[Guarded(['id', 'formula_code'])]
 class ProductionFormula extends Model
 {
     use HasFactory;
@@ -16,7 +16,6 @@ class ProductionFormula extends Model
     protected function casts(): array
     {
         return [
-            'version' => 'integer',
             'output_quantity' => 'decimal:2',
             'is_active' => 'boolean',
         ];

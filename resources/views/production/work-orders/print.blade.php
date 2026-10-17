@@ -131,7 +131,7 @@
             </div>
             <div>
                 <span class="label">{{ __('Formula') }}</span>
-                <span class="value mono">{{ $workOrder->productionFormula->formula_code }} v{{ $workOrder->productionFormula->version }}</span>
+                <span class="value mono">{{ $workOrder->productionFormula->formula_code }}</span>
             </div>
             <div>
                 <span class="label">{{ __('Created by') }}</span>

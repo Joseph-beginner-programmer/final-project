@@ -19,16 +19,20 @@
         q: '',
         items: @js($searchables),
         up: false,
+        listMax: 256,
         match(text) { return this.q === '' || text.includes(this.q.toLowerCase()) },
         get none() { return ! this.items.some(text => this.match(text)) },
         show() {
             this.open = true;
             this.q = '';
             this.$nextTick(() => {
-                // open upward when there isn't room below the trigger (but there is above)
                 const r = this.$refs.trigger.getBoundingClientRect();
-                const h = this.$refs.panel.offsetHeight;
-                this.up = r.bottom + h + 8 > window.innerHeight && r.top - h - 8 > 0;
+                const below = window.innerHeight - r.bottom - 16;
+                const above = r.top - 16;
+                const chrome = this.$refs.panel.offsetHeight - this.$refs.list.offsetHeight;
+                const needed = chrome + Math.min(256, this.$refs.list.scrollHeight);
+                this.up = needed > below && above > below;
+                this.listMax = Math.max(96, Math.min(256, (this.up ? above : below) - chrome));
                 this.$refs.search.focus();
             });
         },
@@ -49,7 +53,6 @@
         wire:target="{{ $model }}"
         @class([
             'w-full flex items-center justify-between gap-2 rounded-lg border bg-white dark:bg-white/5 text-left shadow-xs transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 hover:border-zinc-300 dark:hover:border-white/20',
-            // heights mirror flux:input exactly, so a picker lines up with the input beside it
             'h-8 px-2.5' => $size === 'sm',
             'h-10 px-3' => $size === 'md',
             'border-red-500' => $invalid,
@@ -98,7 +101,7 @@
             </div>
         </div>
 
-        <div role="listbox" aria-label="{{ $label }}" class="max-h-64 overflow-y-auto p-1.5 space-y-0.5">
+        <div x-ref="list" role="listbox" aria-label="{{ $label }}" :style="`max-height: ${listMax}px`" class="max-h-64 overflow-y-auto overscroll-contain p-1.5 space-y-0.5">
             @foreach ($options as $i => $option)
                 @php
                     $isSelected = (string) $selected === (string) $option['id'];
@@ -123,7 +126,12 @@
                     ])
                 >
                     <span class="flex min-w-0 flex-1 flex-col">
-                        <span class="truncate text-sm text-zinc-900 dark:text-white">{{ $option['title'] }}</span>
+                        <span class="flex min-w-0 items-center gap-1.5">
+                            <span class="truncate text-sm text-zinc-900 dark:text-white">{{ $option['title'] }}</span>
+                            @if (filled($option['badge'] ?? null))
+                                <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium {{ $option['badge']['class'] }}">{{ $option['badge']['label'] }}</span>
+                            @endif
+                        </span>
                         <span class="font-data text-[11px] text-accent">{{ $option['subtitle'] }}</span>
                     </span>
 

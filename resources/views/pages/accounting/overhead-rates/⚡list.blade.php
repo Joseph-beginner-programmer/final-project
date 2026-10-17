@@ -1,6 +1,8 @@
 <?php
 
 use App\Actions\Production\SetOverheadRateAction;
+use App\Enums\OverheadCategory;
+use App\Exceptions\InvalidOverheadEstimateException;
 use App\Exceptions\InvalidRateEffectiveDateException;
 use App\Models\OverheadRate;
 use App\Models\WorkCenter;
@@ -17,7 +19,10 @@ new #[Title('Overhead Rates')] class extends Component {
     #[Locked]
     public ?int $workCenterId = null;
 
-    public string $ratePerHour = '';
+    /** @var array<string, string> */
+    public array $amounts = [];
+
+    public string $budgetedHours = '';
 
     public string $effectiveFrom = '';
 
@@ -30,7 +35,7 @@ new #[Title('Overhead Rates')] class extends Component {
     public function workCenters(): Collection
     {
         return WorkCenter::query()
-            ->with(['overheadRates' => fn ($query) => $query->with('createdBy')->orderByDesc('effective_from')])
+            ->with(['overheadRates' => fn ($query) => $query->with(['createdBy', 'components'])->orderByDesc('effective_from')])
             ->orderBy('id')
             ->get();
     }
@@ -54,14 +59,40 @@ new #[Title('Overhead Rates')] class extends Component {
         return $workCenter->overheadRates->first(fn (OverheadRate $rate) => $rate->effective_from->isFuture());
     }
 
+    #[Computed]
+    public function previewTotal(): string
+    {
+        return array_reduce($this->amounts, fn (string $carry, $amount) => is_numeric($amount) && $amount >= 0 ? bcadd($carry, (string) $amount, 2) : $carry, '0');
+    }
+
+    #[Computed]
+    public function previewRate(): ?string
+    {
+        if (! is_numeric($this->budgetedHours) || bccomp($this->budgetedHours, '0', 2) <= 0 || bccomp($this->previewTotal, '0', 2) <= 0) {
+            return null;
+        }
+
+        return SetOverheadRateAction::rateFor($this->previewTotal, $this->budgetedHours);
+    }
+
     public function openSetRate(int $id): void
     {
         Gate::authorize('create', OverheadRate::class);
 
         $this->resetValidation();
         $this->workCenterId = $id;
-        $this->ratePerHour = '';
         $this->effectiveFrom = now()->toDateString();
+        $this->amounts = collect($this->selectedWorkCenter->overheadCategories())->mapWithKeys(fn (OverheadCategory $c) => [$c->value => ''])->all();
+        $this->budgetedHours = '';
+
+        $current = $this->currentRate($this->selectedWorkCenter);
+        if ($current?->hasBreakdown()) {
+            foreach ($current->components as $component) {
+                $this->amounts[$component->category->value] = bcadd((string) $component->amount, '0', 0);
+            }
+            $this->budgetedHours = $this->formatQuantity((string) $current->budgeted_machine_hours);
+        }
+
         $this->modal('set-overhead-rate')->show();
     }
 
@@ -77,11 +108,13 @@ new #[Title('Overhead Rates')] class extends Component {
 
         $this->validate(
             [
-                'ratePerHour' => ['required', 'numeric', 'gt:0'],
+                'amounts.*' => ['nullable', 'numeric', 'min:0'],
+                'budgetedHours' => ['required', 'numeric', 'gt:0'],
                 'effectiveFrom' => ['required', 'date'],
             ],
             attributes: [
-                'ratePerHour' => __('Rate per Machine Hour'),
+                'amounts.*' => __('Amount'),
+                'budgetedHours' => __('Budgeted machine hours'),
                 'effectiveFrom' => __('Effective From'),
             ],
         );
@@ -89,7 +122,11 @@ new #[Title('Overhead Rates')] class extends Component {
         $workCenter = WorkCenter::findOrFail($this->workCenterId);
 
         try {
-            app(SetOverheadRateAction::class)->handle($workCenter, (string) $this->ratePerHour, $this->effectiveFrom, Auth::id());
+            app(SetOverheadRateAction::class)->handle($workCenter, $this->amounts, (string) $this->budgetedHours, $this->effectiveFrom, Auth::id());
+        } catch (InvalidOverheadEstimateException $e) {
+            $this->addError('amounts', $e->userMessage());
+
+            return;
         } catch (InvalidRateEffectiveDateException $e) {
             $this->addError('effectiveFrom', $e->userMessage());
 
@@ -105,6 +142,16 @@ new #[Title('Overhead Rates')] class extends Component {
     public function formatRupiah(string $amount): string
     {
         return 'Rp '.number_format((float) $amount, 0, ',', '.');
+    }
+
+    public function formatQuantity(string $quantity): string
+    {
+        return str_contains($quantity, '.') ? rtrim(rtrim($quantity, '0'), '.') : $quantity;
+    }
+
+    public function share(string $amount, string $total): int
+    {
+        return bccomp($total, '0', 2) > 0 ? (int) round((float) bcdiv(bcmul($amount, '100', 4), $total, 4)) : 0;
     }
 }; ?>
 
@@ -133,7 +180,7 @@ new #[Title('Overhead Rates')] class extends Component {
         </h1>
         <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
         <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5 max-w-2xl">
-            {{ __('Applied overhead (electricity, machine depreciation) is charged to work orders per machine hour. Set each rate from the budget: estimated monthly overhead ÷ budgeted machine hours. Work orders keep the rate that applied when they were created.') }}
+            {{ __('Factory overhead (electricity, machine and mold depreciation, maintenance, other) is charged to work orders per machine hour. The rate is the estimated monthly overhead of a work center divided by its budgeted machine hours. Work orders keep the rate that applied when they were created.') }}
         </p>
     </div>
 
@@ -164,6 +211,38 @@ new #[Title('Overhead Rates')] class extends Component {
                             </p>
                         @endif
                     </div>
+
+                    @if ($current?->hasBreakdown())
+                        @php($total = $current->budgetedTotal())
+                        <div class="mt-4 rounded-lg bg-zinc-50 dark:bg-white/5 p-3">
+                            <p class="flex flex-wrap items-baseline gap-x-1.5 font-data text-xs tabular-nums text-zinc-600 dark:text-zinc-300">
+                                <span class="font-semibold text-zinc-900 dark:text-white">{{ $this->formatRupiah($total) }}</span>
+                                <span>÷</span>
+                                <span class="font-semibold text-zinc-900 dark:text-white">{{ $this->formatQuantity((string) $current->budgeted_machine_hours) }} {{ __('machine hrs') }}</span>
+                                <span class="text-zinc-400">{{ __('per month') }}</span>
+                            </p>
+                            <ul class="mt-2.5 space-y-1.5">
+                                @foreach ($workCenter->overheadCategories() as $category)
+                                    @php($component = $current->components->firstWhere('category', $category))
+                                    @php($amount = $component ? (string) $component->amount : '0')
+                                    @php($pct = $this->share($amount, $total))
+                                    <li class="text-xs {{ $component ? '' : 'opacity-50' }}">
+                                        <div class="flex items-center justify-between gap-3">
+                                            <span class="text-zinc-600 dark:text-zinc-300">{{ $category->label() }}</span>
+                                            <span class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $component ? $this->formatRupiah($amount) : '—' }} <span class="inline-block w-9 text-right text-zinc-400">{{ $pct }}%</span></span>
+                                        </div>
+                                        <div class="mt-1 h-1 rounded-full bg-zinc-200 dark:bg-white/10" role="presentation">
+                                            <div class="h-1 rounded-full bg-accent" style="width: {{ $pct }}%"></div>
+                                        </div>
+                                    </li>
+                                @endforeach
+                            </ul>
+                        </div>
+                    @elseif ($current)
+                        <p class="mt-4 rounded-lg border border-dashed border-zinc-200 dark:border-white/10 px-3 py-2 text-xs text-zinc-500 dark:text-zinc-400">
+                            {{ __('Entered as a single number, before rates had a breakdown. Set a new rate to record its calculation.') }}
+                        </p>
+                    @endif
                 </div>
 
                 <div class="px-5 py-3 border-t border-zinc-100 dark:border-white/10 flex justify-end gap-2">
@@ -176,11 +255,51 @@ new #[Title('Overhead Rates')] class extends Component {
         @endforeach
     </div>
 
-    <flux:modal name="set-overhead-rate" focusable class="max-w-md">
+    <flux:modal name="set-overhead-rate" focusable class="w-full max-w-lg">
         <form wire:submit="saveRate" class="space-y-5">
             <div>
                 <flux:heading size="lg">{{ __('Set Overhead Rate') }}</flux:heading>
-                <flux:subheading>{{ $this->selectedWorkCenter ? __($this->selectedWorkCenter->name) : '' }}</flux:subheading>
+                <flux:subheading>{{ $this->selectedWorkCenter ? __($this->selectedWorkCenter->name) : '' }} · {{ __('estimate for one month') }}</flux:subheading>
+            </div>
+
+            <fieldset class="space-y-3">
+                <legend class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Estimated monthly overhead') }}</legend>
+                @foreach ($this->selectedWorkCenter?->overheadCategories() ?? [] as $category)
+                    <div wire:key="amount-{{ $category->value }}" class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_11rem] items-center gap-x-3 gap-y-1">
+                        <div>
+                            <p class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ $category->label() }}</p>
+                            <p class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ $category->hint() }}</p>
+                        </div>
+                        <flux:input.group>
+                            <flux:input.group.prefix class="px-2 text-xs">Rp</flux:input.group.prefix>
+                            <flux:input size="sm" wire:model.live.debounce.400ms="amounts.{{ $category->value }}" type="text" inputmode="numeric" pattern="[0-9]*" input:class="text-right font-data tabular-nums" placeholder="0" :loading="false" :aria-label="$category->label()" />
+                        </flux:input.group>
+                        @error('amounts.'.$category->value) <flux:error class="sm:col-start-2" :message="$message" /> @enderror
+                    </div>
+                @endforeach
+                @error('amounts') <flux:error :message="$message" /> @enderror
+            </fieldset>
+
+            <div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_11rem] items-start gap-x-3 gap-y-1">
+                <div>
+                    <p class="text-sm font-medium text-zinc-800 dark:text-zinc-200">{{ __('Budgeted machine hours') }}</p>
+                    <p class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('How long the machines are expected to run in a month, e.g. 9 machines × 8 hrs × 25 days = 1,800') }}</p>
+                </div>
+                <div>
+                    <flux:input.group>
+                        <flux:input size="sm" wire:model.live.debounce.400ms="budgetedHours" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" placeholder="0" :loading="false" :aria-label="__('Budgeted machine hours')" />
+                        <flux:input.group.suffix class="px-2 text-xs">{{ __('hrs') }}</flux:input.group.suffix>
+                    </flux:input.group>
+                    @error('budgetedHours') <flux:error class="mt-1" :message="$message" /> @enderror
+                </div>
+            </div>
+
+            <div class="rounded-lg bg-accent px-4 py-3 text-accent-foreground" aria-live="polite">
+                <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Rate per Machine Hour') }}</p>
+                <p class="mt-0.5 font-data text-xl font-medium tabular-nums">{{ $this->previewRate !== null ? $this->formatRupiah($this->previewRate) : '—' }}</p>
+                <p class="mt-1 font-data text-[11px] tabular-nums text-accent-foreground/80">
+                    {{ $this->formatRupiah($this->previewTotal) }} ÷ {{ is_numeric($budgetedHours) ? $this->formatQuantity((string) $budgetedHours) : '0' }} {{ __('machine hrs') }}
+                </p>
             </div>
 
             @if ($this->selectedWorkCenter && ($current = $this->currentRate($this->selectedWorkCenter)))
@@ -189,14 +308,6 @@ new #[Title('Overhead Rates')] class extends Component {
                     {{ __('since') }} {{ $current->effective_from->format('d M Y') }}
                 </p>
             @endif
-
-            <div>
-                <flux:input.group :label="__('Rate per Machine Hour')">
-                    <flux:input.group.prefix>Rp</flux:input.group.prefix>
-                    <flux:input wire:model="ratePerHour" type="text" inputmode="numeric" pattern="[0-9]*" input:class="text-right font-data tabular-nums" placeholder="0" />
-                </flux:input.group>
-                @error('ratePerHour') <flux:error class="mt-1" :message="$message" /> @enderror
-            </div>
 
             <flux:input type="date" wire:model="effectiveFrom" :label="__('Effective From')" />
 
@@ -211,7 +322,7 @@ new #[Title('Overhead Rates')] class extends Component {
         </form>
     </flux:modal>
 
-    <flux:modal name="overhead-history" class="max-w-lg">
+    <flux:modal name="overhead-history" class="w-full max-w-lg">
         <div class="space-y-4">
             <div>
                 <flux:heading size="lg">{{ __('Rate History') }}</flux:heading>
@@ -220,14 +331,26 @@ new #[Title('Overhead Rates')] class extends Component {
 
             <div class="rounded-md border border-zinc-200 dark:border-white/10 divide-y divide-zinc-100 dark:divide-white/5 text-xs">
                 @forelse ($this->selectedWorkCenter?->overheadRates ?? [] as $rate)
-                    <div wire:key="oh-hist-{{ $rate->id }}" class="flex items-center justify-between gap-3 px-3 py-2.5">
-                        <div>
+                    <div wire:key="oh-hist-{{ $rate->id }}" class="flex items-start justify-between gap-3 px-3 py-2.5">
+                        <div class="min-w-0">
                             <p class="font-data tabular-nums text-zinc-700 dark:text-zinc-300">
                                 {{ $rate->effective_from->format('d M Y') }} &ndash; {{ $rate->effective_to?->format('d M Y') ?? __('now') }}
                             </p>
                             <p class="text-zinc-400 dark:text-zinc-500 mt-0.5">{{ __('Set by') }} {{ $rate->createdBy->name }}</p>
+                            @if ($rate->hasBreakdown())
+                                <p class="mt-1 text-zinc-500 dark:text-zinc-400">
+                                    {{ $rate->components->map(fn ($c) => $c->category->label().' '.$this->formatRupiah((string) $c->amount))->implode(' · ') }}
+                                </p>
+                            @endif
                         </div>
-                        <span class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatRupiah((string) $rate->rate_per_hour) }}</span>
+                        <div class="shrink-0 text-right">
+                            <p class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatRupiah((string) $rate->rate_per_hour) }}</p>
+                            @if ($rate->hasBreakdown())
+                                <p class="font-data tabular-nums text-zinc-500 dark:text-zinc-400">{{ $this->formatRupiah($rate->budgetedTotal()) }} ÷ {{ $this->formatQuantity((string) $rate->budgeted_machine_hours) }} {{ __('hrs') }}</p>
+                            @else
+                                <p class="text-zinc-400 dark:text-zinc-500">{{ __('no breakdown') }}</p>
+                            @endif
+                        </div>
                     </div>
                 @empty
                     <p class="px-3 py-6 text-center text-zinc-500 dark:text-zinc-400">{{ __('No rates set yet.') }}</p>

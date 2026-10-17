@@ -228,7 +228,7 @@ new #[Title('Work Orders')] class extends Component {
                                 <p class="font-data text-[11px] text-zinc-400 dark:text-zinc-500">{{ $workOrder->product->product_code }}</p>
                             </td>
                             <td class="py-2 px-3 font-data whitespace-nowrap text-zinc-600 dark:text-zinc-400">
-                                {{ $workOrder->productionFormula->formula_code }} <span class="text-zinc-400 dark:text-zinc-500">v{{ $workOrder->productionFormula->version }}</span>
+                                {{ $workOrder->productionFormula->formula_code }}
                             </td>
                             <td class="py-2 px-3 text-right font-data font-medium tabular-nums whitespace-nowrap text-zinc-900 dark:text-white">
                                 {{ $this->formatQuantity((string) $workOrder->quantity_target) }} {{ $workOrder->product->unit_of_measure }}
@@ -279,7 +279,7 @@ new #[Title('Work Orders')] class extends Component {
                     </div>
                     <p class="mt-1 text-sm text-zinc-700 dark:text-zinc-300">{{ $workOrder->product->product_name }}</p>
                     <p class="mt-1 text-xs font-data text-zinc-500 dark:text-zinc-400">
-                        {{ $workOrder->productionFormula->formula_code }} v{{ $workOrder->productionFormula->version }}
+                        {{ $workOrder->productionFormula->formula_code }}
                     </p>
                     <div class="mt-2 flex items-center justify-between gap-2 text-xs">
                         @if ($isLate)

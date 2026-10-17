@@ -10,6 +10,8 @@ use App\Models\Customer;
 use App\Models\Product;
 use App\Models\SalesOrder;
 use App\Support\IncomingStock;
+use App\Support\ProductCost;
+use App\Support\SalesAvailability;
 use Flux\Flux;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
@@ -28,6 +30,8 @@ new #[Title('Sales Order')] class extends Component {
     public string $soNumber = '';
 
     public string $customerId = '';
+
+    public ?int $sourcesProductId = null;
 
     #[Locked]
     public string $orderDate = '';
@@ -165,7 +169,12 @@ new #[Title('Sales Order')] class extends Component {
     #[Computed]
     public function products(): Collection
     {
-        return Product::where('type', ProductType::FinishedGoods->value)->orderBy('product_name')->get();
+        $onOrder = collect($this->items)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all();
+
+        return Product::where('type', ProductType::FinishedGoods->value)
+            ->where(fn ($query) => $query->where('is_active', true)->orWhereIn('id', $onOrder))
+            ->orderBy('product_name')
+            ->get();
     }
 
     #[Computed]
@@ -174,17 +183,60 @@ new #[Title('Sales Order')] class extends Component {
         return IncomingStock::forProducts($this->products->pluck('id'));
     }
 
+    #[Computed]
+    public function reserved(): array
+    {
+        return SalesAvailability::reserved($this->products->pluck('id'), $this->salesOrderId);
+    }
+
+    #[Computed]
+    public function sourcesProduct(): ?Product
+    {
+        return $this->sourcesProductId ? $this->products->firstWhere('id', $this->sourcesProductId) : null;
+    }
+
+    #[Computed]
+    public function reservedOrders(): array
+    {
+        return $this->sourcesProductId ? SalesAvailability::reservedOrders([$this->sourcesProductId], $this->salesOrderId)[$this->sourcesProductId] ?? [] : [];
+    }
+
+    public function costPreview(int $productId, mixed $quantity): array
+    {
+        $quantity = is_numeric($quantity) && (float) $quantity > 0 ? (string) $quantity : '1';
+
+        return ProductCost::fifoPreview($productId, $quantity, $this->reserved[$productId] ?? '0');
+    }
+
+    public function rowQuantity(int $productId): string
+    {
+        $row = collect($this->items)->first(fn (array $item) => (int) ($item['product_id'] ?? 0) === $productId);
+
+        return is_numeric($row['quantity'] ?? null) ? (string) $row['quantity'] : '';
+    }
+
+    public function rowPrice(int $productId): ?string
+    {
+        $row = collect($this->items)->first(fn (array $item) => (int) ($item['product_id'] ?? 0) === $productId);
+
+        return is_numeric($row['unit_price'] ?? null) ? (string) $row['unit_price'] : null;
+    }
+
+    public function showSources(int $productId): void
+    {
+        $this->sourcesProductId = $productId;
+        unset($this->sourcesProduct, $this->reservedOrders);
+        $this->modal('stock-sources')->show();
+    }
+
     public function productOptions(int $index): array
     {
         $taken = collect($this->items)->except($index)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all();
 
-        return $this->products->map(fn (Product $product) => [
-            'id' => $product->id,
-            'title' => $product->product_name,
-            'subtitle' => $product->product_code,
-            'meta' => __('Stock').' '.$this->formatQuantity((string) $product->current_stock).' '.$product->unit_of_measure,
-            'disabled_reason' => in_array($product->id, $taken, true) ? __('Already chosen') : null,
-        ])->all();
+        return $this->products->map(fn (Product $product) => $product->toPickerOption(
+            __('Stock').' '.$this->formatQuantity((string) $product->current_stock).' '.$product->unit_of_measure,
+            in_array($product->id, $taken, true) ? __('Already chosen') : null,
+        ))->all();
     }
 
     public function rowSubtotal(array $item): string
@@ -465,6 +517,7 @@ new #[Title('Sales Order')] class extends Component {
             <div class="px-5 py-4 bg-accent">
                 <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Total') }}</p>
                 <p class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah($this->total) }}</p>
+                <x-tax-estimate :amount="$this->total" />
             </div>
         </div>
     </div>
@@ -495,17 +548,88 @@ new #[Title('Sales Order')] class extends Component {
 
                 @foreach ($items as $index => $item)
                     @php($product = $this->products->firstWhere('id', (int) ($item['product_id'] ?? 0)))
-                    <div wire:key="so-row-{{ $index }}" class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_2rem] @3xl:grid-cols-[minmax(0,1fr)_7rem_9rem_8.5rem_2rem] gap-x-3 gap-y-2 items-start px-4 py-3 border-b border-zinc-100 dark:border-white/5 last:border-0">
-                        <div class="col-span-3 @3xl:col-span-1 min-w-0">
+                    <div wire:key="so-row-{{ $index }}" class="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_2rem] @3xl:grid-cols-[minmax(0,1fr)_7rem_9rem_8.5rem_2rem] gap-x-3 gap-y-2 items-start px-4 py-3 border-b border-zinc-100 dark:border-white/5 last:border-0">
+                        <div class="col-span-2 @3xl:col-span-1 min-w-0">
                             <x-picker :model="'items.'.$index.'.product_id'" :options="$this->productOptions($index)" :selected="(string) $item['product_id']"
                                 :placeholder="__('Select product...')" :label="__('Product')" :invalid="$errors->has('items.'.$index.'.product_id')" />
                             @error("items.$index.product_id") <flux:error class="mt-1" :message="$message" /> @enderror
                             @if ($product)
                                 @php($incoming = IncomingStock::total($this->incoming[$product->id] ?? []))
-                                <p class="mt-1 font-data text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">
-                                    {{ __('In Stock') }} {{ $this->formatQuantity((string) $product->current_stock) }}
-                                    · {{ __('Incoming') }} {{ $this->formatQuantity($incoming) }} {{ $product->unit_of_measure }}
-                                </p>
+                                @php($reserved = $this->reserved[$product->id] ?? '0')
+                                @php($check = SalesAvailability::check(filled($item['quantity'] ?? null) && is_numeric($item['quantity']) ? (string) $item['quantity'] : '0', (string) $product->current_stock, $reserved, $incoming))
+                                @php($hasReserved = bccomp($reserved, '0', 2) > 0)
+                                @php($hasIncoming = bccomp($incoming, '0', 2) > 0)
+                                <div class="mt-2 flex flex-wrap items-center gap-1.5">
+                                    <div class="flex min-h-11 flex-col justify-center rounded-md border border-zinc-200 bg-zinc-50 px-2.5 py-1 dark:border-white/10 dark:bg-white/5">
+                                        <span class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('In Stock') }}</span>
+                                        <span class="font-data text-sm font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $this->formatQuantity((string) $product->current_stock) }} <span class="text-[11px] font-normal text-zinc-500 dark:text-zinc-400">{{ $product->unit_of_measure }}</span></span>
+                                    </div>
+                                    <button type="button" @disabled(! $hasReserved) wire:click="showSources({{ $product->id }})"
+                                        aria-label="{{ __('Reserved') }} {{ $this->formatQuantity($reserved) }} {{ $product->unit_of_measure }}{{ $hasReserved ? ' — '.__('view orders') : '' }}"
+                                        @class([
+                                            'group flex min-h-11 items-center gap-2 rounded-md border px-2.5 py-1 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                                            'cursor-pointer border-amber-200 bg-amber-50 hover:border-amber-300 hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:hover:bg-amber-500/20' => $hasReserved,
+                                            'cursor-default border-zinc-200 bg-white dark:border-white/10 dark:bg-transparent' => ! $hasReserved,
+                                        ])>
+                                        <span class="flex flex-col">
+                                            <span @class(['text-[10px] font-semibold uppercase tracking-wider', 'text-amber-800 dark:text-amber-300' => $hasReserved, 'text-zinc-500 dark:text-zinc-400' => ! $hasReserved])>{{ __('Reserved') }}</span>
+                                            <span @class(['font-data text-sm font-semibold tabular-nums', 'text-amber-900 dark:text-amber-200' => $hasReserved, 'text-zinc-400 dark:text-zinc-500' => ! $hasReserved])>{{ $this->formatQuantity($reserved) }} <span class="text-[11px] font-normal">{{ $product->unit_of_measure }}</span></span>
+                                        </span>
+                                        @if ($hasReserved)
+                                            <flux:icon.chevron-right variant="micro" class="size-4 text-amber-700 transition-transform group-hover:translate-x-0.5 dark:text-amber-300" />
+                                        @endif
+                                    </button>
+                                    <button type="button" @disabled(! $hasIncoming) wire:click="showSources({{ $product->id }})"
+                                        aria-label="{{ __('Incoming') }} {{ $this->formatQuantity($incoming) }} {{ $product->unit_of_measure }}{{ $hasIncoming ? ' — '.__('view documents') : '' }}"
+                                        @class([
+                                            'group flex min-h-11 items-center gap-2 rounded-md border px-2.5 py-1 text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent',
+                                            'cursor-pointer border-blue-200 bg-blue-50 hover:border-blue-300 hover:bg-blue-100 dark:border-blue-500/20 dark:bg-blue-500/10 dark:hover:bg-blue-500/20' => $hasIncoming,
+                                            'cursor-default border-zinc-200 bg-white dark:border-white/10 dark:bg-transparent' => ! $hasIncoming,
+                                        ])>
+                                        <span class="flex flex-col">
+                                            <span @class(['text-[10px] font-semibold uppercase tracking-wider', 'text-blue-800 dark:text-blue-300' => $hasIncoming, 'text-zinc-500 dark:text-zinc-400' => ! $hasIncoming])>{{ __('Incoming') }}</span>
+                                            <span @class(['font-data text-sm font-semibold tabular-nums', 'text-blue-900 dark:text-blue-200' => $hasIncoming, 'text-zinc-400 dark:text-zinc-500' => ! $hasIncoming])>{{ $this->formatQuantity($incoming) }} <span class="text-[11px] font-normal">{{ $product->unit_of_measure }}</span></span>
+                                        </span>
+                                        @if ($hasIncoming)
+                                            <flux:icon.chevron-right variant="micro" class="size-4 text-blue-700 transition-transform group-hover:translate-x-0.5 dark:text-blue-300" />
+                                        @endif
+                                    </button>
+                                    @if ($check['status'])
+                                        <x-material-status :status="$check['status']" :shortage="$check['shortage']" :unit="$product->unit_of_measure" />
+                                    @endif
+                                </div>
+                                @can('costs.view')
+                                    @php($preview = $this->costPreview($product->id, $item['quantity'] ?? null))
+                                    @php($price = is_numeric($item['unit_price'] ?? null) ? (string) $item['unit_price'] : null)
+                                    @php($margin = $preview['average'] !== null && $price !== null ? ProductCost::margin($price, $preview['average']) : null)
+                                    @php($under = $margin !== null && bccomp($margin, '0', 1) < 0)
+                                    <div @class([
+                                        'mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border px-2.5 py-1.5 text-xs',
+                                        'border-red-200 bg-red-50 dark:border-red-500/20 dark:bg-red-500/10' => $under,
+                                        'border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/5' => ! $under,
+                                    ])>
+                                        @if ($preview['average'] !== null)
+                                            <span class="text-zinc-600 dark:text-zinc-300">{{ __('Cost') }} ≈ <span class="font-data font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $this->formatRupiah($preview['average']) }}</span>/{{ $product->unit_of_measure }}</span>
+                                            @if ($margin !== null)
+                                                @if ($under)
+                                                    <span class="inline-flex items-center gap-1 font-semibold text-red-700 dark:text-red-400"><flux:icon.exclamation-triangle variant="micro" class="size-3.5" />{{ __('Below cost') }} · {{ __('margin') }} <span class="font-data tabular-nums">{{ str_replace('.', ',', $margin) }}%</span></span>
+                                                @else
+                                                    <span class="text-zinc-600 dark:text-zinc-300">{{ __('margin') }} <span class="font-data font-semibold tabular-nums text-green-700 dark:text-green-400">{{ str_replace('.', ',', $margin) }}%</span></span>
+                                                @endif
+                                            @endif
+                                        @else
+                                            <span class="text-zinc-500 dark:text-zinc-400">{{ __('No free stock — cost not known yet') }}</span>
+                                        @endif
+                                        @if (bccomp($preview['uncovered'], '0', 2) > 0 && $preview['average'] !== null)
+                                            <span class="text-amber-700 dark:text-amber-400">{{ __(':qty without stock, cost not known yet', ['qty' => $this->formatQuantity($preview['uncovered']).' '.$product->unit_of_measure]) }}</span>
+                                        @endif
+                                        @if (count($preview['lots']))
+                                            <button type="button" wire:click="showSources({{ $product->id }})" class="ml-auto inline-flex items-center gap-1 rounded font-medium text-accent hover:underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent cursor-pointer">
+                                                <flux:icon.squares-2x2 variant="micro" class="size-3.5" />{{ trans_choice('View lot|View :count lots', count($preview['lots'])) }}
+                                            </button>
+                                        @endif
+                                    </div>
+                                @endcan
                             @endif
                         </div>
 
@@ -529,12 +653,12 @@ new #[Title('Sales Order')] class extends Component {
                             @error("items.$index.unit_price") <flux:error class="mt-1" :message="$message" /> @enderror
                         </div>
 
-                        <div class="min-w-0 text-right">
-                            <p class="@3xl:hidden mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Subtotal') }}</p>
+                        <div class="col-span-2 @3xl:col-span-1 min-w-0 flex items-center justify-between gap-3 border-t border-dashed border-zinc-200 pt-2 @3xl:block @3xl:border-0 @3xl:pt-0 @3xl:text-right dark:border-white/10">
+                            <p class="@3xl:hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Subtotal') }}</p>
                             <p class="flex min-h-8 items-center justify-end font-data text-xs font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->formatRupiah($this->rowSubtotal($item)) }}</p>
                         </div>
 
-                        <div class="col-start-4 row-start-1 @3xl:col-start-5 flex justify-end">
+                        <div class="col-start-3 row-start-1 @3xl:col-start-5 flex justify-end">
                             <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeItemRow({{ $index }})" :aria-label="__('Remove')" class="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 active:scale-[0.95]" />
                         </div>
                     </div>
@@ -579,4 +703,108 @@ new #[Title('Sales Order')] class extends Component {
             @endif
         </div>
     </div>
+    <flux:modal name="stock-sources" class="w-full max-w-xl">
+        @if ($sources = $this->sourcesProduct)
+            @php($unit = $sources->unit_of_measure)
+            @php($incomingRows = $this->incoming[$sources->id] ?? [])
+            <div class="space-y-5">
+                <div>
+                    <flux:heading size="lg">{{ $sources->product_name }}</flux:heading>
+                    <flux:subheading>{{ __('Where this product is promised and where more is coming from. Documents open in a new tab, so this order stays as it is.') }}</flux:subheading>
+                </div>
+
+                <div class="grid grid-cols-3 gap-2">
+                    <div class="rounded-md border border-border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/5 px-3 py-2">
+                        <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('In Stock') }}</p>
+                        <p class="font-data text-base font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $this->formatQuantity((string) $sources->current_stock) }}</p>
+                    </div>
+                    <div class="rounded-md border border-border-amber-200 bg-amber-50 dark:border-amber-500/20 dark:bg-amber-500/10 px-3 py-2">
+                        <p class="text-[10px] font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-300">{{ __('Reserved') }}</p>
+                        <p class="font-data text-base font-semibold tabular-nums text-amber-900 dark:text-amber-200">{{ $this->formatQuantity($this->reserved[$sources->id] ?? '0') }}</p>
+                    </div>
+                    <div class="rounded-md border border-border-blue-200 bg-blue-50 dark:border-blue-500/20 dark:bg-blue-500/10 px-3 py-2">
+                        <p class="text-[10px] font-semibold uppercase tracking-wider text-blue-800 dark:text-blue-300">{{ __('Incoming') }}</p>
+                        <p class="font-data text-base font-semibold tabular-nums text-blue-900 dark:text-blue-200">{{ $this->formatQuantity(IncomingStock::total($incomingRows)) }}</p>
+                    </div>
+                </div>
+
+                @can('costs.view')
+                    @php($rowQty = $this->rowQuantity($sources->id))
+                    @php($lotPreview = $this->costPreview($sources->id, $rowQty))
+                    @php($rowPrice = $this->rowPrice($sources->id))
+                    <section aria-labelledby="sources-lots">
+                        <h3 id="sources-lots" class="mb-1 flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                            <span class="size-2 rounded-full bg-accent"></span>{{ __('Lots this order would use') }}
+                        </h3>
+                        <p class="mb-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                            {{ __('Oldest first (FIFO), after the stock already promised to other confirmed orders. An estimate — the warehouse takes the actual lots when it delivers.') }}
+                        </p>
+                        @if (count($lotPreview['lots']))
+                            <div class="overflow-x-auto rounded-md border border-zinc-200 dark:border-white/10">
+                                <table class="w-full text-xs">
+                                    <thead>
+                                        <tr class="bg-zinc-50 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:bg-white/5 dark:text-zinc-400">
+                                            <th class="px-3 py-2">{{ __('Lot') }}</th>
+                                            <th class="px-3 py-2 text-right">{{ __('Qty') }}</th>
+                                            <th class="px-3 py-2 text-right">{{ __('Cost / unit') }}</th>
+                                            <th class="px-3 py-2 text-right">{{ __('Value') }}</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-zinc-100 dark:divide-white/5">
+                                        @foreach ($lotPreview['lots'] as $lot)
+                                            <tr>
+                                                <td class="px-3 py-2">
+                                                    <p class="font-data text-zinc-800 dark:text-zinc-200">{{ $lot['lot_number'] }}</p>
+                                                    <p class="text-[10px] text-zinc-500 dark:text-zinc-400">{{ __('received') }} {{ $lot['received_at']->format('d M Y') }}</p>
+                                                </td>
+                                                <td class="px-3 py-2 text-right font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->formatQuantity($lot['quantity']) }} {{ $unit }}</td>
+                                                <td class="px-3 py-2 text-right font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->formatRupiah($lot['unit_cost']) }}</td>
+                                                <td class="px-3 py-2 text-right font-data tabular-nums text-zinc-900 dark:text-white">{{ $this->formatRupiah(bcmul($lot['quantity'], $lot['unit_cost'], 2)) }}</td>
+                                            </tr>
+                                        @endforeach
+                                    </tbody>
+                                    <tfoot>
+                                        <tr class="border-t border-zinc-200 bg-zinc-50 dark:border-white/10 dark:bg-white/5">
+                                            <td class="px-3 py-2 font-semibold text-zinc-700 dark:text-zinc-300">{{ __('Average') }}</td>
+                                            <td class="px-3 py-2 text-right font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $this->formatQuantity($lotPreview['covered']) }} {{ $unit }}</td>
+                                            <td class="px-3 py-2 text-right font-data font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $this->formatRupiah($lotPreview['average']) }}</td>
+                                            <td class="px-3 py-2 text-right font-data tabular-nums text-zinc-700 dark:text-zinc-300">
+                                                @if ($rowPrice !== null)
+                                                    @php($lotMargin = ProductCost::margin($rowPrice, $lotPreview['average']))
+                                                    {{ __('margin') }} <span @class(['font-semibold', 'text-red-600 dark:text-red-400' => bccomp($lotMargin, '0', 1) < 0, 'text-green-700 dark:text-green-400' => bccomp($lotMargin, '0', 1) >= 0])>{{ str_replace('.', ',', $lotMargin) }}%</span>
+                                                @endif
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                            @if (bccomp($lotPreview['uncovered'], '0', 2) > 0)
+                                <p class="mt-1.5 text-[11px] text-amber-700 dark:text-amber-400">{{ __(':qty without stock, cost not known yet', ['qty' => $this->formatQuantity($lotPreview['uncovered']).' '.$unit]) }}</p>
+                            @endif
+                        @else
+                            <p class="rounded-md border border-dashed border-zinc-200 dark:border-white/10 px-3 py-4 text-center text-xs text-zinc-500 dark:text-zinc-400">{{ __('No free stock — cost not known yet') }}</p>
+                        @endif
+                    </section>
+                @endcan
+
+                <section aria-labelledby="sources-reserved">
+                    <h3 id="sources-reserved" class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        <span class="size-2 rounded-full bg-amber-500"></span>{{ __('Reserved for other customers') }}
+                    </h3>
+                    <x-stock-source-list :rows="$this->reservedOrders" :unit="$unit" :empty="__('No other confirmed orders are waiting for this product.')" />
+                </section>
+
+                <section aria-labelledby="sources-incoming">
+                    <h3 id="sources-incoming" class="mb-2 flex items-center gap-1.5 text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                        <span class="size-2 rounded-full bg-blue-500"></span>{{ __('Incoming') }}
+                    </h3>
+                    <x-stock-source-list :rows="$incomingRows" :unit="$unit" :empty="__('Nothing is being produced or ordered for this product.')" />
+                </section>
+
+                <div class="flex justify-end">
+                    <flux:modal.close><flux:button variant="filled" class="active:scale-[0.95]">{{ __('Close') }}</flux:button></flux:modal.close>
+                </div>
+            </div>
+        @endif
+    </flux:modal>
 </section>

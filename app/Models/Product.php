@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Guarded(['id', 'current_stock'])]
+#[Guarded(['id', 'product_code', 'current_stock'])]
 class Product extends Model
 {
     use HasFactory;
@@ -23,6 +23,7 @@ class Product extends Model
             'safety_stock' => 'decimal:2',
             'reorder_point' => 'decimal:2',
             'selling_price' => 'decimal:2',
+            'is_active' => 'boolean',
         ];
     }
 
@@ -57,6 +58,45 @@ class Product extends Model
             ->using(ProductSupplier::class)
             ->withPivot('price')
             ->withTimestamps();
+    }
+
+    public function scopeActive(Builder $query): Builder
+    {
+        return $query->where('is_active', true);
+    }
+
+    public function isLocked(): bool
+    {
+        return bccomp((string) $this->current_stock, '0', 2) !== 0
+            || $this->stockMovements()->exists()
+            || $this->purchaseOrderItems()->exists()
+            || $this->workOrders()->exists()
+            || ProductionFormulaItem::where('material_product_id', $this->id)->exists()
+            || SalesOrderItem::where('product_id', $this->id)->exists();
+    }
+
+    public static function codePrefix(ProductType $type): string
+    {
+        return match ($type) {
+            ProductType::RawMaterial => 'RAW',
+            ProductType::Wip => 'WIP',
+            ProductType::FinishedGoods => 'FG',
+        };
+    }
+
+    /**
+     * @return array{id: int, title: string, subtitle: string, meta: ?string, disabled_reason: ?string, badge: array{label: string, class: string}}
+     */
+    public function toPickerOption(?string $meta = null, ?string $disabledReason = null): array
+    {
+        return [
+            'id' => $this->id,
+            'title' => $this->product_name,
+            'subtitle' => $this->product_code,
+            'meta' => $meta,
+            'disabled_reason' => $disabledReason,
+            'badge' => ['label' => $this->type->label(), 'class' => $this->type->badgeClasses()],
+        ];
     }
 
     public function scopePurchasable(Builder $query): Builder

@@ -100,18 +100,18 @@ new #[Title('Material Issue')] class extends Component {
         $plannedIds = array_map('intval', array_keys($this->planned));
         $taken = collect($this->extras)->except($index)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all();
 
+        $chosen = collect($this->extras)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all();
+
         return Product::query()
             ->whereIn('type', [ProductType::RawMaterial->value, ProductType::Wip->value])
+            ->where(fn ($query) => $query->where('is_active', true)->orWhereIn('id', $chosen))
             ->whereNotIn('id', $plannedIds)
             ->orderBy('product_name')
             ->get()
-            ->map(fn (Product $product) => [
-                'id' => $product->id,
-                'title' => $product->product_name,
-                'subtitle' => $product->product_code,
-                'meta' => __('Stock').' '.$this->formatQuantity((string) $product->current_stock).' '.$product->unit_of_measure,
-                'disabled_reason' => in_array($product->id, $taken, true) ? __('Already chosen') : null,
-            ])->all();
+            ->map(fn (Product $product) => $product->toPickerOption(
+                __('Stock').' '.$this->formatQuantity((string) $product->current_stock).' '.$product->unit_of_measure,
+                in_array($product->id, $taken, true) ? __('Already chosen') : null,
+            ))->all();
     }
 
     public function extraProduct(int $index): ?Product

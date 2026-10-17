@@ -388,7 +388,7 @@ new #[Title('Work Order Detail')] class extends Component {
             <dl class="mt-4 pt-3 border-t border-zinc-100 dark:border-white/10 space-y-2 text-xs">
                 <div class="flex items-center justify-between gap-2">
                     <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Formula') }}</dt>
-                    <dd class="font-data text-zinc-800 dark:text-zinc-200">{{ $workOrder->productionFormula->formula_code }} v{{ $workOrder->productionFormula->version }}</dd>
+                    <dd class="font-data text-zinc-800 dark:text-zinc-200">{{ $workOrder->productionFormula->formula_code }}</dd>
                 </div>
                 <div class="flex items-center justify-between gap-2">
                     <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Work Center') }}</dt>

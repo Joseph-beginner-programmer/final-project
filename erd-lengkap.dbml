@@ -76,6 +76,14 @@ Enum payment_term {
   net_60
 }
 
+Enum overhead_category {
+  electricity [note: 'Listrik — satu meteran untuk seluruh pabrik']
+  machine_depreciation [note: 'Penyusutan mesin molding dan lini perakitan']
+  mold_depreciation [note: 'Penyusutan cetakan (mold)']
+  maintenance [note: 'Pemeliharaan dan suku cadang']
+  other [note: 'Biaya overhead pabrik lainnya']
+}
+
 Enum so_status {
   draft
   confirmed
@@ -171,21 +179,22 @@ Table labor_rates [headercolor: #6D6D6D] {
 
 Table suppliers [headercolor: #1565C0] {
   id bigint [pk, increment]
-  supplier_code varchar [unique]
+  supplier_code varchar [unique, note: 'Dibuat otomatis: SUP-001, SUP-002, ...']
   supplier_name varchar
   contact_person varchar
   phone varchar
   email varchar
   address text
+  is_active boolean [default: true, note: 'Nonaktif: tidak bisa dipilih di PO baru, tetap ada di riwayat']
   created_at timestamp
   updated_at timestamp
 }
 
 Table product_supplier [headercolor: #1565C0] {
   id bigint [pk, increment]
-  product_id bigint [ref: > products.id]
+  product_id bigint [ref: > products.id, note: 'Hanya raw_material']
   supplier_id bigint [ref: > suppliers.id]
-  price decimal(18,2)
+  price decimal(18,2) [note: 'Harga awal yang terisi di PO baru']
   created_at timestamp
   updated_at timestamp
 
@@ -283,7 +292,7 @@ Table purchase_return_items [headercolor: #1565C0] {
 
 Table products [headercolor: #2E7D32] {
   id bigint [pk, increment]
-  product_code varchar [unique]
+  product_code varchar [unique, note: 'Dibuat otomatis per jenis: RAW-001, WIP-001, FG-001']
   product_name varchar
   unit_of_measure varchar
   type product_type
@@ -291,6 +300,7 @@ Table products [headercolor: #2E7D32] {
   safety_stock decimal(18,4) [default: 0]
   reorder_point decimal(18,4) [default: 0]
   selling_price decimal(18,2) [null, note: 'Hanya untuk finished_goods']
+  is_active boolean [default: true, note: 'Nonaktif: hilang dari pilihan, tetap ada di riwayat. Jenis dan satuan terkunci setelah ada stok atau dokumen']
   created_at timestamp
   updated_at timestamp
 }
@@ -349,6 +359,7 @@ Table work_centers [headercolor: #C62828] {
   id bigint [pk, increment]
   code varchar [unique]
   name varchar
+  uses_molds boolean [default: false, note: 'true = memakai cetakan (MOLDING); false = kategori mold_depreciation tidak berlaku (ASSEMBLY)']
   created_at timestamp
   updated_at timestamp
 }
@@ -359,7 +370,8 @@ Table work_centers [headercolor: #C62828] {
 Table overhead_rates [headercolor: #C62828] {
   id bigint [pk, increment]
   work_center_id bigint [ref: > work_centers.id]
-  rate_per_hour decimal(18,2)
+  rate_per_hour decimal(18,2) [note: 'Dihitung sistem: total overhead_rate_components / budgeted_machine_hours, dibulatkan 2 desimal; disalin ke work order']
+  budgeted_machine_hours decimal(12,2) [null, note: 'Anggaran jam mesin sebulan; null = tarif lama tanpa rincian']
   effective_from date
   effective_to date [null]
   created_by bigint [ref: > users.id]
@@ -367,13 +379,26 @@ Table overhead_rates [headercolor: #C62828] {
   updated_at timestamp
 }
 
+// Rincian taksiran overhead bulanan yang membentuk satu tarif (kategori yang sama dengan overhead_expenses)
+Table overhead_rate_components [headercolor: #C62828] {
+  id bigint [pk, increment]
+  overhead_rate_id bigint [ref: > overhead_rates.id]
+  category overhead_category
+  amount decimal(18,2)
+  created_at timestamp
+  updated_at timestamp
+
+  indexes {
+    (overhead_rate_id, category) [unique]
+  }
+}
+
 // Mengelola Formula Produksi (BOM)
 Table production_formulas [headercolor: #C62828] {
   id bigint [pk, increment]
-  formula_code varchar [unique]
-  product_id bigint [ref: > products.id, note: 'Produk yang dihasilkan: wip atau finished_goods']
+  formula_code varchar [unique, note: 'F-{product_code}']
+  product_id bigint [unique, ref: > products.id, note: 'Produk yang dihasilkan: wip atau finished_goods. Satu formula per produk, diubah langsung (tanpa versi); WO menyimpan salinan rencananya sendiri']
   work_center_id bigint [ref: > work_centers.id, note: 'Pusat kerja yang mengerjakan; menentukan tarif BOP']
-  version int [default: 1]
   output_quantity decimal(18,4) [note: 'Ukuran batch yang menjadi dasar jumlah bahan']
   is_active boolean [default: true]
   created_by bigint [ref: > users.id]
@@ -612,7 +637,8 @@ Table customers [headercolor: #6A1B9A] {
 
 // Menyusun Pesanan Penjualan: draf -> dikonfirmasi oleh Penjualan sendiri (tanpa persetujuan).
 // Stok kurang hanya diperingatkan (make-to-order), menampilkan stok yang akan datang dari produksi.
-// Harga belum termasuk pajak; pajak di faktur.
+// Harga belum termasuk pajak; pajak di faktur. PT SAI = PKP. SO/PO hanya menampilkan
+// perkiraan PPN (config tax.estimate_rate, informasi saja, tidak disimpan/dijurnal).
 Table sales_orders [headercolor: #6A1B9A] {
   id bigint [pk, increment]
   so_number varchar [unique, note: 'SO-{tahun}-{id}']
@@ -751,7 +777,7 @@ Table accounts [headercolor: #EF6C00] {
 Table overhead_expenses [headercolor: #EF6C00] {
   id bigint [pk, increment]
   period date [note: 'Hari pertama bulan, mis. 2026-10-01']
-  category varchar [note: 'electricity | depreciation | other']
+  category overhead_category [note: 'Kategori yang sama dipakai untuk menaksir tarif dan untuk mencatat biaya aktual, agar bisa dibandingkan per kategori']
   description varchar [null]
   amount decimal(18,2)
   created_by bigint [ref: > users.id]
@@ -766,7 +792,7 @@ Table overhead_period_closings [headercolor: #EF6C00] {
   period date [unique]
   applied_total decimal(18,2)
   actual_total decimal(18,2)
-  variance decimal(18,2) [note: 'actual - applied; positif = kurang dibebankan (underapplied)']
+  variance decimal(18,2) [note: 'actual - applied; positif = kurang dibebankan (underapplied). Seluruh selisih dibebankan ke HPP bulan itu (keputusan 2026-10-15), tidak dialokasikan ke persediaan; dokumen/lot tidak diubah']
   journal_entry_id bigint [ref: - journal_entries.id, null]
   closed_by bigint [ref: > users.id]
   closed_at timestamp
@@ -813,7 +839,8 @@ Table purchase_invoices [headercolor: #EF6C00] {
   subtotal decimal(18,2) [note: 'Jumlah yang ditagih pemasok, sebelum pajak']
   receipt_value decimal(18,2) [note: 'Jumlah total_value baris penerimaan; dihapus dari Barang Diterima Belum Difakturkan']
   price_variance decimal(18,2) [default: 0, note: 'subtotal - receipt_value; diposting ke Selisih Harga Pembelian']
-  tax_amount decimal(18,2) [default: 0]
+  tax_rate decimal(5,2) [default: 0, note: 'Diketik per faktur, disalin dari faktur pajak pemasok']
+  tax_amount decimal(18,2) [default: 0, note: 'PPN Masukan; dikreditkan (PT SAI = PKP), tidak masuk biaya persediaan']
   total_amount decimal(18,2)
   amount_paid decimal(18,2) [default: 0]
   status invoice_status [default: 'unpaid']
@@ -846,7 +873,8 @@ Table sales_invoices [headercolor: #EF6C00] {
   invoice_date date
   due_date date
   subtotal decimal(18,2)
-  tax_amount decimal(18,2) [default: 0]
+  tax_rate decimal(5,2) [default: 0, note: 'Diketik per faktur']
+  tax_amount decimal(18,2) [default: 0, note: 'PPN Keluaran = subtotal x tax_rate']
   total_amount decimal(18,2)
   amount_paid decimal(18,2) [default: 0]
   status invoice_status [default: 'unpaid']
@@ -896,6 +924,7 @@ TableGroup Persediaan {
 TableGroup Produksi {
   work_centers
   overhead_rates
+  overhead_rate_components
   production_formulas
   production_formula_items
   work_orders

@@ -78,4 +78,15 @@ class PurchaseOrderPolicy
                 PurchaseOrderStatus::FullyReceived,
             ], true);
     }
+
+    public function export(User $user, PurchaseOrder $po): bool
+    {
+        return $user->can('purchasing.view')
+            && in_array($po->status, [
+                PurchaseOrderStatus::Approved,
+                PurchaseOrderStatus::PartiallyReceived,
+                PurchaseOrderStatus::FullyReceived,
+                PurchaseOrderStatus::Closed,
+            ], true);
+    }
 }
