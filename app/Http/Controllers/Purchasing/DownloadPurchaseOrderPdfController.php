@@ -14,7 +14,7 @@ class DownloadPurchaseOrderPdfController extends Controller
     {
         Gate::authorize('export', $purchaseOrder);
 
-        $purchaseOrder->load(['supplier', 'items.product', 'createdBy', 'approvedBy']);
+        $purchaseOrder->load(['supplier', 'items.product', 'charges', 'createdBy', 'approvedBy']);
 
         return Pdf::loadView('purchasing.orders.pdf', [
             'purchaseOrder' => $purchaseOrder,

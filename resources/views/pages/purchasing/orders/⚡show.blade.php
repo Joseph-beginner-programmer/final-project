@@ -1,8 +1,11 @@
 <?php
 
+use App\Actions\Purchasing\AddPurchaseOrderChargeAction;
 use App\Actions\Purchasing\AddPurchaseOrderItemAction;
+use App\Actions\Purchasing\RemovePurchaseOrderChargeAction;
 use App\Actions\Purchasing\RemovePurchaseOrderItemAction;
 use App\Actions\Purchasing\SubmitPurchaseOrderForApprovalAction;
+use App\Actions\Purchasing\UpdatePurchaseOrderChargeAction;
 use App\Actions\Purchasing\UpdatePurchaseOrderItemAction;
 use App\Actions\Purchasing\ApprovePurchaseOrderAction;
 use App\Actions\Purchasing\ClosePurchaseOrderAction;
@@ -14,6 +17,7 @@ use App\Exceptions\PurchaseOrderHaveNoItemException;
 use App\Exceptions\PurchaseOrderItemQuantityNotValidException;
 use App\Exceptions\PurchaseOrderNotEditableException;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderCharge;
 use App\Models\PurchaseOrderItem;
 use Flux\Flux;
 use Illuminate\Support\Collection;
@@ -34,6 +38,16 @@ new #[Title('Purchase Order Details')] class extends Component {
         'unit_price' => '',
     ];
 
+    public array $charges = [];
+
+    public array $newCharge = [
+        'description' => '',
+        'amount' => '',
+        'include_in_cost' => true,
+    ];
+
+    public string $activeTab = 'items';
+
     public string $rejectionReason = '';
 
     public string $closeReason = '';
@@ -42,9 +56,10 @@ new #[Title('Purchase Order Details')] class extends Component {
     {
         Gate::authorize('view', $purchaseOrder);
 
-        $this->purchaseOrder = $purchaseOrder->load(['supplier', 'createdBy', 'approvedBy', 'closedBy', 'items.product']);
+        $this->purchaseOrder = $purchaseOrder->load(['supplier', 'createdBy', 'approvedBy', 'closedBy', 'items.product', 'charges']);
 
         $this->syncItemsFromModel();
+        $this->syncChargesFromModel();
     }
 
     protected function syncItemsFromModel(): void
@@ -55,6 +70,19 @@ new #[Title('Purchase Order Details')] class extends Component {
             $this->items[$item->id] = [
                 'quantity_ordered' => (string) $item->quantity_ordered,
                 'unit_price' => (int) $item->unit_price,
+            ];
+        }
+    }
+
+    protected function syncChargesFromModel(): void
+    {
+        $this->charges = [];
+
+        foreach ($this->purchaseOrder->charges as $charge) {
+            $this->charges[$charge->id] = [
+                'description' => $charge->description,
+                'amount' => (int) $charge->amount,
+                'include_in_cost' => $charge->include_in_cost,
             ];
         }
     }
@@ -178,6 +206,91 @@ new #[Title('Purchase Order Details')] class extends Component {
         $this->syncItemsFromModel();
 
         Flux::toast(variant: 'success', text: __('Item removed.'));
+    }
+
+    public function addCharge(): void
+    {
+        Gate::authorize('update', $this->purchaseOrder);
+
+        $this->validate([
+            'newCharge.description' => ['required', 'string', 'max:255'],
+            'newCharge.amount' => ['required', 'numeric', 'gt:0'],
+        ], attributes: [
+            'newCharge.description' => __('Description'),
+            'newCharge.amount' => __('Amount'),
+        ]);
+
+        try {
+            app(AddPurchaseOrderChargeAction::class)->handle(
+                po: $this->purchaseOrder,
+                description: $this->newCharge['description'],
+                amount: $this->newCharge['amount'],
+                includeInCost: (bool) $this->newCharge['include_in_cost'],
+            );
+        } catch (PurchaseOrderNotEditableException $e) {
+            $this->addError('newCharge', $e->userMessage());
+
+            return;
+        }
+
+        $this->purchaseOrder->refresh()->load('charges');
+        $this->syncChargesFromModel();
+        $this->newCharge = ['description' => '', 'amount' => '', 'include_in_cost' => true];
+
+        Flux::toast(variant: 'success', text: __('Charge added.'));
+    }
+
+    public function updateCharge(int $chargeId): void
+    {
+        Gate::authorize('update', $this->purchaseOrder);
+
+        $this->validate([
+            "charges.{$chargeId}.description" => ['required', 'string', 'max:255'],
+            "charges.{$chargeId}.amount" => ['required', 'numeric', 'gt:0'],
+        ], attributes: [
+            "charges.{$chargeId}.description" => __('Description'),
+            "charges.{$chargeId}.amount" => __('Amount'),
+        ]);
+
+        $charge = $this->purchaseOrder->charges->firstWhere('id', $chargeId);
+
+        try {
+            app(UpdatePurchaseOrderChargeAction::class)->handle(
+                charge: $charge,
+                description: $this->charges[$chargeId]['description'],
+                amount: $this->charges[$chargeId]['amount'],
+                includeInCost: (bool) ($this->charges[$chargeId]['include_in_cost'] ?? true),
+            );
+        } catch (PurchaseOrderNotEditableException $e) {
+            $this->addError('charges', $e->userMessage());
+
+            return;
+        }
+
+        $this->purchaseOrder->refresh()->load('charges');
+        $this->syncChargesFromModel();
+
+        Flux::toast(variant: 'success', text: __('Charge updated.'));
+    }
+
+    public function removeCharge(int $chargeId): void
+    {
+        Gate::authorize('update', $this->purchaseOrder);
+
+        $charge = PurchaseOrderCharge::findOrFail($chargeId);
+
+        try {
+            app(RemovePurchaseOrderChargeAction::class)->handle($charge);
+        } catch (PurchaseOrderNotEditableException $e) {
+            $this->addError('charges', $e->userMessage());
+
+            return;
+        }
+
+        $this->purchaseOrder->refresh()->load('charges');
+        $this->syncChargesFromModel();
+
+        Flux::toast(variant: 'success', text: __('Charge removed.'));
     }
 
     public function submit(): void
@@ -409,6 +522,8 @@ new #[Title('Purchase Order Details')] class extends Component {
 
     @error('items') <flux:error class="mt-3" :message="$message" /> @enderror
     @error('newItem') <flux:error class="mt-3" :message="$message" /> @enderror
+    @error('charges') <flux:error class="mt-3" :message="$message" /> @enderror
+    @error('newCharge') <flux:error class="mt-3" :message="$message" /> @enderror
 
     <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
@@ -478,6 +593,12 @@ new #[Title('Purchase Order Details')] class extends Component {
                         <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Line Items') }}</dt>
                         <dd class="font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ str_pad((string) $purchaseOrder->items->count(), 2, '0', STR_PAD_LEFT) }}</dd>
                     </div>
+                    @if ($purchaseOrder->charges->isNotEmpty())
+                        <div class="flex justify-between gap-2">
+                            <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Other charges') }}</dt>
+                            <dd class="font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $this->formatRupiah($purchaseOrder->chargesTotal()) }}</dd>
+                        </div>
+                    @endif
                 </dl>
             </div>
             <div class="px-4 py-3.5 bg-accent mt-auto">
@@ -488,11 +609,16 @@ new #[Title('Purchase Order Details')] class extends Component {
         </div>
     </div>
 
-    <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 130ms;">
-        <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">
-            {{ __('Line Items') }}
-        </h2>
+    <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 130ms;" x-data="{ tab: $wire.entangle('activeTab') }">
+        @php($chargeErrors = collect($errors->keys())->contains(fn ($key) => str_starts_with($key, 'charges') || str_starts_with($key, 'newCharge')))
+        <div class="flex items-end justify-between gap-3 mb-3">
+            <x-tab-bar :label="__('Order lines')" :tabs="[
+                'items' => ['label' => __('Line Items'), 'count' => $purchaseOrder->items->count()],
+                'charges' => ['label' => __('Other charges'), 'count' => $purchaseOrder->charges->count(), 'error' => $chargeErrors],
+            ]" />
+        </div>
 
+        <div role="tabpanel" x-show="tab === 'items'">
         <div class="hidden lg:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <table class="w-full text-xs border-collapse">
                 <thead>
@@ -707,6 +833,126 @@ new #[Title('Purchase Order Details')] class extends Component {
                     </flux:button>
                 </div>
             @endcan
+        </div>
+        </div>
+
+        <div role="tabpanel" x-show="tab === 'charges'" x-cloak>
+            <div class="hidden lg:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
+                <table class="w-full text-xs border-collapse">
+                    <thead>
+                        <tr class="text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10">
+                            <th class="py-2 px-3">{{ __('Description') }}</th>
+                            <th class="py-2 px-3 text-right">{{ __('Amount') }}</th>
+                            @can('update', $purchaseOrder)
+                                <th class="py-2 px-3 w-20"></th>
+                            @endcan
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @forelse ($purchaseOrder->charges as $charge)
+                            <tr wire:key="po-charge-{{ $charge->id }}" wire:transition class="border-b border-zinc-100 dark:border-white/5 last:border-0 align-top">
+                                <td class="py-2 px-3">
+                                    @can('update', $purchaseOrder)
+                                        <flux:input size="sm" wire:model="charges.{{ $charge->id }}.description" :loading="false" />
+                                        @error("charges.{$charge->id}.description") <flux:error class="mt-1" :message="$message" /> @enderror
+                                        <div class="mt-2"><flux:checkbox wire:model="charges.{{ $charge->id }}.include_in_cost" :label="__('Include in inventory cost')" /></div>
+                                    @else
+                                        <p class="text-zinc-700 dark:text-zinc-300">{{ $charge->description }}</p>
+                                        <p class="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">{{ $charge->include_in_cost ? __('Included in inventory cost') : __('Not included in inventory cost') }}</p>
+                                    @endcan
+                                </td>
+                                <td class="py-2 px-3 w-40">
+                                    @can('update', $purchaseOrder)
+                                        <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model="charges.{{ $charge->id }}.amount" :loading="false" />
+                                        @error("charges.{$charge->id}.amount") <flux:error class="mt-1" :message="$message" /> @enderror
+                                    @else
+                                        <p class="text-right font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $this->formatRupiah((string) $charge->amount) }}</p>
+                                    @endcan
+                                </td>
+                                @can('update', $purchaseOrder)
+                                    <td class="py-2 px-3 pt-2 text-right whitespace-nowrap">
+                                        <flux:button size="sm" variant="ghost" icon="check" wire:click="updateCharge({{ $charge->id }})" wire:loading.attr="disabled" wire:target="updateCharge({{ $charge->id }})" class="active:scale-[0.95]" />
+                                        <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeCharge({{ $charge->id }})" wire:loading.attr="disabled" wire:target="removeCharge({{ $charge->id }})" class="active:scale-[0.95]" />
+                                    </td>
+                                @endcan
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="3" class="py-8 text-center text-zinc-500 dark:text-zinc-400">
+                                    {{ __('No other charges.') }}
+                                </td>
+                            </tr>
+                        @endforelse
+
+                        @can('update', $purchaseOrder)
+                            <tr class="bg-zinc-50/70 dark:bg-white/[0.02]">
+                                <td class="py-2 px-3 align-top">
+                                    <flux:input size="sm" wire:model="newCharge.description" :placeholder="__('e.g. Shipping, Packing')" :invalid="$errors->has('newCharge.description')" />
+                                    @error('newCharge.description') <flux:error class="mt-1" :message="$message" /> @enderror
+                                    <div class="mt-2"><flux:checkbox wire:model="newCharge.include_in_cost" :label="__('Include in inventory cost')" /></div>
+                                </td>
+                                <td class="py-2 px-3 w-40 align-top">
+                                    <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model="newCharge.amount" :loading="false" />
+                                    @error('newCharge.amount') <flux:error class="mt-1" :message="$message" /> @enderror
+                                </td>
+                                <td class="py-2 px-3 text-right align-top">
+                                    <flux:button size="sm" variant="ghost" icon="plus" wire:click="addCharge" wire:loading.attr="disabled" wire:target="addCharge" class="active:scale-[0.95]">
+                                        {{ __('Add') }}
+                                    </flux:button>
+                                </td>
+                            </tr>
+                        @endcan
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-4 lg:hidden rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
+                @forelse ($purchaseOrder->charges as $charge)
+                    <div wire:key="po-charge-card-{{ $charge->id }}" wire:transition class="p-4">
+                        @can('update', $purchaseOrder)
+                            <flux:input size="sm" :label="__('Description')" wire:model="charges.{{ $charge->id }}.description" :loading="false" />
+                            @error("charges.{$charge->id}.description") <flux:error class="mt-1" :message="$message" /> @enderror
+                            <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" :label="__('Amount')" input:class="font-data tabular-nums" class="mt-3" wire:model="charges.{{ $charge->id }}.amount" :loading="false" />
+                            @error("charges.{$charge->id}.amount") <flux:error class="mt-1" :message="$message" /> @enderror
+                            <div class="mt-3"><flux:checkbox wire:model="charges.{{ $charge->id }}.include_in_cost" :label="__('Include in inventory cost')" /></div>
+
+                            <div class="flex items-center gap-2 mt-3 pt-3 border-t border-zinc-100 dark:border-white/10">
+                                <flux:button size="sm" variant="ghost" icon="check" class="flex-1 active:scale-[0.97]" wire:click="updateCharge({{ $charge->id }})" wire:loading.attr="disabled" wire:target="updateCharge({{ $charge->id }})">
+                                    {{ __('Save changes') }}
+                                </flux:button>
+                                <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeCharge({{ $charge->id }})" wire:loading.attr="disabled" wire:target="removeCharge({{ $charge->id }})" class="active:scale-[0.95]" />
+                            </div>
+                        @else
+                            <div class="flex items-center justify-between gap-3">
+                                <span class="text-sm text-zinc-700 dark:text-zinc-300">{{ $charge->description }}</span>
+                                <span class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatRupiah((string) $charge->amount) }}</span>
+                            </div>
+                            <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">{{ $charge->include_in_cost ? __('Included in inventory cost') : __('Not included in inventory cost') }}</p>
+                        @endcan
+                    </div>
+                @empty
+                    <div class="py-8 text-center text-sm text-zinc-500 dark:text-zinc-400 px-4">
+                        {{ __('No other charges.') }}
+                    </div>
+                @endforelse
+
+                @can('update', $purchaseOrder)
+                    <div class="p-4 bg-zinc-50/70 dark:bg-white/[0.02]">
+                        <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{{ __('Other charges') }}</p>
+
+                        <flux:input size="sm" :label="__('Description')" :placeholder="__('e.g. Shipping, Packing')" wire:model="newCharge.description" :invalid="$errors->has('newCharge.description')" />
+                        @error('newCharge.description') <flux:error class="mt-1" :message="$message" /> @enderror
+
+                        <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" :label="__('Amount')" input:class="font-data tabular-nums" class="mt-3" wire:model="newCharge.amount" :loading="false" />
+                        @error('newCharge.amount') <flux:error class="mt-1" :message="$message" /> @enderror
+                        <div class="mt-3"><flux:checkbox wire:model="newCharge.include_in_cost" :label="__('Include in inventory cost')" /></div>
+
+                        <flux:button size="sm" variant="primary" icon="plus" class="w-full mt-3 active:scale-[0.97]" wire:click="addCharge" wire:loading.attr="disabled" wire:target="addCharge">
+                            {{ __('Add charge') }}
+                        </flux:button>
+                    </div>
+                @endcan
+            </div>
         </div>
     </div>
 </section>

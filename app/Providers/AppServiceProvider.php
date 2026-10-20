@@ -6,9 +6,13 @@ use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 use App\Http\Responses\LoginResponse;
 use Carbon\CarbonImmutable;
 use App\Enums\UserRole;
+use App\Models\MaterialIssue;
 use App\Models\MaterialIssueItem;
+use App\Models\MaterialReturn;
 use App\Models\MaterialReturnItem;
 use App\Models\ProductionReceipt;
+use App\Models\ProductionResult;
+use App\Models\SalesDelivery;
 use App\Models\SalesDeliveryItem;
 use App\Models\PurchaseOrderReceipt;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -92,6 +96,18 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('costs.view', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::Sales], true);
         });
+        Gate::define('accounts.manage', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
+        Gate::define('journal.manage', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
+        Gate::define('reports.production', function ($user) {
+            return in_array($user->role, [UserRole::Production, UserRole::Manager, UserRole::Accounting], true);
+        });
+        Gate::define('reports.inventory-value', function ($user) {
+            return in_array($user->role, [UserRole::Manager, UserRole::Accounting], true);
+        });
 
         Relation::morphMap([
             'purchase_order_receipt' => PurchaseOrderReceipt::class,
@@ -99,6 +115,10 @@ class AppServiceProvider extends ServiceProvider
             'material_return_item' => MaterialReturnItem::class,
             'production_receipt' => ProductionReceipt::class,
             'sales_delivery_item' => SalesDeliveryItem::class,
+            'material_issue' => MaterialIssue::class,
+            'production_result' => ProductionResult::class,
+            'material_return' => MaterialReturn::class,
+            'sales_delivery' => SalesDelivery::class,
         ]);
     }
 

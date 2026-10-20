@@ -2,8 +2,11 @@
 
 namespace App\Actions\Production;
 
+use App\Actions\Accounting\PostJournalEntryAction;
 use App\DTO\Production\ProductionResultData;
+use App\Enums\AccountSystemRole;
 use App\Enums\DocumentStatus;
+use App\Enums\JournalEntryType;
 use App\Enums\WorkOrderStatus;
 use App\Exceptions\InvalidProductionResultException;
 use App\Exceptions\MissingLaborRateException;
@@ -11,6 +14,7 @@ use App\Exceptions\WorkOrderNotRecordableException;
 use App\Models\Employee;
 use App\Models\ProductionResult;
 use App\Models\WorkOrder;
+use App\Support\AccountResolver;
 use Illuminate\Support\Facades\DB;
 
 class PostProductionResultAction
@@ -105,6 +109,19 @@ class PostProductionResultAction
             $workOrder->quantity_good = $result->quantity_good;
             $workOrder->quantity_reject = $result->quantity_reject;
             $workOrder->transitionTo(WorkOrderStatus::Completed);
+
+            app(PostJournalEntryAction::class)->handle(
+                lines: [
+                    ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => bcadd($laborCost, $overheadCost, 2), 'credit' => '0'],
+                    ['account_id' => AccountResolver::forRole(AccountSystemRole::WagesPayable)->id, 'debit' => '0', 'credit' => $laborCost],
+                    ['account_id' => AccountResolver::forRole(AccountSystemRole::OverheadApplied)->id, 'debit' => '0', 'credit' => $overheadCost],
+                ],
+                type: JournalEntryType::Auto,
+                description: __('Production result :number', ['number' => $result->result_number]),
+                userId: $userId,
+                sourceType: 'production_result',
+                sourceId: $result->id,
+            );
 
             return $result->load(['materials', 'labors']);
         });

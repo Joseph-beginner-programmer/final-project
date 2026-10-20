@@ -2,12 +2,16 @@
 
 namespace App\Actions\Warehouse;
 
+use App\Actions\Accounting\PostJournalEntryAction;
 use App\Actions\Inventory\DrawStockFifoAction;
+use App\Enums\AccountSystemRole;
 use App\Enums\DocumentStatus;
+use App\Enums\JournalEntryType;
 use App\Enums\StockMovementType;
 use App\Exceptions\InsufficientStockException;
 use App\Models\SalesDelivery;
 use App\Models\SalesOrder;
+use App\Support\AccountResolver;
 use Illuminate\Support\Facades\DB;
 
 class PostSalesDeliveryAction
@@ -62,6 +66,20 @@ class PostSalesDeliveryAction
             $delivery->transitionTo(DocumentStatus::Posted);
 
             $order->syncDeliveryStatus();
+
+            $totalCogs = $items->reduce(fn (string $carry, $item) => bcadd($carry, (string) $item->cogs_total, 2), '0');
+
+            app(PostJournalEntryAction::class)->handle(
+                lines: [
+                    ['account_id' => AccountResolver::forRole(AccountSystemRole::Cogs)->id, 'debit' => $totalCogs, 'credit' => '0'],
+                    ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryFinished)->id, 'debit' => '0', 'credit' => $totalCogs],
+                ],
+                type: JournalEntryType::Auto,
+                description: __('Sales delivery :number', ['number' => $delivery->delivery_number]),
+                userId: $userId,
+                sourceType: 'sales_delivery',
+                sourceId: $delivery->id,
+            );
 
             return $delivery->load('items.product');
         });

@@ -56,6 +56,20 @@
                                 :current="request()->routeIs('accounting.overhead-rates.*')" wire:navigate>
                                 {{ __('Overhead Rates') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="rectangle-stack" :href="route('accounting.accounts.list')"
+                                :current="request()->routeIs('accounting.accounts.*')" wire:navigate>
+                                {{ __('Chart of Accounts') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="book-open" :href="route('accounting.journal.list')"
+                                :current="request()->routeIs('accounting.journal.*')" wire:navigate>
+                                {{ __('General Journal') }}
+                            </flux:sidebar.item>
+                            @can('reports.production')
+                                <flux:sidebar.item icon="document-chart-bar" :href="route('production.reports.index')"
+                                    :current="request()->routeIs('production.reports.*')" wire:navigate>
+                                    {{ __('Reports') }}
+                                </flux:sidebar.item>
+                            @endcan
                         @endif
 
                         @if ($role === UserRole::Manager)
@@ -82,6 +96,12 @@
                                 :current="request()->routeIs('production.formulas.*')" wire:navigate>
                                 {{ __('Production Formulas') }}
                             </flux:sidebar.item>
+                            @can('reports.production')
+                                <flux:sidebar.item icon="document-chart-bar" :href="route('production.reports.index')"
+                                    :current="request()->routeIs('production.reports.*')" wire:navigate>
+                                    {{ __('Reports') }}
+                                </flux:sidebar.item>
+                            @endcan
                         @endif
 
                         @if ($role === UserRole::Warehouse)

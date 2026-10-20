@@ -110,7 +110,7 @@ Enum journal_entry_type {
   manual      // jurnal umum manual
   adjustment  // jurnal penyesuaian
   closing     // jurnal penutup
-  opening     // saldo awal
+  opening     // saldo awal, diinput lewat Jurnal Umum (bukan kolom di accounts)
 }
 
 Enum journal_status {
@@ -210,7 +210,7 @@ Table purchase_orders [headercolor: #1565C0] {
   status po_status [default: 'draft']
   order_date date
   expected_delivery_date date [null]
-  total_amount decimal(18,2)
+  total_amount decimal(18,2) [note: 'Subtotal barang + biaya lainnya, dihitung sistem']
   created_by bigint [ref: > users.id]
   approved_by bigint [ref: > users.id, null, note: 'Manajemen: Menyetujui Pesanan Pembelian']
   approved_at timestamp [null]
@@ -235,6 +235,15 @@ Table purchase_order_items [headercolor: #1565C0] {
   subtotal decimal(18,2)
   created_at timestamp
   updated_at timestamp
+}
+
+// Biaya lainnya pada PO (mis. ongkos kirim, pengemasan), beberapa baris
+Table purchase_order_charges [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  purchase_order_id bigint [ref: > purchase_orders.id]
+  description varchar
+  amount decimal(18,2)
+  include_in_cost boolean [default: true, note: 'Ya = dialokasikan ke biaya persediaan (ongkos kirim, bongkar muat, asuransi); dibagi per item menurut porsi subtotal, lalu dibagi qty dipesan = tambahan biaya per unit pada lot saat penerimaan. Tidak = beban, dicatat saat faktur']
 }
 
 Table purchase_order_receipt_batches [headercolor: #1565C0] {
@@ -760,13 +769,16 @@ Table sales_return_items [headercolor: #6A1B9A] {
 // applied_overhead, overhead_variance, discrepancy_loss, material_variance, grni, purchase_price_variance,
 // vat_in, vat_out, accounts_payable, accounts_receivable, sales_revenue,
 // sales_return, cogs
+// Mengelola Akun Perusahaan (Akuntansi): akun bebas dibuat, diubah, dihapus oleh user.
+// normal_balance dihitung otomatis dari type, tidak bisa dipilih bebas. Flat per 2026-10-18 —
+// tanpa sub-akun (parent_id) untuk saat ini, bisa ditambahkan nanti tanpa mengubah data yang ada.
 Table accounts [headercolor: #EF6C00] {
   id bigint [pk, increment]
-  account_code varchar [unique]
+  account_code varchar [unique, note: 'Diketik sendiri oleh user, mengikuti skema penomoran akuntansi']
   account_name varchar
   type account_type
-  normal_balance normal_balance
-  parent_id bigint [ref: > accounts.id, null]
+  normal_balance normal_balance [note: 'Otomatis dari type: harta/beban = debit, kewajiban/modal/pendapatan = kredit']
+  system_role varchar [unique, null, note: 'Peran sistem (App\\Enums\\AccountSystemRole) — menautkan akun ini ke jurnal otomatis, mis. inventory_raw, cogs. Satu peran hanya boleh dipakai satu akun.']
   is_active boolean [default: true]
   created_at timestamp
   updated_at timestamp
@@ -800,16 +812,21 @@ Table overhead_period_closings [headercolor: #EF6C00] {
 
 // Mengelola Jurnal Umum: jurnal otomatis (dari fitur lain), manual,
 // penyesuaian, penutup, dan saldo awal (dibedakan lewat entry_type)
+// ✅ DIBANGUN (2026-10-18): App\Actions\Accounting\PostJournalEntryAction menolak entri jika
+// baris < 2, satu baris punya debit DAN kredit, atau total debit ≠ total kredit (bcmath).
+// Dipakai otomatis oleh 6 Action yang sudah ada (ReceivePurchaseOrderAction, PostMaterialIssueAction,
+// PostProductionResultAction, PostProductionReceiptAction, PostMaterialReturnAction,
+// PostSalesDeliveryAction, via App\Support\AccountResolver::forRole()) dan oleh halaman Jurnal Umum manual.
 Table journal_entries [headercolor: #EF6C00] {
   id bigint [pk, increment]
   journal_number varchar [unique]
   entry_date date
-  description text
+  description varchar
   entry_type journal_entry_type
-  source_type varchar [null, note: 'Polimorfik: production_result, production_receipt, purchase_invoice, dst.; null untuk jurnal manual, penyesuaian, penutup, dan saldo awal']
+  source_type varchar [null, note: 'Polimorfik: purchase_order_receipt, material_issue, production_result, production_receipt, material_return, sales_delivery; null untuk jurnal manual, penyesuaian, penutup, dan saldo awal']
   source_id bigint [null]
   status journal_status [default: 'posted']
-  reversal_of_id bigint [ref: > journal_entries.id, null, note: 'Koreksi dilakukan dengan jurnal balik, bukan mengubah jurnal']
+  reversal_of_id bigint [ref: > journal_entries.id, null, note: 'Koreksi dilakukan dengan jurnal balik (App\\Actions\\Accounting\\ReverseJournalEntryAction), bukan mengubah jurnal']
   created_by bigint [ref: > users.id]
   created_at timestamp
 }
@@ -821,7 +838,6 @@ Table journal_entry_lines [headercolor: #EF6C00] {
   account_id bigint [ref: > accounts.id]
   debit decimal(18,2) [default: 0]
   credit decimal(18,2) [default: 0]
-  memo varchar [null]
 }
 
 // Aturan: 1 faktur = 1 penerimaan (satu batch penerimaan).
@@ -909,6 +925,7 @@ TableGroup Pembelian {
   product_supplier
   purchase_orders
   purchase_order_items
+  purchase_order_charges
   purchase_order_receipt_batches
   purchase_order_receipts
   purchase_returns

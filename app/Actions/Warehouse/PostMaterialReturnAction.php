@@ -2,14 +2,18 @@
 
 namespace App\Actions\Warehouse;
 
+use App\Actions\Accounting\PostJournalEntryAction;
 use App\Actions\Inventory\CreateStockMovementAction;
 use App\DTO\Inventory\CreateStockMovementData;
+use App\Enums\AccountSystemRole;
 use App\Enums\Direction;
 use App\Enums\DocumentStatus;
+use App\Enums\JournalEntryType;
 use App\Enums\StockMovementType;
 use App\Models\InventoryLot;
 use App\Models\MaterialReturn;
 use App\Models\ProductionResult;
+use App\Support\AccountResolver;
 use Illuminate\Support\Facades\DB;
 
 class PostMaterialReturnAction
@@ -74,6 +78,31 @@ class PostMaterialReturnAction
             $return->received_by = $userId;
             $return->received_at = now();
             $return->transitionTo(DocumentStatus::Posted);
+
+            $postedItems = $return->items()->get();
+            $totalReturned = $postedItems->reduce(fn (string $carry, $item) => bcadd($carry, (string) $item->total_cost, 2), '0');
+            $netVariance = $postedItems->reduce(fn (string $carry, $item) => bcadd($carry, (string) $item->variance_value, 2), '0');
+
+            $journalLines = [
+                ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryRaw)->id, 'debit' => $totalReturned, 'credit' => '0'],
+                ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => '0', 'credit' => $totalReturned],
+            ];
+            if (bccomp($netVariance, '0', 2) > 0) {
+                $journalLines[] = ['account_id' => AccountResolver::forRole(AccountSystemRole::MaterialVariance)->id, 'debit' => $netVariance, 'credit' => '0'];
+                $journalLines[] = ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => '0', 'credit' => $netVariance];
+            } elseif (bccomp($netVariance, '0', 2) < 0) {
+                $journalLines[] = ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => bcmul($netVariance, '-1', 2), 'credit' => '0'];
+                $journalLines[] = ['account_id' => AccountResolver::forRole(AccountSystemRole::MaterialVariance)->id, 'debit' => '0', 'credit' => bcmul($netVariance, '-1', 2)];
+            }
+
+            app(PostJournalEntryAction::class)->handle(
+                lines: $journalLines,
+                type: JournalEntryType::Auto,
+                description: __('Material return :number', ['number' => $return->return_number]),
+                userId: $userId,
+                sourceType: 'material_return',
+                sourceId: $return->id,
+            );
 
             return $return->load('items');
         });

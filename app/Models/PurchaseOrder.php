@@ -66,6 +66,11 @@ class PurchaseOrder extends Model
         return $this->hasMany(PurchaseOrderItem::class);
     }
 
+    public function charges(): HasMany
+    {
+        return $this->hasMany(PurchaseOrderCharge::class);
+    }
+
     public function purchaseOrderReceiptBatches(): HasMany
     {   
         return $this->hasMany(PurchaseOrderReceiptBatch::class);
@@ -87,8 +92,13 @@ class PurchaseOrder extends Model
 
     public function recalculateTotal(): void
     {
-        $this->total_amount = $this->items()->sum('subtotal');
+        $this->total_amount = bcadd((string) $this->items()->sum('subtotal'), (string) $this->charges()->sum('amount'), 2);
         $this->save();
+    }
+
+    public function chargesTotal(): string
+    {
+        return $this->charges->reduce(fn (string $carry, PurchaseOrderCharge $charge) => bcadd($carry, (string) $charge->amount, 2), '0');
     }
 
     public function ensureIsEditable(): void

@@ -21,7 +21,7 @@ Route::middleware(['auth'])->group(function () {
         ->name('accounting.dashboard')
         ->middleware('dashboard.access:accounting');
 
-    Route::view('/production/dashboard', 'dashboards.placeholder')
+    Route::livewire('/production/dashboard', 'pages::production.dashboard')
         ->name('production.dashboard')
         ->middleware('dashboard.access:production');
 
@@ -86,6 +86,22 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/production/results/{productionResult}', 'pages::production.results.show')
         ->name('production.results.show');
+
+    Route::livewire('/production/reports', 'pages::production.reports.index')
+        ->name('production.reports.index');
+
+    Route::livewire('/production/reports/cost', 'pages::production.reports.cost')
+        ->name('production.reports.cost');
+
+    Route::get('/production/reports/cost/export/{format}', \App\Http\Controllers\Production\ExportProductionCostController::class)
+        ->name('production.reports.cost.export');
+
+    Route::livewire('/production/reports/inventory', 'pages::production.reports.inventory')
+        ->name('production.reports.inventory');
+
+    Route::get('/production/reports/inventory/export/{format}', \App\Http\Controllers\Production\ExportInventoryController::class)
+        ->name('production.reports.inventory.export');
+
 
     Route::livewire('/warehouse/outbound/material-issues', 'pages::warehouse.outbound.material-issues.list')
         ->name('warehouse.outbound.material-issues.list');
@@ -176,6 +192,16 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/accounting/overhead-rates', 'pages::accounting.overhead-rates.list')
         ->name('accounting.overhead-rates.list');
+
+    Route::livewire('/accounting/accounts', 'pages::accounting.accounts.list')
+        ->name('accounting.accounts.list');
+
+    Route::livewire('/accounting/journal', 'pages::accounting.journal.list')
+        ->name('accounting.journal.list');
+    Route::livewire('/accounting/journal/create', 'pages::accounting.journal.create')
+        ->name('accounting.journal.create');
+    Route::livewire('/accounting/journal/{journalEntry}', 'pages::accounting.journal.show')
+        ->name('accounting.journal.show');
 
 });
 

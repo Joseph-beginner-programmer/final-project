@@ -56,4 +56,28 @@ class PurchaseOrderItem extends Model
     {
         return bccomp((string) $this->quantity_received, (string) $this->quantity_ordered, 2) >= 0;
     }
+
+    public function chargeShare(): string
+    {
+        $po = $this->purchaseOrder;
+        $capitalizedCharges = (string) $po->charges()->where('include_in_cost', true)->sum('amount');
+        $itemsSubtotal = (string) $po->items()->sum('subtotal');
+
+        if (bccomp($capitalizedCharges, '0', 2) <= 0 || bccomp($itemsSubtotal, '0', 2) <= 0) {
+            return '0';
+        }
+
+        return bcdiv(bcmul($capitalizedCharges, (string) $this->subtotal, 6), $itemsSubtotal, 6);
+    }
+
+    public function landedUnitCost(): string
+    {
+        $unitPrice = (string) $this->unit_price;
+
+        if (bccomp((string) $this->quantity_ordered, '0', 2) <= 0) {
+            return $unitPrice;
+        }
+
+        return bcadd($unitPrice, bcdiv($this->chargeShare(), (string) $this->quantity_ordered, 6), 6);
+    }
 }

@@ -25,6 +25,10 @@ new #[Title('Create Purchase Order')] class extends Component {
 
     public array $items = [];
 
+    public array $charges = [];
+
+    public string $activeTab = 'items';
+
     public function mount(): void
     {
         Gate::authorize('create', PurchaseOrder::class);
@@ -47,6 +51,19 @@ new #[Title('Create Purchase Order')] class extends Component {
         unset($this->items[$index]);
 
         $this->items = array_values($this->items);
+    }
+
+    public function addChargeRow(): void
+    {
+        $this->charges[] = ['description' => '', 'amount' => '', 'include_in_cost' => true];
+        $this->activeTab = 'charges';
+    }
+
+    public function removeChargeRow(int $index): void
+    {
+        unset($this->charges[$index]);
+
+        $this->charges = array_values($this->charges);
     }
 
     public function updatedSupplierId(): void
@@ -120,12 +137,27 @@ new #[Title('Create Purchase Order')] class extends Component {
     }
 
     #[Computed]
-    public function estimatedTotal(): string
+    public function itemsSubtotal(): string
     {
         return collect($this->items)->reduce(
             fn (string $carry, array $item) => bcadd($carry, $this->rowSubtotal($item), 2),
             '0'
         );
+    }
+
+    #[Computed]
+    public function chargesTotal(): string
+    {
+        return collect($this->charges)->reduce(
+            fn (string $carry, array $charge) => bcadd($carry, filled($charge['amount'] ?? null) ? (string) $charge['amount'] : '0', 2),
+            '0'
+        );
+    }
+
+    #[Computed]
+    public function estimatedTotal(): string
+    {
+        return bcadd($this->itemsSubtotal, $this->chargesTotal, 2);
     }
 
     #[Computed]
@@ -174,6 +206,8 @@ new #[Title('Create Purchase Order')] class extends Component {
             'items.*.product_id' => ['required', 'exists:products,id'],
             'items.*.quantity_ordered' => ['required', 'numeric', 'gt:0'],
             'items.*.unit_price' => ['required', 'numeric', 'gt:0'],
+            'charges.*.description' => ['required', 'string', 'max:255'],
+            'charges.*.amount' => ['required', 'numeric', 'gt:0'],
         ];
     }
 
@@ -186,6 +220,8 @@ new #[Title('Create Purchase Order')] class extends Component {
             'items.*.product_id' => __('Product'),
             'items.*.quantity_ordered' => __('Qty'),
             'items.*.unit_price' => __('Unit Price'),
+            'charges.*.description' => __('Description'),
+            'charges.*.amount' => __('Amount'),
         ];
     }
 
@@ -196,8 +232,16 @@ new #[Title('Create Purchase Order')] class extends Component {
         $this->items = array_values(array_filter($this->items, function (array $item): bool {
             return filled($item['product_id']) || filled($item['quantity_ordered']) || filled($item['unit_price']);
         }));
+        $this->charges = array_values(array_filter($this->charges, fn (array $row) => filled($row['description']) || filled($row['amount'])));
 
-        $this->validate();
+        try {
+            $this->validate();
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            $keys = array_keys($e->errors());
+            $chargeErrorsOnly = $keys !== [] && collect($keys)->every(fn ($key) => str_starts_with($key, 'charges.'));
+            $this->activeTab = $chargeErrorsOnly ? 'charges' : 'items';
+            throw $e;
+        }
 
         $data = new CreatePurchaseOrderData(
             supplierId: $this->supplierId,
@@ -205,6 +249,11 @@ new #[Title('Create Purchase Order')] class extends Component {
             expectedDeliveryDate: $this->expectedDeliveryDate,
             createdBy: Auth::id(),
             items: $this->items,
+            charges: collect($this->charges)->map(fn (array $row) => [
+                'description' => (string) $row['description'],
+                'amount' => (string) $row['amount'],
+                'include_in_cost' => (bool) ($row['include_in_cost'] ?? true),
+            ])->all(),
         );
 
         try {
@@ -345,8 +394,9 @@ new #[Title('Create Purchase Order')] class extends Component {
                     </div>
                 </section>
 
-                <section class="motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
-                    <div class="flex items-center justify-between pb-2.5 mb-5 border-b border-zinc-200 dark:border-white/10">
+                <section class="motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;" x-data="{ tab: $wire.entangle('activeTab') }">
+                    @php($chargeErrors = collect($errors->keys())->contains(fn ($key) => str_starts_with($key, 'charges')))
+                    <div class="flex items-end justify-between gap-3 pb-2.5 mb-5 border-b border-zinc-200 dark:border-white/10">
                         <div class="flex items-center gap-2.5">
                             <span class="flex items-center justify-center size-5">
                                 @if ($this->isItemsStepComplete())
@@ -357,18 +407,21 @@ new #[Title('Create Purchase Order')] class extends Component {
                                     <span wire:key="step-2-pending" wire:transition class="flex items-center justify-center size-5 rounded-sm bg-accent/10 dark:bg-accent/20 font-data text-[10px] font-bold text-accent">2</span>
                                 @endif
                             </span>
-                            <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300">
-                                {{ __('Line Items') }}
-                                <span class="text-zinc-400 dark:text-zinc-500 font-normal normal-case tracking-normal">
-                                    ({{ str_pad((string) count($items), 2, '0', STR_PAD_LEFT) }})
-                                </span>
-                            </h2>
+                            <x-tab-bar :label="__('Order lines')" :tabs="[
+                                'items' => ['label' => __('Line Items'), 'count' => count($items)],
+                                'charges' => ['label' => __('Other charges'), 'count' => count($charges), 'error' => $chargeErrors],
+                            ]" />
                         </div>
 
-                        <flux:button size="sm" variant="ghost" icon="plus" wire:click="addItemRow" :disabled="!$supplierId" class="active:scale-[0.95]">
+                        <flux:button size="sm" variant="ghost" icon="plus" x-show="tab === 'items'" wire:click="addItemRow" :disabled="!$supplierId" class="active:scale-[0.95]">
                             {{ __('Add Row') }}
                         </flux:button>
+                        <flux:button size="sm" variant="ghost" icon="plus" x-show="tab === 'charges'" x-cloak wire:click="addChargeRow" class="active:scale-[0.95]">
+                            {{ __('Add charge') }}
+                        </flux:button>
                     </div>
+
+                    <div role="tabpanel" x-show="tab === 'items'">
 
                     <div wire:loading wire:target="supplierId" class="overflow-hidden rounded-md border border-zinc-200 dark:border-white/10">
                         <div class="animate-pulse motion-reduce:animate-none divide-y divide-zinc-100 dark:divide-white/5">
@@ -516,6 +569,44 @@ new #[Title('Create Purchase Order')] class extends Component {
                         @error('items') <flux:error class="mt-3" :message="$message" /> @enderror
                     @endif
                     </div>
+                    </div>
+
+                    <div role="tabpanel" x-show="tab === 'charges'" x-cloak>
+                        @if ($charges === [])
+                            <div class="flex flex-col items-center gap-3 rounded-md border border-dashed border-zinc-200 dark:border-white/10 py-10 text-center">
+                                <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('No other charges — add one for e.g. shipping or packing.') }}</p>
+                                <flux:button size="sm" variant="filled" icon="plus" wire:click="addChargeRow" class="active:scale-[0.95]">{{ __('Add charge') }}</flux:button>
+                            </div>
+                        @else
+                            <div class="rounded-md border border-zinc-200 dark:border-white/10">
+                                <div class="hidden sm:grid grid-cols-[minmax(0,1fr)_11rem_2rem] gap-x-3 px-3 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10 rounded-t-md">
+                                    <span>{{ __('Description') }}</span>
+                                    <span class="text-right">{{ __('Amount') }}</span>
+                                    <span></span>
+                                </div>
+                                @foreach ($charges as $index => $charge)
+                                    <div wire:key="charge-row-{{ $index }}" wire:transition class="grid grid-cols-[minmax(0,1fr)_2rem] sm:grid-cols-[minmax(0,1fr)_11rem_2rem] gap-x-3 gap-y-2 items-start px-3 py-3 border-b border-zinc-100 dark:border-white/5 last:border-0">
+                                        <div class="min-w-0">
+                                            <flux:input size="sm" wire:model="charges.{{ $index }}.description" :placeholder="__('e.g. Shipping, Packing')" :aria-label="__('Description')" />
+                                            @error("charges.$index.description") <flux:error class="mt-1" :message="$message" /> @enderror
+                                            <div class="mt-2"><flux:checkbox wire:model="charges.{{ $index }}.include_in_cost" :label="__('Include in inventory cost')" /></div>
+                                        </div>
+                                        <div class="col-span-2 row-start-2 sm:col-span-1 sm:row-start-1 sm:col-start-2">
+                                            <flux:input.group>
+                                                <flux:input.group.prefix class="px-2 text-xs">Rp</flux:input.group.prefix>
+                                                <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" input:class="text-right font-data tabular-nums" wire:model.live.debounce.400ms="charges.{{ $index }}.amount" :loading="false" :aria-label="__('Amount')" />
+                                            </flux:input.group>
+                                            @error("charges.$index.amount") <flux:error class="mt-1" :message="$message" /> @enderror
+                                        </div>
+                                        <div class="col-start-2 row-start-1 sm:col-start-3 flex justify-end">
+                                            <flux:button size="sm" variant="ghost" icon="trash" wire:click="removeChargeRow({{ $index }})" :aria-label="__('Remove')" class="text-zinc-400 hover:text-red-600 dark:hover:text-red-400 active:scale-[0.95]" />
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+                        @error('charges') <flux:error class="mt-3" :message="$message" /> @enderror
+                    </div>
                 </section>
             </div>
 
@@ -531,6 +622,12 @@ new #[Title('Create Purchase Order')] class extends Component {
                                 <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Line Items') }}</dt>
                                 <dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ str_pad((string) count($items), 2, '0', STR_PAD_LEFT) }}</dd>
                             </div>
+                            @if (bccomp($this->chargesTotal, '0', 2) > 0)
+                                <div class="flex items-center justify-between px-4 py-2.5">
+                                    <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Other charges') }}</dt>
+                                    <dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->formatRupiah($this->chargesTotal) }}</dd>
+                                </div>
+                            @endif
                             <div class="flex items-center justify-between px-4 py-2.5">
                                 <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Total Qty') }}</dt>
                                 <dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->formatQuantity($this->totalQuantity) }}</dd>

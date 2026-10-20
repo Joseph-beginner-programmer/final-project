@@ -2,14 +2,18 @@
 
 namespace App\Actions\Warehouse;
 
+use App\Actions\Accounting\PostJournalEntryAction;
 use App\Actions\Inventory\CreateStockMovementAction;
 use App\DTO\Inventory\CreateStockMovementData;
+use App\Enums\AccountSystemRole;
 use App\Enums\Direction;
 use App\Enums\DocumentStatus;
+use App\Enums\JournalEntryType;
 use App\Enums\StockMovementType;
 use App\Models\InventoryLot;
 use App\Models\ProductionReceipt;
 use App\Models\ProductionResult;
+use App\Support\AccountResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -63,6 +67,23 @@ class PostProductionReceiptAction
             $receipt->received_by = $userId;
             $receipt->received_at = now();
             $receipt->transitionTo(DocumentStatus::Posted);
+
+            $lines = [
+                ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryFinished)->id, 'debit' => $value, 'credit' => '0'],
+                ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => '0', 'credit' => (string) $result->total_cost],
+            ];
+            if (bccomp((string) $receipt->shortage_value, '0', 2) > 0) {
+                $lines[] = ['account_id' => AccountResolver::forRole(AccountSystemRole::ProductionLoss)->id, 'debit' => (string) $receipt->shortage_value, 'credit' => '0'];
+            }
+
+            app(PostJournalEntryAction::class)->handle(
+                lines: $lines,
+                type: JournalEntryType::Auto,
+                description: __('Production receipt :number', ['number' => $receipt->receipt_number]),
+                userId: $userId,
+                sourceType: 'production_receipt',
+                sourceId: $receipt->id,
+            );
 
             return $receipt->load('lot');
         });

@@ -107,6 +107,20 @@
     </table>
 
     <table class="totals" style="margin-top: 4px;">
+        @if ($purchaseOrder->charges->isNotEmpty())
+            <tr>
+                <td style="width: 65%;"></td>
+                <td>{{ __('Subtotal') }}</td>
+                <td class="right">{{ $rupiah($purchaseOrder->items->sum('subtotal')) }}</td>
+            </tr>
+            @foreach ($purchaseOrder->charges as $charge)
+                <tr>
+                    <td></td>
+                    <td class="muted">{{ $charge->description }}</td>
+                    <td class="right">{{ $rupiah($charge->amount) }}</td>
+                </tr>
+            @endforeach
+        @endif
         <tr class="grand">
             <td style="width: 65%;"></td>
             <td>{{ __('Total') }}</td>

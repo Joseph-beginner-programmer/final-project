@@ -2,16 +2,20 @@
 
 namespace App\Actions\Purchasing;
 
+use App\Actions\Accounting\PostJournalEntryAction;
 use App\Actions\Inventory\CreateStockMovementAction;
 use App\DTO\Inventory\CreateStockMovementData;
 use App\DTO\Purchasing\ReceivePurchaseOrderData;
+use App\Enums\AccountSystemRole;
 use App\Enums\Direction;
+use App\Enums\JournalEntryType;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\StockMovementType;
 use App\Exceptions\InvalidReceiptQuantityException;
 use App\Models\InventoryLot;
 use App\Models\PurchaseOrderItem;
 use App\Models\PurchaseOrderReceipt;
+use App\Support\AccountResolver;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -30,6 +34,8 @@ class ReceivePurchaseOrderAction
                 'purchase_order_receipt_batch_id' => $data->purchaseOrderReceiptBatchId
             ]);
 
+            $landedUnitCost = $poItem->landedUnitCost();
+
             $lot = InventoryLot::create([
                 'lot_number' => (string) Str::uuid(),
                 'product_id' => $poItem->product->id,
@@ -37,8 +43,8 @@ class ReceivePurchaseOrderAction
                 'source_id' => $receipt->id,
                 'quantity_initial' => $data->quantityReceived,
                 'quantity_remaining' => $data->quantityReceived,
-                'unit_cost' => $poItem->unit_price,
-                'value_remaining' => bcmul($data->quantityReceived, (string) $poItem->unit_price, 2),
+                'unit_cost' => bcadd($landedUnitCost, '0.005', 2),
+                'value_remaining' => bcadd(bcmul($data->quantityReceived, $landedUnitCost, 6), '0.005', 2),
                 'received_at' => now(),
             ]);
             $lot->lot_number = sprintf('LOT-%s-%06d', $lot->received_at->format('Y'), $lot->id);
@@ -63,6 +69,18 @@ class ReceivePurchaseOrderAction
                 referenceId: $receipt->id,
                 referenceType: 'purchase_order_receipt',
             ));
+
+            app(PostJournalEntryAction::class)->handle(
+                lines: [
+                    ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryRaw)->id, 'debit' => (string) $lot->value_remaining, 'credit' => '0'],
+                    ['account_id' => AccountResolver::forRole(AccountSystemRole::GoodsReceivedNotInvoiced)->id, 'debit' => '0', 'credit' => (string) $lot->value_remaining],
+                ],
+                type: JournalEntryType::Auto,
+                description: __('Purchase receipt for :po — :product', ['po' => $poItem->purchaseOrder->po_number, 'product' => $poItem->product->product_name]),
+                userId: $data->receivedBy,
+                sourceType: 'purchase_order_receipt',
+                sourceId: $receipt->id,
+            );
 
             return $receipt;
         });

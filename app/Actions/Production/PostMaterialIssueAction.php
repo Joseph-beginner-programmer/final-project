@@ -2,14 +2,18 @@
 
 namespace App\Actions\Production;
 
+use App\Actions\Accounting\PostJournalEntryAction;
 use App\Actions\Inventory\DrawStockFifoAction;
+use App\Enums\AccountSystemRole;
 use App\Enums\DocumentStatus;
+use App\Enums\JournalEntryType;
 use App\Enums\StockMovementType;
 use App\Enums\WorkOrderStatus;
 use App\Exceptions\InsufficientStockException;
 use App\Exceptions\WorkOrderNotIssuableException;
 use App\Models\MaterialIssue;
 use App\Models\WorkOrder;
+use App\Support\AccountResolver;
 use Illuminate\Support\Facades\DB;
 
 class PostMaterialIssueAction
@@ -63,6 +67,20 @@ class PostMaterialIssueAction
             if ($workOrder->status === WorkOrderStatus::Released) {
                 $workOrder->transitionTo(WorkOrderStatus::InProgress);
             }
+
+            $totalCost = $items->reduce(fn (string $carry, $item) => bcadd($carry, (string) $item->total_cost, 2), '0');
+
+            app(PostJournalEntryAction::class)->handle(
+                lines: [
+                    ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => $totalCost, 'credit' => '0'],
+                    ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryRaw)->id, 'debit' => '0', 'credit' => $totalCost],
+                ],
+                type: JournalEntryType::Auto,
+                description: __('Material issue :number', ['number' => $issue->issue_number]),
+                userId: $userId,
+                sourceType: 'material_issue',
+                sourceId: $issue->id,
+            );
 
             return $issue->load('items.product');
         });
