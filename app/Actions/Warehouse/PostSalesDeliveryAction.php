@@ -12,6 +12,7 @@ use App\Exceptions\InsufficientStockException;
 use App\Models\SalesDelivery;
 use App\Models\SalesOrder;
 use App\Support\AccountResolver;
+use App\Support\InventoryAccounts;
 use Illuminate\Support\Facades\DB;
 
 class PostSalesDeliveryAction
@@ -70,10 +71,11 @@ class PostSalesDeliveryAction
             $totalCogs = $items->reduce(fn (string $carry, $item) => bcadd($carry, (string) $item->cogs_total, 2), '0');
 
             app(PostJournalEntryAction::class)->handle(
-                lines: [
-                    ['account_id' => AccountResolver::forRole(AccountSystemRole::Cogs)->id, 'debit' => $totalCogs, 'credit' => '0'],
-                    ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryFinished)->id, 'debit' => '0', 'credit' => $totalCogs],
-                ],
+                lines: array_map(fn (array $line) => [
+                    'account_id' => $line['account_id'] ?? AccountResolver::forRole($line['role'])->id,
+                    'debit' => $line['debit'],
+                    'credit' => $line['credit'],
+                ], self::journalPlan($items->map(fn ($item) => ['type' => $item->product->type, 'amount' => (string) $item->cogs_total]))),
                 type: JournalEntryType::Auto,
                 description: __('Sales delivery :number', ['number' => $delivery->delivery_number]),
                 userId: $userId,
@@ -83,5 +85,35 @@ class PostSalesDeliveryAction
 
             return $delivery->load('items.product');
         });
+    }
+
+    /**
+     * @return list<array{role: ?AccountSystemRole, account_id: ?int, debit: string, credit: string}>
+     */
+    public function preview(SalesDelivery $delivery): array
+    {
+        $lotsByProduct = [];
+        $rows = $delivery->items()->with('product')->get()->map(function ($item) use (&$lotsByProduct) {
+            $lotsByProduct[$item->product_id] ??= $this->fifo->availableLots($item->product_id);
+
+            return ['type' => $item->product->type, 'amount' => $this->fifo->estimate($lotsByProduct[$item->product_id], (string) $item->quantity)];
+        });
+
+        return self::journalPlan($rows);
+    }
+
+    /**
+     * @param  iterable<array{type: \App\Enums\ProductType, amount: string}>  $rows
+     * @return list<array{role: ?AccountSystemRole, account_id: ?int, debit: string, credit: string}>
+     */
+    public static function journalPlan(iterable $rows): array
+    {
+        $grouped = InventoryAccounts::group($rows);
+        $total = array_reduce($grouped, fn (string $carry, array $row) => bcadd($carry, $row['amount'], 2), '0');
+
+        return [
+            ['role' => AccountSystemRole::Cogs, 'account_id' => null, 'debit' => $total, 'credit' => '0'],
+            ...array_map(fn (array $row) => ['role' => $row['role'], 'account_id' => null, 'debit' => '0', 'credit' => $row['amount']], array_values($grouped)),
+        ];
     }
 }

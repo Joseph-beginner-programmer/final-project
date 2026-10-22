@@ -40,4 +40,22 @@ class PurchaseOrderReceipt extends Model
     {
         return $this->morphMany(StockMovement::class, 'reference');
     }
+
+    public function receivedValue(): string
+    {
+        $journal = JournalEntry::query()
+            ->where('source_type', 'purchase_order_receipt')
+            ->where('source_id', $this->id)
+            ->whereNull('reversal_of_id')
+            ->with('lines')
+            ->first();
+
+        if ($journal) {
+            return $journal->totalDebit();
+        }
+
+        $lot = $this->inventoryLot;
+
+        return $lot ? bcmul((string) $lot->quantity_initial, (string) $lot->unit_cost, 2) : '0';
+    }
 }

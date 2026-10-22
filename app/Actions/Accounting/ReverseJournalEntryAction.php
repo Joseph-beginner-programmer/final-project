@@ -13,9 +13,9 @@ class ReverseJournalEntryAction
         private PostJournalEntryAction $postJournalEntry,
     ) {}
 
-    public function handle(JournalEntry $entry, int $userId): JournalEntry
+    public function handle(JournalEntry $entry, int $userId, ?string $entryDate = null): JournalEntry
     {
-        return DB::transaction(function () use ($entry, $userId) {
+        return DB::transaction(function () use ($entry, $userId, $entryDate) {
             $entry->transitionTo(JournalStatus::Reversed);
 
             $lines = $entry->lines->map(fn ($line) => [
@@ -31,6 +31,7 @@ class ReverseJournalEntryAction
                 userId: $userId,
                 sourceType: $entry->source_type,
                 sourceId: $entry->source_id,
+                entryDate: $entryDate,
             );
 
             $reversal->reversal_of_id = $entry->id;

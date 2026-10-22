@@ -22,6 +22,14 @@ class DrawStockFifoAction
         return InventoryLot::availableFifo($productId)->lockForUpdate()->get();
     }
 
+    /**
+     * @return Collection<int, InventoryLot>
+     */
+    public function availableLots(int $productId): Collection
+    {
+        return InventoryLot::availableFifo($productId)->get();
+    }
+
     public function available(Collection $lots): string
     {
         return $lots->reduce(fn (string $carry, InventoryLot $lot) => bcadd($carry, (string) $lot->quantity_remaining, 2), '0');
@@ -36,25 +44,10 @@ class DrawStockFifoAction
         string $referenceType,
         int $referenceId,
     ): string {
-        $stillNeeded = $quantity;
         $total = '0';
 
-        foreach ($lots as $lot) {
-            if (bccomp($stillNeeded, '0', 2) <= 0) {
-                break;
-            }
-
-            $remaining = (string) $lot->quantity_remaining;
-            if (bccomp($remaining, '0', 2) <= 0) {
-                continue;
-            }
-
-            $take = bccomp($remaining, $stillNeeded, 2) <= 0 ? $remaining : $stillNeeded;
-            $emptiesLot = bccomp($take, $remaining, 2) === 0;
-
-            $value = $emptiesLot ? (string) $lot->value_remaining : bcmul($take, (string) $lot->unit_cost, 2);
-
-            $lot->quantity_remaining = bcsub($remaining, $take, 2);
+        foreach (self::slices($lots, $quantity) as [$lot, $take, $value]) {
+            $lot->quantity_remaining = bcsub((string) $lot->quantity_remaining, $take, 2);
             $lot->value_remaining = bcsub((string) $lot->value_remaining, $value, 2);
             $lot->save();
 
@@ -72,9 +65,53 @@ class DrawStockFifoAction
             ));
 
             $total = bcadd($total, $value, 2);
-            $stillNeeded = bcsub($stillNeeded, $take, 2);
         }
 
         return $total;
+    }
+
+    /**
+     * @param  Collection<int, InventoryLot>  $lots
+     */
+    public function estimate(Collection $lots, string $quantity): string
+    {
+        $total = '0';
+
+        foreach (self::slices($lots, $quantity) as [$lot, $take, $value]) {
+            $lot->quantity_remaining = bcsub((string) $lot->quantity_remaining, $take, 2);
+            $lot->value_remaining = bcsub((string) $lot->value_remaining, $value, 2);
+            $total = bcadd($total, $value, 2);
+        }
+
+        return $total;
+    }
+
+    /**
+     * @param  Collection<int, InventoryLot>  $lots
+     * @return list<array{0: InventoryLot, 1: string, 2: string}>
+     */
+    public static function slices(Collection $lots, string $quantity): array
+    {
+        $stillNeeded = $quantity;
+        $slices = [];
+
+        foreach ($lots as $lot) {
+            if (bccomp($stillNeeded, '0', 2) <= 0) {
+                break;
+            }
+
+            $remaining = (string) $lot->quantity_remaining;
+            if (bccomp($remaining, '0', 2) <= 0) {
+                continue;
+            }
+
+            $take = bccomp($remaining, $stillNeeded, 2) <= 0 ? $remaining : $stillNeeded;
+            $value = bccomp($take, $remaining, 2) === 0 ? (string) $lot->value_remaining : bcmul($take, (string) $lot->unit_cost, 2);
+
+            $slices[] = [$lot, $take, $value];
+            $stillNeeded = bcsub($stillNeeded, $take, 2);
+        }
+
+        return $slices;
     }
 }

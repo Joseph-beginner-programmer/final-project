@@ -27,6 +27,19 @@ new #[Title('Production Receipt')] class extends Component {
         $this->productionReceipt->load(['product', 'productionResult.workOrder', 'lot', 'createdBy', 'receivedBy']);
     }
 
+    public function journalPlan(): ?array
+    {
+        if ($this->productionReceipt->status->value !== 'draft') {
+            return null;
+        }
+
+        try {
+            return app(\App\Actions\Warehouse\PostProductionReceiptAction::class)->preview($this->productionReceipt);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     public function post(): void
     {
         Gate::authorize('post', $this->productionReceipt);
@@ -196,7 +209,7 @@ new #[Title('Production Receipt')] class extends Component {
     </div>
 
     @can('post', $receipt)
-        <flux:modal name="post-receipt" focusable class="max-w-lg">
+        <flux:modal name="post-receipt" focusable class="max-w-xl">
             <div class="space-y-6">
                 <div>
                     <flux:heading size="lg">{{ __('Post this production receipt?') }}</flux:heading>
@@ -207,6 +220,7 @@ new #[Title('Production Receipt')] class extends Component {
                         {{ __(':count :unit fewer than reported will be recorded as a shortage.', ['count' => $this->formatQuantity($shortage), 'unit' => $unit]) }}
                     </p>
                 @endif
+                <x-journal-confirm :plan="$this->journalPlan()" :hide-amounts="! \Illuminate\Support\Facades\Gate::allows('costs.view')" />
                 <div class="flex justify-end gap-2">
                     <flux:modal.close><flux:button variant="filled" class="active:scale-[0.95]">{{ __('Cancel') }}</flux:button></flux:modal.close>
                     <flux:button variant="primary" wire:click="post" wire:loading.attr="disabled" wire:target="post" class="active:scale-[0.95]">{{ __('Post') }}</flux:button>

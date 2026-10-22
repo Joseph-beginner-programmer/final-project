@@ -87,6 +87,21 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/production/results/{productionResult}', 'pages::production.results.show')
         ->name('production.results.show');
 
+    Route::livewire('/accounting/overhead', 'pages::accounting.overhead.index')
+        ->name('accounting.overhead.index');
+
+    Route::livewire('/accounting/purchase-invoices', 'pages::accounting.purchase-invoices.list')
+        ->name('accounting.purchase-invoices.list');
+
+    Route::livewire('/accounting/purchase-invoices/create/{batch}', 'pages::accounting.purchase-invoices.form')
+        ->name('accounting.purchase-invoices.create');
+
+    Route::livewire('/accounting/purchase-invoices/{purchaseInvoice}/edit', 'pages::accounting.purchase-invoices.form')
+        ->name('accounting.purchase-invoices.edit');
+
+    Route::livewire('/accounting/purchase-invoices/{purchaseInvoice}', 'pages::accounting.purchase-invoices.show')
+        ->name('accounting.purchase-invoices.show');
+
     Route::livewire('/production/reports', 'pages::production.reports.index')
         ->name('production.reports.index');
 

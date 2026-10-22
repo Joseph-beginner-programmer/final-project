@@ -13,6 +13,15 @@ enum ProductType: string
         return $this === self::RawMaterial;
     }
 
+    public function inventoryRole(): AccountSystemRole
+    {
+        return match ($this) {
+            self::RawMaterial => AccountSystemRole::InventoryRaw,
+            self::Wip => AccountSystemRole::InventorySemiFinished,
+            self::FinishedGoods => AccountSystemRole::InventoryFinished,
+        };
+    }
+
     public function label(): string
     {
         return __(match ($this) {

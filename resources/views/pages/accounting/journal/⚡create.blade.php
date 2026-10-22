@@ -119,6 +119,29 @@ new #[Title('New Journal Entry')] class extends Component {
         ];
     }
 
+    public function confirmPost(): void
+    {
+        Gate::authorize('create', JournalEntry::class);
+        $this->lines = array_values(array_filter($this->lines, fn (array $line) => filled($line['account_id']) || filled($line['debit']) || filled($line['credit'])));
+        $this->validate();
+        $this->modal('confirm-entry')->show();
+    }
+
+    public function entryPlan(): array
+    {
+        return collect($this->lines)
+            ->filter(fn (array $line) => filled($line['account_id']))
+            ->map(fn (array $line) => [
+                'role' => null,
+                'account_id' => (int) $line['account_id'],
+                'debit' => is_numeric($line['debit']) ? bcadd((string) $line['debit'], '0', 2) : '0',
+                'credit' => is_numeric($line['credit']) ? bcadd((string) $line['credit'], '0', 2) : '0',
+            ])
+            ->filter(fn (array $line) => bccomp($line['debit'], '0', 2) > 0 || bccomp($line['credit'], '0', 2) > 0)
+            ->values()
+            ->all();
+    }
+
     public function save(): void
     {
         Gate::authorize('create', JournalEntry::class);
@@ -190,7 +213,7 @@ new #[Title('New Journal Entry')] class extends Component {
             <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
             <p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1.5">{{ __('Posts immediately — corrections are made with a reversing entry, not an edit.') }}</p>
         </div>
-        <flux:button variant="primary" wire:click="save" wire:loading.attr="disabled" wire:target="save" :disabled="! $this->isBalanced">
+        <flux:button variant="primary" wire:click="confirmPost" wire:loading.attr="disabled" wire:target="confirmPost" :disabled="! $this->isBalanced">
             {{ __('Post Entry') }}
         </flux:button>
     </div>
@@ -262,4 +285,18 @@ new #[Title('New Journal Entry')] class extends Component {
             @endif
         </div>
     </div>
+
+    <flux:modal name="confirm-entry" class="max-w-xl">
+        <div class="space-y-4">
+            <div>
+                <flux:heading size="lg">{{ __('Post this journal entry?') }}</flux:heading>
+                <flux:subheading>{{ __('It posts immediately and cannot be edited — a mistake is corrected with a reversing entry.') }}</flux:subheading>
+            </div>
+            <x-journal-confirm :plan="$this->entryPlan()" />
+            <div class="flex justify-end gap-2">
+                <flux:modal.close><flux:button variant="filled">{{ __('Back') }}</flux:button></flux:modal.close>
+                <flux:button variant="primary" wire:click="save" wire:loading.attr="disabled" wire:target="save">{{ __('Post Entry') }}</flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </section>

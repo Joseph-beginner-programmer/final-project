@@ -119,6 +119,7 @@ Enum journal_status {
 }
 
 Enum invoice_status {
+  draft
   unpaid
   partially_paid
   paid
@@ -388,7 +389,7 @@ Table overhead_rates [headercolor: #C62828] {
   updated_at timestamp
 }
 
-// Rincian taksiran overhead bulanan yang membentuk satu tarif (kategori yang sama dengan overhead_expenses)
+// Rincian taksiran overhead bulanan yang membentuk satu tarif (kategori yang sama dengan akun BOP sesungguhnya)
 Table overhead_rate_components [headercolor: #C62828] {
   id bigint [pk, increment]
   overhead_rate_id bigint [ref: > overhead_rates.id]
@@ -767,7 +768,7 @@ Table sales_return_items [headercolor: #6A1B9A] {
 // (misalnya config/accounts.php): raw_material_inventory, wip_inventory,
 // finished_goods_inventory, wip_in_transit, fg_in_transit, applied_labor,
 // applied_overhead, overhead_variance, discrepancy_loss, material_variance, grni, purchase_price_variance,
-// vat_in, vat_out, accounts_payable, accounts_receivable, sales_revenue,
+// vat_out, accounts_receivable, sales_revenue, (vat_in, accounts_payable, purchase_price_variance: dibuat 2026-10-21)
 // sales_return, cogs
 // Mengelola Akun Perusahaan (Akuntansi): akun bebas dibuat, diubah, dihapus oleh user.
 // normal_balance dihitung otomatis dari type, tidak bisa dipilih bebas. Flat per 2026-10-18 —
@@ -784,31 +785,21 @@ Table accounts [headercolor: #EF6C00] {
   updated_at timestamp
 }
 
-// Akuntansi: Mengelola Biaya Overhead — BOP aktual dicatat per bulan untuk seluruh pabrik
-// (listrik satu meteran, tidak bisa dipisah per pusat kerja; penyusutan diinput manual).
-Table overhead_expenses [headercolor: #EF6C00] {
-  id bigint [pk, increment]
-  period date [note: 'Hari pertama bulan, mis. 2026-10-01']
-  category overhead_category [note: 'Kategori yang sama dipakai untuk menaksir tarif dan untuk mencatat biaya aktual, agar bisa dibandingkan per kategori']
-  description varchar [null]
-  amount decimal(18,2)
-  created_by bigint [ref: > users.id]
-  created_at timestamp
-  updated_at timestamp
-}
-
-// Penutupan BOP per bulan: BOP dibebankan (jumlah production_results.overhead_cost) vs BOP aktual.
-// Selisih kurang/lebih dibebankan ditutup dengan jurnal (Selisih BOP).
-Table overhead_period_closings [headercolor: #EF6C00] {
-  id bigint [pk, increment]
-  period date [unique]
-  applied_total decimal(18,2)
-  actual_total decimal(18,2)
-  variance decimal(18,2) [note: 'actual - applied; positif = kurang dibebankan (underapplied). Seluruh selisih dibebankan ke HPP bulan itu (keputusan 2026-10-15), tidak dialokasikan ke persediaan; dokumen/lot tidak diubah']
-  journal_entry_id bigint [ref: - journal_entries.id, null]
-  closed_by bigint [ref: > users.id]
-  closed_at timestamp
-}
+// Akuntansi: Mengelola Biaya Overhead Aktual + Penutupan BOP per bulan — ✅ DIBANGUN 2026-10-23
+// TANPA TABEL BARU (keputusan user: "jangan tambah tabel jika bisa"). Rancangan lama overhead_expenses
+// dan overhead_period_closings dihapus dari ERD; datanya disimpan di journal_entries / journal_entry_lines:
+//   - Kategori = akun BOP sesungguhnya, dipetakan lewat accounts.system_role (overhead_electricity,
+//     overhead_machine_depreciation, overhead_mold_depreciation, overhead_maintenance, overhead_other),
+//     sama dengan Enum overhead_category yang dipakai menaksir tarif.
+//   - Satu tagihan = satu journal_entries: source_type = 'overhead_expense', source_id = periode YYYYMM,
+//     entry_date = hari terakhir periode (atau hari ini jika periode = bulan berjalan);
+//     Dr BOP [kategori] / Cr akun pilihan (Kas/Bank, Utang, Akumulasi Penyusutan). Dibatalkan = jurnal pembalik
+//     bertanggal sama (hanya selama periode belum ditutup).
+//   - Penutupan = satu journal_entries entry_type = 'closing', source_type = 'overhead_closing', source_id = YYYYMM,
+//     entry_date = hari terakhir periode: Dr BOP Dibebankan (saldo bulan itu) / Cr tiap akun BOP sesungguhnya,
+//     selisih (sesungguhnya - dibebankan) ke Harga Pokok Penjualan (keputusan 2026-10-15). Periode yang sudah
+//     ditutup terkunci: tagihan terlambat dicatat di bulan berikutnya yang masih terbuka.
+//   - Anggaran per kategori = jumlah overhead_rate_components dari tarif yang berlaku tiap pusat kerja.
 
 // Mengelola Jurnal Umum: jurnal otomatis (dari fitur lain), manual,
 // penyesuaian, penutup, dan saldo awal (dibedakan lewat entry_type)
@@ -840,42 +831,80 @@ Table journal_entry_lines [headercolor: #EF6C00] {
   credit decimal(18,2) [default: 0]
 }
 
-// Aturan: 1 faktur = 1 penerimaan (satu batch penerimaan).
-// Jurnal saat faktur:  Dr Barang Diterima Belum Difakturkan (receipt_value)
-// Saat diposting, purchase_order_items.quantity_invoiced diperbarui dari baris penerimaan batch tersebut.
+// Aturan: 1 faktur = 1 penerimaan (satu batch penerimaan) — dijaga di aplikasi: hanya satu faktur
+// yang belum dibatalkan per batch (faktur yang dibatalkan boleh diganti faktur baru).
+// Jurnal saat diposting (tanggal = invoice_date):
+//   Dr Barang Diterima Belum Difakturkan (receipt_value) + Dr akun beban per baris biaya lain
+//   + Dr PPN Masukan (tax_amount) + Dr/Cr Selisih Harga Pembelian (price_variance) / Cr Utang Usaha (total_amount).
+// Dibatalkan setelah diposting (hanya jika belum ada pembayaran) = jurnal pembalik.
 Table purchase_invoices [headercolor: #EF6C00] {
   id bigint [pk, increment]
+  internal_number varchar [unique, note: 'PI-{tahun}-{id}']
   invoice_number varchar [note: 'Nomor faktur dari pemasok']
-  internal_number varchar [unique]
   purchase_order_id bigint [ref: > purchase_orders.id]
-  purchase_order_receipt_batch_id bigint [ref: - purchase_order_receipt_batches.id, unique, note: '3-way match: PO - receipt - faktur']
+  purchase_order_receipt_batch_id bigint [ref: > purchase_order_receipt_batches.id, note: '3-way match: PO - receipt - faktur']
   supplier_id bigint [ref: > suppliers.id]
   invoice_date date
-  due_date date
-  subtotal decimal(18,2) [note: 'Jumlah yang ditagih pemasok, sebelum pajak']
-  receipt_value decimal(18,2) [note: 'Jumlah total_value baris penerimaan; dihapus dari Barang Diterima Belum Difakturkan']
-  price_variance decimal(18,2) [default: 0, note: 'subtotal - receipt_value; diposting ke Selisih Harga Pembelian']
+  due_date date [note: 'Diketik (pemasok belum punya syarat pembayaran)']
+  goods_amount decimal(18,2) [default: 0, note: 'Σ purchase_invoice_items.amount']
+  capitalized_charges decimal(18,2) [default: 0, note: 'Biaya PO "masuk biaya persediaan" yang ditagih; terisi otomatis dari porsi penerimaan']
+  other_charges decimal(18,2) [default: 0, note: 'Σ purchase_invoice_charges.amount (beban)']
+  subtotal decimal(18,2) [default: 0, note: 'DPP = barang + biaya persediaan + biaya lain']
+  receipt_value decimal(18,2) [default: 0, note: 'Nilai saat diterima (jurnal penerimaan); dihapus dari Barang Diterima Belum Difakturkan']
+  price_variance decimal(18,2) [default: 0, note: '(barang + biaya persediaan) - receipt_value; ke Selisih Harga Pembelian']
   tax_rate decimal(5,2) [default: 0, note: 'Diketik per faktur, disalin dari faktur pajak pemasok']
-  tax_amount decimal(18,2) [default: 0, note: 'PPN Masukan; dikreditkan (PT SAI = PKP), tidak masuk biaya persediaan']
-  total_amount decimal(18,2)
-  amount_paid decimal(18,2) [default: 0]
-  status invoice_status [default: 'unpaid']
+  tax_amount decimal(18,2) [default: 0, note: 'PPN Masukan = DPP x tax_rate; dikreditkan (PT SAI = PKP), tidak masuk biaya persediaan']
+  total_amount decimal(18,2) [default: 0]
+  amount_paid decimal(18,2) [default: 0, note: 'Σ pembayaran yang belum dibatalkan']
+  status invoice_status [default: 'draft']
+  notes text [null]
   created_by bigint [ref: > users.id]
+  posted_by bigint [null, ref: > users.id]
+  posted_at timestamp [null]
   created_at timestamp
   updated_at timestamp
 }
 
-// Jurnal: Dr Utang Usaha / Cr Kas atau Bank
+Table purchase_invoice_items [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  purchase_invoice_id bigint [ref: > purchase_invoices.id]
+  purchase_order_receipt_id bigint [ref: > purchase_order_receipts.id]
+  product_id bigint [ref: > products.id]
+  quantity decimal(12,2) [note: 'Dari penerimaan, tidak bisa diubah']
+  unit_price decimal(14,2) [note: 'Harga di faktur; terisi harga PO, bisa diubah']
+  amount decimal(18,2)
+  received_value decimal(18,2) [note: 'Nilai baris saat diterima (termasuk porsi biaya persediaan)']
+
+  indexes {
+    (purchase_invoice_id, purchase_order_receipt_id) [unique]
+  }
+}
+
+// Biaya yang bukan biaya persediaan (admin, materai) — dicatat ke akun beban pilihan.
+Table purchase_invoice_charges [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  purchase_invoice_id bigint [ref: > purchase_invoices.id]
+  description varchar
+  account_id bigint [ref: > accounts.id, note: 'Akun beban (type = expense)']
+  amount decimal(18,2)
+}
+
+// Jurnal: Dr Utang Usaha / Cr Kas atau Bank (tanggal = payment_date). Dibatalkan = jurnal pembalik.
 Table purchase_payments [headercolor: #EF6C00] {
   id bigint [pk, increment]
-  payment_number varchar [unique]
+  payment_number varchar [unique, note: 'PAY-{tahun}-{id}']
   purchase_invoice_id bigint [ref: > purchase_invoices.id]
   payment_date date
-  amount decimal(18,2)
+  amount decimal(18,2) [note: 'Maksimal sisa tagihan; boleh sebagian']
   method payment_method
-  cash_account_id bigint [ref: > accounts.id, note: 'Akun Kas / Bank yang dipakai']
+  cash_account_id bigint [ref: > accounts.id, note: 'Akun Kas / Bank (harta aktif)']
+  reference varchar [null, note: 'Nomor transfer / giro']
+  status document_status [default: 'posted', note: 'posted / cancelled']
   created_by bigint [ref: > users.id]
+  cancelled_by bigint [null, ref: > users.id]
+  cancelled_at timestamp [null]
   created_at timestamp
+  updated_at timestamp
 }
 
 // Aturan: 1 faktur = 1 pengiriman (satu sales delivery).
@@ -968,12 +997,12 @@ TableGroup Penjualan {
 }
 
 TableGroup Akuntansi {
-  overhead_expenses
-  overhead_period_closings
   accounts
   journal_entries
   journal_entry_lines
   purchase_invoices
+  purchase_invoice_items
+  purchase_invoice_charges
   purchase_payments
   sales_invoices
   sales_payments

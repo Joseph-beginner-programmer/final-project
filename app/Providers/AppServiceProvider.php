@@ -108,6 +108,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('reports.inventory-value', function ($user) {
             return in_array($user->role, [UserRole::Manager, UserRole::Accounting], true);
         });
+        Gate::define('purchasing.invoice', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
 
         Relation::morphMap([
             'purchase_order_receipt' => PurchaseOrderReceipt::class,
@@ -119,6 +122,8 @@ class AppServiceProvider extends ServiceProvider
             'production_result' => ProductionResult::class,
             'material_return' => MaterialReturn::class,
             'sales_delivery' => SalesDelivery::class,
+            'purchase_invoice' => \App\Models\PurchaseInvoice::class,
+            'purchase_payment' => \App\Models\PurchasePayment::class,
         ]);
     }
 

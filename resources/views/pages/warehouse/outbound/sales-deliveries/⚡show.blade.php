@@ -32,6 +32,19 @@ new #[Title('Sales Delivery')] class extends Component {
         ]);
     }
 
+    public function journalPlan(): ?array
+    {
+        if ($this->salesDelivery->status->value !== 'draft') {
+            return null;
+        }
+
+        try {
+            return app(\App\Actions\Warehouse\PostSalesDeliveryAction::class)->preview($this->salesDelivery);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     public function post(): void
     {
         Gate::authorize('post', $this->salesDelivery);
@@ -217,12 +230,13 @@ new #[Title('Sales Delivery')] class extends Component {
     </div>
 
     @can('post', $delivery)
-        <flux:modal name="post-delivery" focusable class="max-w-lg">
+        <flux:modal name="post-delivery" focusable class="max-w-xl">
             <div class="space-y-6">
                 <div>
                     <flux:heading size="lg">{{ __('Post this delivery?') }}</flux:heading>
                     <flux:subheading>{{ __('The goods leave the warehouse now, taken from the oldest lots first. A posted delivery can no longer be changed.') }}</flux:subheading>
                 </div>
+                <x-journal-confirm :plan="$this->journalPlan()" :hide-amounts="! \Illuminate\Support\Facades\Gate::allows('costs.view')" />
                 <div class="flex justify-end gap-2">
                     <flux:modal.close><flux:button variant="filled" class="active:scale-[0.95]">{{ __('Cancel') }}</flux:button></flux:modal.close>
                     <flux:button variant="primary" wire:click="post" wire:loading.attr="disabled" wire:target="post" class="active:scale-[0.95]">{{ __('Post') }}</flux:button>

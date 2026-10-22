@@ -79,12 +79,7 @@ class PostProductionResultAction
             $laborCost = '0';
 
             foreach ($result->labors as $labor) {
-                $rate = $plannedRates[$labor->employee_id] ?? null;
-                if ($rate === null) {
-                    $employee = Employee::findOrFail($labor->employee_id);
-                    $rate = $employee->laborRateOn($result->production_date)?->hourly_rate
-                        ?? throw new MissingLaborRateException($employee, $result->production_date->toDateString());
-                }
+                $rate = self::laborRate($plannedRates, $labor->employee_id, $result->production_date);
 
                 $labor->hourly_rate = (string) $rate;
                 $labor->total_cost = bcmul((string) $labor->hours, (string) $rate, 2);
@@ -111,11 +106,11 @@ class PostProductionResultAction
             $workOrder->transitionTo(WorkOrderStatus::Completed);
 
             app(PostJournalEntryAction::class)->handle(
-                lines: [
-                    ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => bcadd($laborCost, $overheadCost, 2), 'credit' => '0'],
-                    ['account_id' => AccountResolver::forRole(AccountSystemRole::WagesPayable)->id, 'debit' => '0', 'credit' => $laborCost],
-                    ['account_id' => AccountResolver::forRole(AccountSystemRole::OverheadApplied)->id, 'debit' => '0', 'credit' => $overheadCost],
-                ],
+                lines: array_map(fn (array $line) => [
+                    'account_id' => $line['account_id'] ?? AccountResolver::forRole($line['role'])->id,
+                    'debit' => $line['debit'],
+                    'credit' => $line['credit'],
+                ], self::journalPlan($laborCost, $overheadCost)),
                 type: JournalEntryType::Auto,
                 description: __('Production result :number', ['number' => $result->result_number]),
                 userId: $userId,
@@ -125,5 +120,48 @@ class PostProductionResultAction
 
             return $result->load(['materials', 'labors']);
         });
+    }
+
+    /**
+     * @return list<array{role: ?AccountSystemRole, account_id: ?int, debit: string, credit: string}>
+     */
+    public function preview(ProductionResult $result): array
+    {
+        $result->loadMissing('labors');
+        $workOrder = $result->workOrder;
+        $plannedRates = $workOrder->labors()->pluck('hourly_rate', 'employee_id');
+        $laborCost = $result->labors->reduce(
+            fn (string $carry, $labor) => bcadd($carry, bcmul((string) $labor->hours, (string) self::laborRate($plannedRates, $labor->employee_id, today()), 2), 2),
+            '0',
+        );
+
+        return self::journalPlan($laborCost, bcmul((string) $result->machine_hours, (string) $workOrder->overhead_rate, 2));
+    }
+
+    /**
+     * @return list<array{role: ?AccountSystemRole, account_id: ?int, debit: string, credit: string}>
+     */
+    public static function journalPlan(string $laborCost, string $overheadCost): array
+    {
+        return [
+            ['role' => AccountSystemRole::InventoryWip, 'account_id' => null, 'debit' => bcadd($laborCost, $overheadCost, 2), 'credit' => '0'],
+            ['role' => AccountSystemRole::WagesPayable, 'account_id' => null, 'debit' => '0', 'credit' => $laborCost],
+            ['role' => AccountSystemRole::OverheadApplied, 'account_id' => null, 'debit' => '0', 'credit' => $overheadCost],
+        ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int|string, mixed>  $plannedRates
+     */
+    public static function laborRate(\Illuminate\Support\Collection $plannedRates, int $employeeId, \Carbon\CarbonInterface $date): string
+    {
+        $rate = $plannedRates[$employeeId] ?? null;
+        if ($rate === null) {
+            $employee = Employee::findOrFail($employeeId);
+            $rate = $employee->laborRateOn(\Illuminate\Support\Carbon::instance($date))?->hourly_rate
+                ?? throw new MissingLaborRateException($employee, $date->toDateString());
+        }
+
+        return (string) $rate;
     }
 }

@@ -14,6 +14,7 @@ use App\Models\InventoryLot;
 use App\Models\MaterialReturn;
 use App\Models\ProductionResult;
 use App\Support\AccountResolver;
+use App\Support\InventoryAccounts;
 use Illuminate\Support\Facades\DB;
 
 class PostMaterialReturnAction
@@ -79,21 +80,15 @@ class PostMaterialReturnAction
             $return->received_at = now();
             $return->transitionTo(DocumentStatus::Posted);
 
-            $postedItems = $return->items()->get();
+            $postedItems = $return->items()->with('product')->get();
             $totalReturned = $postedItems->reduce(fn (string $carry, $item) => bcadd($carry, (string) $item->total_cost, 2), '0');
             $netVariance = $postedItems->reduce(fn (string $carry, $item) => bcadd($carry, (string) $item->variance_value, 2), '0');
 
-            $journalLines = [
-                ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryRaw)->id, 'debit' => $totalReturned, 'credit' => '0'],
-                ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => '0', 'credit' => $totalReturned],
-            ];
-            if (bccomp($netVariance, '0', 2) > 0) {
-                $journalLines[] = ['account_id' => AccountResolver::forRole(AccountSystemRole::MaterialVariance)->id, 'debit' => $netVariance, 'credit' => '0'];
-                $journalLines[] = ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => '0', 'credit' => $netVariance];
-            } elseif (bccomp($netVariance, '0', 2) < 0) {
-                $journalLines[] = ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => bcmul($netVariance, '-1', 2), 'credit' => '0'];
-                $journalLines[] = ['account_id' => AccountResolver::forRole(AccountSystemRole::MaterialVariance)->id, 'debit' => '0', 'credit' => bcmul($netVariance, '-1', 2)];
-            }
+            $journalLines = array_map(fn (array $line) => [
+                'account_id' => $line['account_id'] ?? AccountResolver::forRole($line['role'])->id,
+                'debit' => $line['debit'],
+                'credit' => $line['credit'],
+            ], self::journalPlan($postedItems->map(fn ($item) => ['type' => $item->product->type, 'amount' => (string) $item->total_cost]), $netVariance));
 
             app(PostJournalEntryAction::class)->handle(
                 lines: $journalLines,
@@ -106,5 +101,53 @@ class PostMaterialReturnAction
 
             return $return->load('items');
         });
+    }
+
+    /**
+     * @return list<array{role: ?AccountSystemRole, account_id: ?int, debit: string, credit: string}>
+     */
+    public function preview(MaterialReturn $return): array
+    {
+        $return->loadMissing('items');
+        $result = ProductionResult::with('workOrder')->findOrFail($return->production_result_id);
+        $returnedByProduct = $return->items->groupBy('product_id')
+            ->map(fn ($rows) => $rows->reduce(fn (string $carry, $row) => bcadd($carry, (string) $row->quantity, 2), '0'))
+            ->all();
+
+        $lines = SaveMaterialReturnDraftAction::checkReturnable($result, $returnedByProduct, $return, lock: false);
+        $rows = [];
+        $netVariance = '0';
+        foreach (SaveMaterialReturnDraftAction::allocate($lines, $returnedByProduct) as $row) {
+            $line = $row['line'];
+            $returned = array_reduce($line->reverseDraws($row['quantity']), fn (string $carry, array $part) => bcadd($carry, $part['value'], 2), '0');
+            $rows[] = ['type' => $line->product->type, 'amount' => $returned];
+            $netVariance = bcadd($netVariance, bcsub($line->leftoverValue($row['expected']), $returned, 2), 2);
+        }
+
+        return self::journalPlan($rows, $netVariance);
+    }
+
+    /**
+     * @param  iterable<array{type: \App\Enums\ProductType, amount: string}>  $rows
+     * @return list<array{role: ?AccountSystemRole, account_id: ?int, debit: string, credit: string}>
+     */
+    public static function journalPlan(iterable $rows, string $netVariance): array
+    {
+        $grouped = InventoryAccounts::group($rows);
+        $totalReturned = array_reduce($grouped, fn (string $carry, array $row) => bcadd($carry, $row['amount'], 2), '0');
+        $lines = array_map(fn (array $row) => ['role' => $row['role'], 'account_id' => null, 'debit' => $row['amount'], 'credit' => '0'], array_values($grouped));
+
+        if (bccomp($netVariance, '0', 2) > 0) {
+            $lines[] = ['role' => AccountSystemRole::MaterialVariance, 'account_id' => null, 'debit' => $netVariance, 'credit' => '0'];
+            $lines[] = ['role' => AccountSystemRole::InventoryWip, 'account_id' => null, 'debit' => '0', 'credit' => bcadd($totalReturned, $netVariance, 2)];
+        } elseif (bccomp($netVariance, '0', 2) < 0) {
+            $surplus = bcmul($netVariance, '-1', 2);
+            $lines[] = ['role' => AccountSystemRole::InventoryWip, 'account_id' => null, 'debit' => '0', 'credit' => bcsub($totalReturned, $surplus, 2)];
+            $lines[] = ['role' => AccountSystemRole::MaterialVariance, 'account_id' => null, 'debit' => '0', 'credit' => $surplus];
+        } else {
+            $lines[] = ['role' => AccountSystemRole::InventoryWip, 'account_id' => null, 'debit' => '0', 'credit' => $totalReturned];
+        }
+
+        return array_values(array_filter($lines, fn (array $line) => bccomp($line['debit'], '0', 2) !== 0 || bccomp($line['credit'], '0', 2) !== 0));
     }
 }

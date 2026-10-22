@@ -35,6 +35,19 @@ new #[Title('Production Result')] class extends Component {
         ]);
     }
 
+    public function journalPlan(): ?array
+    {
+        if ($this->productionResult->status->value !== 'draft') {
+            return null;
+        }
+
+        try {
+            return app(\App\Actions\Production\PostProductionResultAction::class)->preview($this->productionResult);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     public function post(): void
     {
         Gate::authorize('post', $this->productionResult);
@@ -461,12 +474,13 @@ new #[Title('Production Result')] class extends Component {
     </div>
 
     @can('post', $result)
-        <flux:modal name="post-result" focusable class="max-w-lg">
+        <flux:modal name="post-result" focusable class="max-w-xl">
             <div class="space-y-6">
                 <div>
                     <flux:heading size="lg">{{ __('Post this production result?') }}</flux:heading>
                     <flux:subheading>{{ __('The work order becomes Completed and its actual cost is fixed. A posted result can no longer be changed.') }}</flux:subheading>
                 </div>
+                <x-journal-confirm :plan="$this->journalPlan()" :hide-amounts="false" />
                 <div class="flex justify-end gap-2">
                     <flux:modal.close><flux:button variant="filled" class="active:scale-[0.95]">{{ __('Cancel') }}</flux:button></flux:modal.close>
                     <flux:button variant="primary" wire:click="post" wire:loading.attr="disabled" wire:target="post" class="active:scale-[0.95]">{{ __('Post') }}</flux:button>

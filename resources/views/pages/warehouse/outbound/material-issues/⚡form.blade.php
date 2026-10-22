@@ -3,6 +3,7 @@
 use App\Actions\Production\SaveMaterialIssueDraftAction;
 use App\Enums\ProductType;
 use App\Exceptions\InvalidMaterialIssueLineException;
+use App\Exceptions\MaterialIssueDraftExistsException;
 use App\Exceptions\MaterialIssueNotEditableException;
 use App\Exceptions\WorkOrderNotIssuableException;
 use App\Models\MaterialIssue;
@@ -45,6 +46,17 @@ new #[Title('Material Issue')] class extends Component {
             $this->redirectRoute('warehouse.outbound.material-issues.list', navigate: true);
 
             return;
+        }
+
+        if (! $this->materialIssueId) {
+            $existingDraft = $workOrder->materialIssues()->where('status', \App\Enums\DocumentStatus::Draft->value)->first();
+
+            if ($existingDraft) {
+                Flux::toast(variant: 'warning', text: (new MaterialIssueDraftExistsException($existingDraft))->userMessage());
+                $this->redirectRoute('warehouse.outbound.material-issues.edit', $existingDraft, navigate: true);
+
+                return;
+            }
         }
 
         $issued = $workOrder->issuedQuantities();
@@ -190,7 +202,7 @@ new #[Title('Material Issue')] class extends Component {
 
         try {
             $issue = app(SaveMaterialIssueDraftAction::class)->handle($this->workOrder, $lines, Auth::id(), $issue);
-        } catch (InvalidMaterialIssueLineException|WorkOrderNotIssuableException|MaterialIssueNotEditableException $e) {
+        } catch (InvalidMaterialIssueLineException|WorkOrderNotIssuableException|MaterialIssueNotEditableException|MaterialIssueDraftExistsException $e) {
             Flux::toast(variant: 'danger', text: $e->userMessage());
 
             return;

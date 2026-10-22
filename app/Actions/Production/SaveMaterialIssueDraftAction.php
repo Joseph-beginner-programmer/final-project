@@ -5,6 +5,7 @@ namespace App\Actions\Production;
 use App\Enums\DocumentStatus;
 use App\Enums\ProductType;
 use App\Exceptions\InvalidMaterialIssueLineException;
+use App\Exceptions\MaterialIssueDraftExistsException;
 use App\Exceptions\WorkOrderNotIssuableException;
 use App\Models\MaterialIssue;
 use App\Models\Product;
@@ -46,6 +47,18 @@ class SaveMaterialIssueDraftAction
         }
 
         return DB::transaction(function () use ($workOrder, $lines, $userId, $issue) {
+            WorkOrder::whereKey($workOrder->id)->lockForUpdate()->first();
+
+            $otherDraft = MaterialIssue::query()
+                ->where('work_order_id', $workOrder->id)
+                ->where('status', DocumentStatus::Draft->value)
+                ->when($issue, fn ($query) => $query->whereKeyNot($issue->id))
+                ->first();
+
+            if ($otherDraft) {
+                throw new MaterialIssueDraftExistsException($otherDraft);
+            }
+
             if (! $issue) {
                 $issue = new MaterialIssue([
                     'work_order_id' => $workOrder->id,

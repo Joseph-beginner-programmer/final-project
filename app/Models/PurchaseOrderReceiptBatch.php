@@ -34,4 +34,14 @@ class PurchaseOrderReceiptBatch extends Model
     {
         return $this->hasMany(PurchaseOrderReceipt::class);
     }
+
+    public function purchaseInvoices(): HasMany
+    {
+        return $this->hasMany(PurchaseInvoice::class);
+    }
+
+    public function liveInvoice(): ?PurchaseInvoice
+    {
+        return $this->purchaseInvoices()->where('status', '!=', \App\Enums\PurchaseInvoiceStatus::Cancelled->value)->first();
+    }
 }

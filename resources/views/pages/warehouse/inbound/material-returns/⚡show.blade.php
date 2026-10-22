@@ -31,6 +31,19 @@ new #[Title('Material Return')] class extends Component {
         ]);
     }
 
+    public function journalPlan(): ?array
+    {
+        if ($this->materialReturn->status->value !== 'draft') {
+            return null;
+        }
+
+        try {
+            return app(\App\Actions\Warehouse\PostMaterialReturnAction::class)->preview($this->materialReturn);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
     public function post(): void
     {
         Gate::authorize('post', $this->materialReturn);
@@ -227,12 +240,13 @@ new #[Title('Material Return')] class extends Component {
     </div>
 
     @can('post', $return)
-        <flux:modal name="post-return" focusable class="max-w-lg">
+        <flux:modal name="post-return" focusable class="max-w-xl">
             <div class="space-y-6">
                 <div>
                     <flux:heading size="lg">{{ __('Post this material return?') }}</flux:heading>
                     <flux:subheading>{{ __('The received material goes back into stock, into the lots it was last drawn from. A posted return can no longer be changed.') }}</flux:subheading>
                 </div>
+                <x-journal-confirm :plan="$this->journalPlan()" :hide-amounts="! \Illuminate\Support\Facades\Gate::allows('costs.view')" />
                 <div class="flex justify-end gap-2">
                     <flux:modal.close><flux:button variant="filled" class="active:scale-[0.95]">{{ __('Cancel') }}</flux:button></flux:modal.close>
                     <flux:button variant="primary" wire:click="post" wire:loading.attr="disabled" wire:target="post" class="active:scale-[0.95]">{{ __('Post') }}</flux:button>

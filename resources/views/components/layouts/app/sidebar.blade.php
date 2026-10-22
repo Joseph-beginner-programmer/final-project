@@ -64,6 +64,14 @@
                                 :current="request()->routeIs('accounting.journal.*')" wire:navigate>
                                 {{ __('General Journal') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="calculator" :href="route('accounting.overhead.index')"
+                                :current="request()->routeIs('accounting.overhead.*')" wire:navigate>
+                                {{ __('Actual Overhead') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="receipt-percent" :href="route('accounting.purchase-invoices.list')"
+                                :current="request()->routeIs('accounting.purchase-invoices.*')" wire:navigate>
+                                {{ __('Purchase Invoices') }}
+                            </flux:sidebar.item>
                             @can('reports.production')
                                 <flux:sidebar.item icon="document-chart-bar" :href="route('production.reports.index')"
                                     :current="request()->routeIs('production.reports.*')" wire:navigate>

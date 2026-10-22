@@ -21,6 +21,17 @@ enum OverheadCategory: string
         });
     }
 
+    public function systemRole(): AccountSystemRole
+    {
+        return match ($this) {
+            self::Electricity => AccountSystemRole::OverheadElectricity,
+            self::MachineDepreciation => AccountSystemRole::OverheadMachineDepreciation,
+            self::MoldDepreciation => AccountSystemRole::OverheadMoldDepreciation,
+            self::Maintenance => AccountSystemRole::OverheadMaintenance,
+            self::Other => AccountSystemRole::OverheadOther,
+        };
+    }
+
     public function hint(): string
     {
         return __(match ($this) {

@@ -155,19 +155,21 @@ new #[Title('Create Item Receipt')] class extends Component
         };
     }
 
-    public function submit(): void
+    protected function itemsToSubmit(): Collection
     {
-        Gate::authorize('receive', $this->purchaseOrder);
-
-        $itemsToSubmit = collect($this->items)->filter(
-            fn ($item) => $item['quantity'] !== '' && bccomp($item['quantity'], '0', 2) > 0
+        return collect($this->items)->filter(
+            fn ($item) => $item['quantity'] !== '' && is_numeric($item['quantity']) && bccomp($item['quantity'], '0', 2) > 0
         );
+    }
 
-        if ($itemsToSubmit->isEmpty()) {
+    protected function checkBeforeSubmit(): bool
+    {
+        if ($this->itemsToSubmit()->isEmpty()) {
             $message = __('At least one item must have a quantity greater than 0.');
             $this->addError('items', $message);
             Flux::toast(variant: 'danger', text: $message);
-            return;
+
+            return false;
         }
 
         try {
@@ -179,6 +181,35 @@ new #[Title('Create Item Receipt')] class extends Component
             Flux::toast(variant: 'danger', text: __('Please fix the highlighted fields before submitting.'));
             throw $e;
         }
+
+        return true;
+    }
+
+    public function receiptPlan(): array
+    {
+        return \App\Actions\Purchasing\ReceivePurchaseOrderAction::preview(
+            $this->itemsToSubmit()->mapWithKeys(fn ($item, $itemId) => [(int) $itemId => (string) $item['quantity']])->all()
+        );
+    }
+
+    public function confirmSubmit(): void
+    {
+        Gate::authorize('receive', $this->purchaseOrder);
+
+        if ($this->checkBeforeSubmit()) {
+            $this->modal('confirm-receipt')->show();
+        }
+    }
+
+    public function submit(): void
+    {
+        Gate::authorize('receive', $this->purchaseOrder);
+
+        if (! $this->checkBeforeSubmit()) {
+            return;
+        }
+
+        $itemsToSubmit = $this->itemsToSubmit();
 
         $attachmentPath = $this->attachment->store('purchase-order-receipts', 'local');
 
@@ -685,14 +716,30 @@ new #[Title('Create Item Receipt')] class extends Component
             variant="primary"
             icon="check"
             type="button"
-            wire:click="submit"
+            wire:click="confirmSubmit"
             wire:loading.attr="disabled"
-            wire:target="submit"
+            wire:target="confirmSubmit"
             class="w-full sm:w-auto"
         >
-            <span wire:loading.remove wire:target="submit">{{ __('Submit Receipt') }}</span>
-            <span wire:loading wire:target="submit">{{ __('Submitting...') }}</span>
+            {{ __('Submit Receipt') }}
         </flux:button>
     </div>
+
+    <flux:modal name="confirm-receipt" focusable class="max-w-xl">
+        <div class="space-y-5">
+            <div>
+                <flux:heading size="lg">{{ __('Submit this receipt?') }}</flux:heading>
+                <flux:subheading>{{ __('The goods go into stock as new lots and one journal entry is posted per item. A submitted receipt cannot be changed.') }}</flux:subheading>
+            </div>
+            <x-journal-confirm :plan="$this->receiptPlan()" :hide-amounts="! \Illuminate\Support\Facades\Gate::allows('costs.view')" />
+            <div class="flex justify-end gap-2">
+                <flux:modal.close><flux:button variant="filled" class="active:scale-[0.95]">{{ __('Back') }}</flux:button></flux:modal.close>
+                <flux:button variant="primary" wire:click="submit" wire:loading.attr="disabled" wire:target="submit" class="active:scale-[0.95]">
+                    <span wire:loading.remove wire:target="submit">{{ __('Submit Receipt') }}</span>
+                    <span wire:loading wire:target="submit">{{ __('Submitting...') }}</span>
+                </flux:button>
+            </div>
+        </div>
+    </flux:modal>
     @endif
 </section>

@@ -54,6 +54,10 @@ new #[Title('Journal Entry')] class extends Component {
             'production_receipt' => __('Production Receipt'),
             'material_return' => __('Material Return'),
             'sales_delivery' => __('Sales Delivery'),
+            'purchase_invoice' => __('Purchase Invoice'),
+            'purchase_payment' => __('Purchase Payment'),
+            'overhead_expense' => __('Actual Overhead'),
+            'overhead_closing' => __('Overhead closing'),
             default => $this->journalEntry->source_type,
         };
     }
@@ -91,7 +95,7 @@ new #[Title('Journal Entry')] class extends Component {
 
         @can('reverse', $journalEntry)
             @if ($journalEntry->status === JournalStatus::Posted)
-                <flux:button variant="filled" icon="arrow-uturn-left" wire:click="reverse" wire:confirm="{{ __('Reverse this journal entry? A new entry with every line swapped will be posted.') }}" wire:loading.attr="disabled" wire:target="reverse" class="active:scale-[0.95]">
+                <flux:button variant="filled" icon="arrow-uturn-left" x-on:click="$flux.modal('reverse-entry').show()" wire:loading.attr="disabled" wire:target="reverse" class="active:scale-[0.95]">
                     {{ __('Reverse') }}
                 </flux:button>
             @endif
@@ -167,4 +171,18 @@ new #[Title('Journal Entry')] class extends Component {
             </table>
         </div>
     </div>
+
+    <flux:modal name="reverse-entry" class="max-w-xl">
+        <div class="space-y-4">
+            <div>
+                <flux:heading size="lg">{{ __('Reverse this journal entry?') }}</flux:heading>
+                <flux:subheading>{{ __('A new entry with every line swapped is posted today, and this one is marked reversed.') }}</flux:subheading>
+            </div>
+            <x-journal-confirm :plan="\App\Support\JournalPreview::reversalOf($journalEntry)" />
+            <div class="flex justify-end gap-2">
+                <flux:modal.close><flux:button variant="filled">{{ __('Back') }}</flux:button></flux:modal.close>
+                <flux:button variant="danger" wire:click="reverse" wire:loading.attr="disabled" wire:target="reverse">{{ __('Reverse') }}</flux:button>
+            </div>
+        </div>
+    </flux:modal>
 </section>

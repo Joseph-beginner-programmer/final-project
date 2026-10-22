@@ -19,9 +19,6 @@ use App\Models\WorkOrderLabor;
 
 trait BuildsWorkOrderPlan
 {
-    /**
-     * @return array{0: ProductionFormula, 1: OverheadRate}
-     */
     protected function validatePlan(CreateWorkOrderData $data): array
     {
         if ($data->plannedStartDate < now()->toDateString()) {
@@ -71,9 +68,6 @@ trait BuildsWorkOrderPlan
         }
     }
 
-    /**
-     * @param  array{employeeId: int, plannedHours: string}  $labor
-     */
     private function allocateLabor(WorkOrder $workOrder, array $labor): void
     {
         $employee = Employee::findOrFail($labor['employeeId']);

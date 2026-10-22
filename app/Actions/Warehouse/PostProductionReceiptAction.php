@@ -30,9 +30,7 @@ class PostProductionReceiptAction
 
             $received = (string) $receipt->quantity;
             $unitCost = (string) $result->unit_cost;
-            $value = bccomp($received, (string) $result->quantity_good, 2) === 0
-                ? (string) $result->total_cost
-                : bcmul($received, $unitCost, 2);
+            $value = self::receivedValue($result, $received);
 
             $lot = InventoryLot::create([
                 'lot_number' => (string) Str::uuid(),
@@ -68,13 +66,11 @@ class PostProductionReceiptAction
             $receipt->received_at = now();
             $receipt->transitionTo(DocumentStatus::Posted);
 
-            $lines = [
-                ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryFinished)->id, 'debit' => $value, 'credit' => '0'],
-                ['account_id' => AccountResolver::forRole(AccountSystemRole::InventoryWip)->id, 'debit' => '0', 'credit' => (string) $result->total_cost],
-            ];
-            if (bccomp((string) $receipt->shortage_value, '0', 2) > 0) {
-                $lines[] = ['account_id' => AccountResolver::forRole(AccountSystemRole::ProductionLoss)->id, 'debit' => (string) $receipt->shortage_value, 'credit' => '0'];
-            }
+            $lines = array_map(fn (array $line) => [
+                    'account_id' => $line['account_id'] ?? AccountResolver::forRole($line['role'])->id,
+                    'debit' => $line['debit'],
+                    'credit' => $line['credit'],
+                ], self::journalPlan($receipt->product->type, $value, (string) $result->total_cost));
 
             app(PostJournalEntryAction::class)->handle(
                 lines: $lines,
@@ -87,5 +83,37 @@ class PostProductionReceiptAction
 
             return $receipt->load('lot');
         });
+    }
+
+    /**
+     * @return list<array{role: ?AccountSystemRole, account_id: ?int, debit: string, credit: string}>
+     */
+    public function preview(ProductionReceipt $receipt): array
+    {
+        $result = $receipt->productionResult;
+
+        return self::journalPlan($receipt->product->type, self::receivedValue($result, (string) $receipt->quantity), (string) $result->total_cost);
+    }
+
+    public static function receivedValue(ProductionResult $result, string $received): string
+    {
+        return bccomp($received, (string) $result->quantity_good, 2) === 0
+            ? (string) $result->total_cost
+            : bcmul($received, (string) $result->unit_cost, 2);
+    }
+
+    /**
+     * @return list<array{role: ?AccountSystemRole, account_id: ?int, debit: string, credit: string}>
+     */
+    public static function journalPlan(\App\Enums\ProductType $type, string $value, string $resultCost): array
+    {
+        $lines = [['role' => $type->inventoryRole(), 'account_id' => null, 'debit' => $value, 'credit' => '0']];
+        $shortage = bcsub($resultCost, $value, 2);
+        if (bccomp($shortage, '0', 2) > 0) {
+            $lines[] = ['role' => AccountSystemRole::ProductionLoss, 'account_id' => null, 'debit' => $shortage, 'credit' => '0'];
+        }
+        $lines[] = ['role' => AccountSystemRole::InventoryWip, 'account_id' => null, 'debit' => '0', 'credit' => $resultCost];
+
+        return $lines;
     }
 }
