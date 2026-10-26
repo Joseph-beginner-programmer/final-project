@@ -41,6 +41,8 @@ new #[Title('Chart of Accounts')] class extends Component {
 
     public bool $isActive = true;
 
+    public bool $isContra = false;
+
     public function mount(): void
     {
         Gate::authorize('viewAny', Account::class);
@@ -147,13 +149,14 @@ new #[Title('Chart of Accounts')] class extends Component {
         $this->accountType = $account->type->value;
         $this->systemRole = $account->system_role?->value;
         $this->isActive = $account->is_active;
+        $this->isContra = $account->is_contra;
         $this->modal('account-form')->show();
     }
 
     protected function resetForm(): void
     {
         $this->resetValidation();
-        $this->reset('editingId', 'accountCode', 'accountName', 'accountType', 'systemRole', 'isActive');
+        $this->reset('editingId', 'accountCode', 'accountName', 'accountType', 'systemRole', 'isActive', 'isContra');
     }
 
     protected function rules(): array
@@ -190,6 +193,7 @@ new #[Title('Chart of Accounts')] class extends Component {
             'type' => AccountType::from($this->accountType),
             'system_role' => $this->systemRole ? AccountSystemRole::from($this->systemRole) : null,
             'is_active' => $this->isActive,
+            'is_contra' => $this->isContra,
         ];
 
         app(SaveAccountAction::class)->handle($fields, $account);
@@ -288,7 +292,12 @@ new #[Title('Chart of Accounts')] class extends Component {
                                 @endif
                             </td>
                             <td class="py-2 px-3"><span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap {{ $account->type->badgeClasses() }}">{{ $account->type->label() }}</span></td>
-                            <td class="py-2 px-3 text-zinc-600 dark:text-zinc-300">{{ $account->normal_balance->label() }}</td>
+                            <td class="py-2 px-3 text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
+                                {{ $account->normal_balance->label() }}
+                                @if ($account->is_contra)
+                                    <span class="ml-1 inline-flex items-center rounded-full border border-zinc-300 dark:border-white/20 px-1.5 py-0.5 text-[10px] font-medium text-zinc-600 dark:text-zinc-300">{{ __('Contra') }}</span>
+                                @endif
+                            </td>
                             <td class="py-2 px-3">
                                 <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ $account->is_active ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20' : 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-white/5 dark:text-zinc-500 dark:border-white/10' }}">{{ $account->is_active ? __('Active') : __('Inactive') }}</span>
                             </td>
@@ -326,7 +335,7 @@ new #[Title('Chart of Accounts')] class extends Component {
         <form wire:submit="save" class="space-y-5">
             <div>
                 <flux:heading size="lg">{{ $editingId ? __('Edit Account') : __('New Account') }}</flux:heading>
-                <flux:subheading>{{ __('Normal balance is set automatically from the category.') }}</flux:subheading>
+                <flux:subheading>{{ __('Normal balance is set automatically from the category, or the opposite side for a contra account.') }}</flux:subheading>
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 items-start gap-4">
@@ -341,10 +350,15 @@ new #[Title('Chart of Accounts')] class extends Component {
             <flux:input wire:model="accountName" :label="__('Account name')" :placeholder="__('e.g. Kas')" />
 
             @php($previewType = \App\Enums\AccountType::tryFrom($accountType))
+            <flux:checkbox wire:model.live="isContra" :label="__('Contra account')" :description="__('A \'minus\' account inside its category, e.g. Akumulasi Penyusutan under Harta or BOP Dibebankan under Beban. Its normal balance is the opposite side of the category.')" />
+
             @if ($previewType)
                 <div class="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs dark:border-white/10 dark:bg-white/5">
                     <span class="text-zinc-600 dark:text-zinc-300">{{ __('Normal balance') }}</span>
-                    <span class="font-data font-semibold text-zinc-900 dark:text-white">{{ $previewType->normalBalance()->label() }}</span>
+                    <span class="font-data font-semibold text-zinc-900 dark:text-white">{{ $previewType->normalBalanceFor($isContra)->label() }}</span>
+                    @if ($isContra)
+                        <span class="text-zinc-500 dark:text-zinc-400">· {{ __('opposite of :category (:side)', ['category' => $previewType->label(), 'side' => $previewType->normalBalance()->label()]) }}</span>
+                    @endif
                 </div>
             @endif
 

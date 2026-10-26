@@ -87,6 +87,15 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/production/results/{productionResult}', 'pages::production.results.show')
         ->name('production.results.show');
 
+    Route::livewire('/purchase-requisitions', 'pages::purchasing.requisitions.list')
+        ->name('purchasing.requisitions.list');
+
+    Route::livewire('/purchase-requisitions/create', 'pages::purchasing.requisitions.form')
+        ->name('purchasing.requisitions.create');
+
+    Route::livewire('/purchase-requisitions/{purchaseRequisition}', 'pages::purchasing.requisitions.show')
+        ->name('purchasing.requisitions.show');
+
     Route::livewire('/accounting/overhead', 'pages::accounting.overhead.index')
         ->name('accounting.overhead.index');
 
@@ -101,6 +110,42 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/accounting/purchase-invoices/{purchaseInvoice}', 'pages::accounting.purchase-invoices.show')
         ->name('accounting.purchase-invoices.show');
+
+    Route::livewire('/accounting/sales-invoices', 'pages::accounting.sales-invoices.list')
+        ->name('accounting.sales-invoices.list');
+
+    Route::livewire('/accounting/sales-invoices/create/{salesDelivery}', 'pages::accounting.sales-invoices.form')
+        ->name('accounting.sales-invoices.create');
+
+    Route::livewire('/accounting/sales-invoices/{salesInvoice}/edit', 'pages::accounting.sales-invoices.form')
+        ->name('accounting.sales-invoices.edit');
+
+    Route::livewire('/accounting/sales-invoices/{salesInvoice}', 'pages::accounting.sales-invoices.show')
+        ->name('accounting.sales-invoices.show');
+
+    Route::livewire('/accounting/reports/ledger', 'pages::accounting.reports.ledger')
+        ->name('accounting.reports.ledger');
+
+    Route::get('/accounting/reports/ledger/export/{format}', \App\Http\Controllers\Accounting\ExportGeneralLedgerController::class)
+        ->name('accounting.reports.ledger.export');
+
+    Route::livewire('/accounting/reports/trial-balance', 'pages::accounting.reports.trial-balance')
+        ->name('accounting.reports.trial-balance');
+
+    Route::get('/accounting/reports/trial-balance/export/{format}', \App\Http\Controllers\Accounting\ExportTrialBalanceController::class)
+        ->name('accounting.reports.trial-balance.export');
+
+    Route::livewire('/accounting/reports/income-statement', 'pages::accounting.reports.income-statement')
+        ->name('accounting.reports.income-statement');
+
+    Route::get('/accounting/reports/income-statement/export/{format}', \App\Http\Controllers\Accounting\ExportIncomeStatementController::class)
+        ->name('accounting.reports.income-statement.export');
+
+    Route::livewire('/accounting/reports/balance-sheet', 'pages::accounting.reports.balance-sheet')
+        ->name('accounting.reports.balance-sheet');
+
+    Route::get('/accounting/reports/balance-sheet/export/{format}', \App\Http\Controllers\Accounting\ExportBalanceSheetController::class)
+        ->name('accounting.reports.balance-sheet.export');
 
     Route::livewire('/production/reports', 'pages::production.reports.index')
         ->name('production.reports.index');

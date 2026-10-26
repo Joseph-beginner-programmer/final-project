@@ -34,6 +34,12 @@
                                 :current="request()->routeIs('purchasing.suppliers.*')" wire:navigate>
                                 {{ __('Suppliers') }}
                             </flux:sidebar.item>
+                            @can('requisitions.view')
+                                <flux:sidebar.item icon="clipboard-document-list" :href="route('purchasing.requisitions.list')"
+                                    :current="request()->routeIs('purchasing.requisitions.*')" wire:navigate>
+                                    {{ __('Purchase Requests') }}
+                                </flux:sidebar.item>
+                            @endcan
                         @endif
 
                         @if ($role === UserRole::Sales)
@@ -72,6 +78,10 @@
                                 :current="request()->routeIs('accounting.purchase-invoices.*')" wire:navigate>
                                 {{ __('Purchase Invoices') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="document-currency-dollar" :href="route('accounting.sales-invoices.list')"
+                                :current="request()->routeIs('accounting.sales-invoices.*')" wire:navigate>
+                                {{ __('Sales Invoices') }}
+                            </flux:sidebar.item>
                             @can('reports.production')
                                 <flux:sidebar.item icon="document-chart-bar" :href="route('production.reports.index')"
                                     :current="request()->routeIs('production.reports.*')" wire:navigate>
@@ -104,6 +114,12 @@
                                 :current="request()->routeIs('production.formulas.*')" wire:navigate>
                                 {{ __('Production Formulas') }}
                             </flux:sidebar.item>
+                            @can('requisitions.view')
+                                <flux:sidebar.item icon="clipboard-document-list" :href="route('purchasing.requisitions.list')"
+                                    :current="request()->routeIs('purchasing.requisitions.*')" wire:navigate>
+                                    {{ __('Purchase Requests') }}
+                                </flux:sidebar.item>
+                            @endcan
                             @can('reports.production')
                                 <flux:sidebar.item icon="document-chart-bar" :href="route('production.reports.index')"
                                     :current="request()->routeIs('production.reports.*')" wire:navigate>

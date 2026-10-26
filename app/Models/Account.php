@@ -22,6 +22,7 @@ class Account extends Model
             'normal_balance' => NormalBalance::class,
             'system_role' => AccountSystemRole::class,
             'is_active' => 'boolean',
+            'is_contra' => 'boolean',
         ];
     }
 

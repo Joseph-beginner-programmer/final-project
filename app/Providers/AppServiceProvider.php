@@ -105,11 +105,29 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('reports.production', function ($user) {
             return in_array($user->role, [UserRole::Production, UserRole::Manager, UserRole::Accounting], true);
         });
+        Gate::define('reports.finance', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
         Gate::define('reports.inventory-value', function ($user) {
             return in_array($user->role, [UserRole::Manager, UserRole::Accounting], true);
         });
+        Gate::define('requisitions.create', function ($user) {
+            return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
+        });
+        Gate::define('requisitions.process', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+        });
+        Gate::define('requisitions.view', function ($user) {
+            return in_array($user->role, [UserRole::Production, UserRole::Purchasing, UserRole::Manager], true);
+        });
         Gate::define('purchasing.invoice', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
+        Gate::define('sales.invoice', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
+        Gate::define('sales.invoice.view', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::Sales], true);
         });
 
         Relation::morphMap([
@@ -124,6 +142,8 @@ class AppServiceProvider extends ServiceProvider
             'sales_delivery' => SalesDelivery::class,
             'purchase_invoice' => \App\Models\PurchaseInvoice::class,
             'purchase_payment' => \App\Models\PurchasePayment::class,
+            'sales_invoice' => \App\Models\SalesInvoice::class,
+            'sales_payment' => \App\Models\SalesPayment::class,
         ]);
     }
 

@@ -22,6 +22,9 @@ enum AccountSystemRole: string
     case OverheadMoldDepreciation = 'overhead_mold_depreciation';
     case OverheadMaintenance = 'overhead_maintenance';
     case OverheadOther = 'overhead_other';
+    case AccountsReceivable = 'accounts_receivable';
+    case SalesRevenue = 'sales_revenue';
+    case VatOut = 'vat_out';
 
     public function label(): string
     {
@@ -44,6 +47,9 @@ enum AccountSystemRole: string
             self::OverheadMoldDepreciation => 'BOP Penyusutan Molding',
             self::OverheadMaintenance => 'BOP Pemeliharaan',
             self::OverheadOther => 'BOP Lain-lain',
+            self::AccountsReceivable => 'Piutang Usaha',
+            self::SalesRevenue => 'Penjualan',
+            self::VatOut => 'PPN Keluaran',
         };
     }
 
@@ -68,6 +74,9 @@ enum AccountSystemRole: string
             self::OverheadMoldDepreciation => 'BOP sesungguhnya: penyusutan molding per bulan. Ditutup setiap akhir bulan.',
             self::OverheadMaintenance => 'BOP sesungguhnya: suku cadang dan jasa teknisi. Ditutup setiap akhir bulan.',
             self::OverheadOther => 'BOP sesungguhnya: biaya overhead pabrik lainnya. Ditutup setiap akhir bulan.',
+            self::AccountsReceivable => 'Didebit sebesar total faktur penjualan, dikredit saat pelanggan membayar.',
+            self::SalesRevenue => 'Dikredit sebesar DPP faktur penjualan (barang setelah diskon ditambah biaya lain).',
+            self::VatOut => 'Dikredit sebesar PPN dari faktur penjualan; utang pajak yang dikurangi PPN Masukan setiap bulan.',
         };
     }
 }

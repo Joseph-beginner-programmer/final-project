@@ -27,6 +27,36 @@ new #[Title('Reports')] class extends Component {
                 'description' => __('Opening, in, out and closing stock of raw materials and WIP for the month.'),
                 'scope' => __('Per month'),
             ],
+            ...(Gate::allows('reports.finance') ? [
+                [
+                    'route' => 'accounting.reports.ledger',
+                    'icon' => 'book-open',
+                    'title' => __('General Ledger'),
+                    'description' => __('Every journal line of one account in the month, with the running balance and the opposite accounts.'),
+                    'scope' => __('Per month'),
+                ],
+                [
+                    'route' => 'accounting.reports.trial-balance',
+                    'icon' => 'scale',
+                    'title' => __('Trial Balance'),
+                    'description' => __('Opening balance, movements and closing balance of every account, checking that debit equals credit.'),
+                    'scope' => __('Per month'),
+                ],
+                [
+                    'route' => 'accounting.reports.income-statement',
+                    'icon' => 'presentation-chart-line',
+                    'title' => __('Income Statement'),
+                    'description' => __('Revenue, cost of goods sold, gross profit, expenses and net profit, for the month and the year to date.'),
+                    'scope' => __('Per month'),
+                ],
+                [
+                    'route' => 'accounting.reports.balance-sheet',
+                    'icon' => 'building-library',
+                    'title' => __('Balance Sheet'),
+                    'description' => __('Assets, liabilities and equity at the end of the month, checking that both sides are equal.'),
+                    'scope' => __('Month end'),
+                ],
+            ] : []),
         ];
     }
 }; ?>

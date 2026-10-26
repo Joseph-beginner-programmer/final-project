@@ -68,6 +68,13 @@ Enum work_order_status {
   cancelled
 }
 
+Enum requisition_status {
+  submitted [note: 'Diajukan Produksi, menunggu Pembelian']
+  processed [note: 'Dijadikan PO (status akhir). Jika PO ditolak -> kembali submitted, purchase_order_id tetap; jika PO dibuka lagi -> kembali processed']
+  rejected [note: 'Ditolak Pembelian, wajib alasan']
+  cancelled [note: 'Dibatalkan Produksi']
+}
+
 Enum payment_term {
   cash
   net_7
@@ -173,7 +180,8 @@ Table labor_rates [headercolor: #6D6D6D] {
 
 // ======================================================================
 // PEMBELIAN & PENERIMAAN BAHAN BAKU (ERD 2)
-// Use case: Mengelola Data Pemasok, Menyusun Pesanan Pembelian,
+// Use case: Mengelola Data Pemasok, Membuat Permintaan Pembelian (Produksi),
+//           Memproses Permintaan Pembelian, Menyusun Pesanan Pembelian,
 //           Menyetujui Pesanan Pembelian, Mencatat Penerimaan Barang,
 //           Menyusun Retur Pembelian, Melihat Laporan Pembelian
 // ======================================================================
@@ -201,6 +209,39 @@ Table product_supplier [headercolor: #1565C0] {
 
   indexes {
     (product_id, supplier_id) [unique]
+  }
+}
+
+// Permintaan Pembelian — ✅ DIBANGUN 2026-10-25. Berdiri sendiri (tidak terikat work order).
+// Tanpa catatan/keterangan (keputusan user 2026-10-25).
+// Hanya Produksi (dan Manajemen) yang membuat; tanpa persetujuan. Form menyarankan bahan yang kurang:
+// kebutuhan WO terbuka (rencana - sudah dikeluarkan) dan/atau di bawah reorder_point, dikurangi stok,
+// PO terbuka (draft s.d. partially_received) dan permintaan lain yang masih submitted.
+// Pembelian memilih beberapa permintaan -> satu PO (bahan sama dijumlahkan, harga dari pemasok);
+// menyimpan PO menandai permintaan processed dan mengisi purchase_order_id. Bahan yang tidak dijual
+// pemasok itu diberi peringatan dan dipesan lewat PO lain.
+Table purchase_requisitions [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  requisition_number varchar [unique, note: 'PR-YYYY-000001']
+  needed_by date [note: 'Tidak boleh tanggal lampau']
+  status requisition_status [default: 'submitted']
+  rejection_reason text [null]
+  purchase_order_id bigint [ref: > purchase_orders.id, null, note: 'PO hasil permintaan ini']
+  created_by bigint [ref: > users.id]
+  processed_by bigint [ref: > users.id, null, note: 'Yang memproses / menolak / membatalkan']
+  processed_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table purchase_requisition_items [headercolor: #1565C0] {
+  id bigint [pk, increment]
+  purchase_requisition_id bigint [ref: > purchase_requisitions.id]
+  product_id bigint [ref: > products.id, note: 'Hanya bahan baku yang dapat dibeli']
+  quantity decimal(12,2)
+
+  indexes {
+    (purchase_requisition_id, product_id) [unique]
   }
 }
 
@@ -773,12 +814,16 @@ Table sales_return_items [headercolor: #6A1B9A] {
 // Mengelola Akun Perusahaan (Akuntansi): akun bebas dibuat, diubah, dihapus oleh user.
 // normal_balance dihitung otomatis dari type, tidak bisa dipilih bebas. Flat per 2026-10-18 —
 // tanpa sub-akun (parent_id) untuk saat ini, bisa ditambahkan nanti tanpa mengubah data yang ada.
+// Buku Besar, Neraca Saldo, Laporan Laba Rugi dan Neraca (2026-10-26) dibaca langsung dari journal_entry_lines — tanpa tabel baru.
+// Laba Rugi: HPP = akun beban dengan peran cogs, selisih (material_variance, production_loss, purchase_price_variance) dan semua BOP
+// (sesungguhnya + dibebankan); beban lain = beban usaha. Neraca: modal + laba berjalan (belum ada jurnal penutup akhir tahun).
 Table accounts [headercolor: #EF6C00] {
   id bigint [pk, increment]
   account_code varchar [unique, note: 'Diketik sendiri oleh user, mengikuti skema penomoran akuntansi']
   account_name varchar
   type account_type
-  normal_balance normal_balance [note: 'Otomatis dari type: harta/beban = debit, kewajiban/modal/pendapatan = kredit']
+  normal_balance normal_balance [note: 'Otomatis dari type: harta/beban = debit, kewajiban/modal/pendapatan = kredit; dibalik jika is_contra']
+  is_contra boolean [default: false, note: 'Akun kontra (pengurang di dalam kategorinya), mis. Akumulasi Penyusutan, BOP Dibebankan. Ditambahkan 2026-10-26 (#45)']
   system_role varchar [unique, null, note: 'Peran sistem (App\\Enums\\AccountSystemRole) — menautkan akun ini ke jurnal otomatis, mis. inventory_raw, cogs. Satu peran hanya boleh dipakai satu akun.']
   is_active boolean [default: true]
   created_at timestamp
@@ -907,38 +952,55 @@ Table purchase_payments [headercolor: #EF6C00] {
   updated_at timestamp
 }
 
-// Aturan: 1 faktur = 1 pengiriman (satu sales delivery).
-// Jurnal: Dr Piutang Usaha / Cr Penjualan (subtotal), Cr PPN Keluaran (tax_amount)
+// Faktur Penjualan + Penerimaan Pembayaran — ✅ DIBANGUN 2026-10-26 (Akuntansi + Manajemen; Penjualan hanya melihat).
+// Aturan: 1 faktur = 1 pengiriman yang sudah diposting — dijaga di aplikasi: hanya satu faktur yang belum
+// dibatalkan per pengiriman (faktur yang dibatalkan boleh diganti faktur baru). Draf -> Posting.
+// Baris faktur TIDAK disimpan: qty dari sales_delivery_items x harga dari sales_order_items (keduanya terkunci).
+// Diskon pesanan (discount_percent) berlaku per faktur atas nilai barang; biaya lain pesanan (sales_order_charges)
+// ditagihkan sekali, pada faktur pertama pesanan yang diposting (dihitung ulang saat posting).
+// Jurnal saat diposting (tanggal = invoice_date): Dr Piutang Usaha (total_amount) / Cr Penjualan (subtotal = DPP)
+//   / Cr PPN Keluaran (tax_amount). Dibatalkan setelah diposting (hanya jika belum ada pembayaran) = jurnal pembalik.
 Table sales_invoices [headercolor: #EF6C00] {
   id bigint [pk, increment]
-  invoice_number varchar [unique]
+  invoice_number varchar [unique, note: 'SI-{tahun}-{id}']
   sales_order_id bigint [ref: > sales_orders.id]
-  sales_delivery_id bigint [ref: - sales_deliveries.id, unique, note: 'Hanya menagih yang sudah dikirim']
+  sales_delivery_id bigint [ref: > sales_deliveries.id, note: 'Hanya menagih yang sudah dikirim']
   customer_id bigint [ref: > customers.id]
-  invoice_date date
-  due_date date
-  subtotal decimal(18,2)
-  tax_rate decimal(5,2) [default: 0, note: 'Diketik per faktur']
-  tax_amount decimal(18,2) [default: 0, note: 'PPN Keluaran = subtotal x tax_rate']
-  total_amount decimal(18,2)
-  amount_paid decimal(18,2) [default: 0]
-  status invoice_status [default: 'unpaid']
+  invoice_date date [note: 'Tidak sebelum tanggal kirim, tidak di masa depan']
+  due_date date [note: 'Terisi dari payment_terms pesanan, bisa diubah']
+  goods_amount decimal(18,2) [default: 0, note: 'Σ qty dikirim x harga SO']
+  discount_percent decimal(5,2) [default: 0, note: 'Disalin dari sales_orders.discount_percent']
+  discount_amount decimal(18,2) [default: 0]
+  charges_amount decimal(18,2) [default: 0, note: 'Biaya lain pesanan; hanya pada faktur pertama yang diposting']
+  subtotal decimal(18,2) [default: 0, note: 'DPP = barang - diskon + biaya lain']
+  tax_rate decimal(5,2) [default: 0, note: 'Diketik per faktur, bawaan 11']
+  tax_amount decimal(18,2) [default: 0, note: 'PPN Keluaran = DPP x tax_rate']
+  total_amount decimal(18,2) [default: 0]
+  amount_paid decimal(18,2) [default: 0, note: 'Σ pembayaran yang belum dibatalkan']
+  status invoice_status [default: 'draft']
   created_by bigint [ref: > users.id]
+  posted_by bigint [null, ref: > users.id]
+  posted_at timestamp [null]
   created_at timestamp
   updated_at timestamp
 }
 
-// Jurnal: Dr Kas atau Bank / Cr Piutang Usaha
+// Jurnal: Dr Kas atau Bank / Cr Piutang Usaha (tanggal = payment_date). Dibatalkan = jurnal pembalik.
 Table sales_payments [headercolor: #EF6C00] {
   id bigint [pk, increment]
-  payment_number varchar [unique]
+  payment_number varchar [unique, note: 'RCP-{tahun}-{id}']
   sales_invoice_id bigint [ref: > sales_invoices.id]
   payment_date date
-  amount decimal(18,2)
+  amount decimal(18,2) [note: 'Maksimal sisa tagihan; boleh sebagian']
   method payment_method
-  cash_account_id bigint [ref: > accounts.id]
+  cash_account_id bigint [ref: > accounts.id, note: 'Akun Kas / Bank (harta aktif)']
+  reference varchar [null, note: 'Nomor transfer / giro']
+  status document_status [default: 'posted', note: 'posted / cancelled']
   created_by bigint [ref: > users.id]
+  cancelled_by bigint [null, ref: > users.id]
+  cancelled_at timestamp [null]
   created_at timestamp
+  updated_at timestamp
 }
 
 // ============================== GRUP TABEL ==============================
@@ -952,6 +1014,8 @@ TableGroup Pengguna_Karyawan {
 TableGroup Pembelian {
   suppliers
   product_supplier
+  purchase_requisitions
+  purchase_requisition_items
   purchase_orders
   purchase_order_items
   purchase_order_charges

@@ -50,6 +50,10 @@ class CreatePurchaseOrderAction
 
             $po->recalculateTotal();
 
+            if ($data->requisitionIds !== []) {
+                app(ResolvePurchaseRequisitionAction::class)->markProcessed($data->requisitionIds, $po, $data->createdBy);
+            }
+
             return $po->load(['items', 'charges']);
         });
     }

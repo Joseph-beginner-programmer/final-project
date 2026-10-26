@@ -421,6 +421,15 @@ new #[Title('Purchase Order Details')] class extends Component {
             </div>
             <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
             <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-1.5">{{ $purchaseOrder->supplier->supplier_name }}</p>
+            @php($sourceRequests = $purchaseOrder->purchaseRequisitions()->orderBy('id')->get(['id', 'requisition_number']))
+            @if ($sourceRequests->isNotEmpty())
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    {{ __('From purchase requests') }}:
+                    @foreach ($sourceRequests as $req)
+                        <a href="{{ route('purchasing.requisitions.show', $req) }}" wire:navigate class="font-data text-accent hover:underline">{{ $req->requisition_number }}</a>@if (! $loop->last), @endif
+                    @endforeach
+                </p>
+            @endif
         </div>
 
         <div class="flex flex-wrap items-center gap-2">

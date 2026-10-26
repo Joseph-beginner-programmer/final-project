@@ -29,6 +29,11 @@ enum AccountType: string
         };
     }
 
+    public function normalBalanceFor(bool $isContra): NormalBalance
+    {
+        return $isContra ? $this->normalBalance()->opposite() : $this->normalBalance();
+    }
+
     public function badgeClasses(): string
     {
         return match ($this) {

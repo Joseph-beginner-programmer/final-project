@@ -15,6 +15,7 @@ class ReopenPurchaseOrderAction
             $po->rejected_at = null;
             $po->rejection_reason = null;
             $po->save();
+            app(ResolvePurchaseRequisitionAction::class)->restoreForReopenedOrder($po);
         }); 
         
         return $po;

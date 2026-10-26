@@ -19,6 +19,7 @@ class RejectPurchaseOrderAction
             $po->rejected_at = now();
             $po->rejection_reason = $rejectionReason;
             $po->save();
+            app(ResolvePurchaseRequisitionAction::class)->reopenForRejectedOrder($po);
         });
 
         return $po;

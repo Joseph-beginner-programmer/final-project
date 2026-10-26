@@ -66,6 +66,11 @@ class PurchaseOrder extends Model
         return $this->hasMany(PurchaseOrderItem::class);
     }
 
+    public function purchaseRequisitions(): HasMany
+    {
+        return $this->hasMany(PurchaseRequisition::class);
+    }
+
     public function charges(): HasMany
     {
         return $this->hasMany(PurchaseOrderCharge::class);

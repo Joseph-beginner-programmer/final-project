@@ -34,7 +34,7 @@ new #[Title('Sales Order')] class extends Component {
 
     protected function loadRelations(): void
     {
-        $this->salesOrder->load(['customer', 'salesperson', 'items.product', 'charges', 'deliveries.items', 'createdBy', 'confirmedBy', 'cancelledBy']);
+        $this->salesOrder->load(['customer', 'salesperson', 'items.product', 'charges', 'deliveries.items', 'deliveries.salesInvoices', 'createdBy', 'confirmedBy', 'cancelledBy']);
         unset($this->lines, $this->incoming);
     }
 
@@ -362,6 +362,20 @@ new #[Title('Sales Order')] class extends Component {
                         <div class="flex items-center gap-2">
                             <span class="font-data text-zinc-800 dark:text-zinc-200">{{ $delivery->delivery_number }}</span>
                             <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ $this->documentBadgeClasses($delivery->status) }}">{{ $delivery->status->label() }}</span>
+                            @if ($delivery->status === \App\Enums\DocumentStatus::Posted)
+                                @php($salesInvoice = $delivery->salesInvoices->first(fn ($i) => $i->status !== \App\Enums\SalesInvoiceStatus::Cancelled))
+                                @if ($salesInvoice)
+                                    <span class="text-zinc-400">→</span>
+                                    @can('sales.invoice.view')
+                                        <a href="{{ route('accounting.sales-invoices.show', $salesInvoice) }}" wire:navigate class="font-data text-accent hover:underline underline-offset-2">{{ $salesInvoice->invoice_number }}</a>
+                                    @else
+                                        <span class="font-data text-zinc-700 dark:text-zinc-300">{{ $salesInvoice->invoice_number }}</span>
+                                    @endcan
+                                    <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ $salesInvoice->status->badgeClasses() }}">{{ $salesInvoice->status->label() }}</span>
+                                @else
+                                    <span class="text-[11px] text-zinc-500 dark:text-zinc-400">· {{ __('not invoiced yet') }}</span>
+                                @endif
+                            @endif
                         </div>
                         <span class="font-data tabular-nums text-zinc-500 dark:text-zinc-400">
                             {{ $this->formatQuantity((string) $delivery->items->sum('quantity')) }} {{ __('units') }} · {{ $delivery->delivered_at?->format('d M Y H:i') ?? __('not sent yet') }}

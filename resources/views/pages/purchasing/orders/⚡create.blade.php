@@ -4,6 +4,8 @@ use App\Actions\Purchasing\CreatePurchaseOrderAction;
 use App\DTO\Purchasing\CreatePurchaseOrderData;
 use App\Exceptions\InvalidDeliveryDateException;
 use App\Exceptions\NonPurchasableProductException;
+use App\Exceptions\InvalidPurchaseRequisitionException;
+use App\Models\PurchaseRequisition;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
 use Flux\Flux;
@@ -29,12 +31,50 @@ new #[Title('Create Purchase Order')] class extends Component {
 
     public string $activeTab = 'items';
 
+    #[Locked]
+    public array $requisitionIds = [];
+
+    #[Locked]
+    public array $requestedLines = [];
+
     public function mount(): void
     {
         Gate::authorize('create', PurchaseOrder::class);
 
         $this->orderDate = now()->toDateString();
-        $this->addItemRow();
+
+        $ids = collect(explode(',', (string) request()->query('requisitions', '')))->map(fn ($id) => (int) $id)->filter()->unique()->values();
+        if ($ids->isNotEmpty() && Gate::allows('requisitions.process')) {
+            $open = PurchaseRequisition::whereIn('id', $ids)->where('status', 'submitted')->with('items')->get();
+            if ($open->count() < $ids->count()) {
+                Flux::toast(variant: 'warning', text: __('Some selected requests are no longer open and were left out.'));
+            }
+            $this->requisitionIds = $open->pluck('id')->all();
+            foreach ($open->flatMap->items as $item) {
+                $this->requestedLines[$item->product_id] = bcadd($this->requestedLines[$item->product_id] ?? '0', (string) $item->quantity, 2);
+            }
+        }
+
+        if ($this->requisitionIds === []) {
+            $this->addItemRow();
+        }
+    }
+
+    #[Computed]
+    public function sourceRequisitions(): Collection
+    {
+        return PurchaseRequisition::whereIn('id', $this->requisitionIds)->with(['items.product'])->orderBy('needed_by')->get();
+    }
+
+    #[Computed]
+    public function unsuppliedRequested(): Collection
+    {
+        if (! $this->supplierId) {
+            return collect();
+        }
+        $supplied = $this->availableProducts->pluck('id')->all();
+
+        return \App\Models\Product::whereIn('id', array_keys($this->requestedLines))->whereNotIn('id', $supplied)->get();
     }
 
     public function addItemRow(): void
@@ -68,6 +108,25 @@ new #[Title('Create Purchase Order')] class extends Component {
 
     public function updatedSupplierId(): void
     {
+        if ($this->requisitionIds !== []) {
+            unset($this->selectedSupplier, $this->availableProducts, $this->unsuppliedRequested);
+            $this->items = [];
+            foreach ($this->availableProducts as $product) {
+                if (isset($this->requestedLines[$product->id])) {
+                    $this->items[] = [
+                        'product_id' => (string) $product->id,
+                        'quantity_ordered' => \App\Support\Decimal::plain($this->requestedLines[$product->id]),
+                        'unit_price' => $product->pivot->price !== null ? bcadd((string) $product->pivot->price, '0', 0) : '',
+                    ];
+                }
+            }
+            if ($this->items === []) {
+                $this->addItemRow();
+            }
+
+            return;
+        }
+
         foreach ($this->items as $index => $item) {
             $this->items[$index]['product_id'] = '';
         }
@@ -254,6 +313,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                 'amount' => (string) $row['amount'],
                 'include_in_cost' => (bool) ($row['include_in_cost'] ?? true),
             ])->all(),
+            requisitionIds: $this->requisitionIds,
         );
 
         try {
@@ -264,6 +324,10 @@ new #[Title('Create Purchase Order')] class extends Component {
             return;
         } catch (InvalidDeliveryDateException $e) {
             Flux::toast(text: $e->userMessage());
+
+            return;
+        } catch (InvalidPurchaseRequisitionException $e) {
+            Flux::toast(variant: 'danger', text: $e->userMessage());
 
             return;
         }
@@ -309,6 +373,24 @@ new #[Title('Create Purchase Order')] class extends Component {
             {{ __('Save Purchase Order') }}
         </flux:button>
     </div>
+
+    @if ($requisitionIds !== [])
+        <div class="mt-5 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
+            <p class="font-medium text-zinc-900 dark:text-white">{{ __('From purchase requests') }}</p>
+            <ul class="mt-1 space-y-0.5">
+                @foreach ($this->sourceRequisitions as $req)
+                    <li><span class="font-data text-accent">{{ $req->requisition_number }}</span> · {{ __('needed by :date', ['date' => $req->needed_by->translatedFormat('d M Y')]) }} — {{ $req->items->map(fn ($i) => $i->product->product_name.' '.\App\Support\Decimal::plain($i->quantity).' '.$i->product->unit_of_measure)->implode(', ') }}</li>
+                @endforeach
+            </ul>
+            <p class="mt-1.5 text-zinc-500 dark:text-zinc-400">{{ $supplierId ? __('Lines are filled from these requests with this supplier\'s prices. Saving the PO marks the requests as processed.') : __('Choose a supplier — the requested materials it sells are filled in automatically.') }}</p>
+            @if ($this->unsuppliedRequested->isNotEmpty())
+                <p class="mt-1.5 flex items-start gap-1.5 text-amber-800 dark:text-amber-300">
+                    <flux:icon.exclamation-triangle variant="micro" class="mt-0.5 size-3.5 shrink-0" />
+                    {{ __('This supplier does not sell: :items. Order them from another supplier — the requests are still marked processed when this PO is saved.', ['items' => $this->unsuppliedRequested->pluck('product_name')->implode(', ')]) }}
+                </p>
+            @endif
+        </div>
+    @endif
 
     <div class="mt-6 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-md shadow-zinc-900/4 dark:shadow-none p-6 sm:p-8 lg:p-10 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
 

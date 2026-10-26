@@ -38,6 +38,16 @@ class SalesDelivery extends Model
         return $this->hasMany(SalesDeliveryItem::class);
     }
 
+    public function salesInvoices(): HasMany
+    {
+        return $this->hasMany(SalesInvoice::class);
+    }
+
+    public function liveInvoice(): ?SalesInvoice
+    {
+        return $this->salesInvoices()->where('status', '!=', \App\Enums\SalesInvoiceStatus::Cancelled->value)->first();
+    }
+
     public function createdBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
