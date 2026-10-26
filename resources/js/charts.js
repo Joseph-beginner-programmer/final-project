@@ -85,7 +85,11 @@ const chartBase = (config) => ({
     },
 
     drawXLabels(svg, plot, labels, centerOf) {
+        const step = labels.length > 1 ? Math.abs(centerOf(1) - centerOf(0)) : plot.width;
+        const widest = Math.max(...labels.map((text) => String(text).length)) * 6.5 + 8;
+        const every = Math.max(1, Math.ceil(widest / step));
         labels.forEach((text, i) => {
+            if ((labels.length - 1 - i) % every !== 0) return;
             const label = svgEl('text', { x: centerOf(i), y: plot.top + plot.height + 18, 'text-anchor': 'middle', 'font-size': 11 }, { fill: 'var(--viz-muted)' });
             label.textContent = text;
             svg.appendChild(label);
@@ -195,9 +199,11 @@ export const lineTrend = (config) => ({
         svg.setAttribute('width', width);
         svg.replaceChildren();
 
-        const plot = { left: 44, top: 14, width: width - 92, height: height - 40 };
+        const axisWidth = this.config.axisFormat === 'compactRupiah' ? 64 : 44;
+        const labelAbove = this.config.endLabel === 'above';
+        const plot = { left: axisWidth, top: labelAbove ? 22 : 14, width: width - axisWidth - (labelAbove ? 8 : 48), height: height - (labelAbove ? 48 : 40) };
         const labels = this.config.labels;
-        const lines = [{ id: 'overall', name: this.config.overallLabel, values: this.config.overall, color: 'var(--viz-ink-secondary)' }];
+        const lines = [{ id: 'overall', name: this.config.overallLabel, values: this.config.overall, color: this.config.overallColor ?? 'var(--viz-ink-secondary)' }];
         if (this.isolated !== null) {
             const s = this.config.series.find((row) => row.id === this.isolated);
             if (s) lines.push({ id: s.id, name: s.name, values: s.values, color: `var(--series-${s.slot})` });
@@ -231,8 +237,10 @@ export const lineTrend = (config) => ({
             });
             const lastIndex = line.values.map((v) => v !== null).lastIndexOf(true);
             if (lastIndex >= 0) {
-                const label = svgEl('text', { x: xOf(lastIndex) + 8, y: yOf(line.values[lastIndex]) + 4, 'font-size': 11, 'font-weight': 600 }, { fill: 'var(--viz-ink)' });
-                label.textContent = this.format(line.values[lastIndex]);
+                const label = labelAbove
+                    ? svgEl('text', { x: xOf(lastIndex) + 4, y: yOf(line.values[lastIndex]) - 10, 'text-anchor': 'end', 'font-size': 11, 'font-weight': 600 }, { fill: 'var(--viz-ink)', paintOrder: 'stroke', stroke: 'var(--viz-surface)', strokeWidth: 3 })
+                    : svgEl('text', { x: xOf(lastIndex) + 8, y: yOf(line.values[lastIndex]) + 4, 'font-size': 11, 'font-weight': 600 }, { fill: 'var(--viz-ink)' });
+                label.textContent = formatters[this.config.labelFormat ?? this.config.format ?? 'number'](line.values[lastIndex]);
                 svg.appendChild(label);
             }
         });
@@ -265,9 +273,146 @@ export const lineTrend = (config) => ({
     },
 });
 
+export const groupedBar = (config) => ({
+    ...chartBase(config),
+
+    render() {
+        const svg = this.$refs.svg;
+        const width = this.$refs.frame.clientWidth;
+        const height = this.config.height ?? 240;
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        svg.setAttribute('width', width);
+        svg.replaceChildren();
+
+        const axisWidth = this.config.axisFormat === 'compactRupiah' ? 64 : 44;
+        const plot = { left: axisWidth, top: 12, width: width - axisWidth - 8, height: height - 40 };
+        const labels = this.config.labels;
+        const visible = this.config.series.filter((s) => !this.isDimmed(s.id));
+        const bars = visible.filter((s) => s.kind !== 'line');
+        const lines = visible.filter((s) => s.kind === 'line');
+        const all = visible.flatMap((s) => s.values);
+        const maxValue = niceMax(Math.max(...all, 0));
+        const minValue = Math.min(...all, 0) < 0 ? -niceMax(-Math.min(...all)) : 0;
+        const span = maxValue - minValue;
+        const yOf = (v) => plot.top + plot.height - ((v - minValue) / span) * plot.height;
+
+        for (let i = 0; i <= 4; i++) {
+            const value = minValue + (span / 4) * i;
+            const y = yOf(value);
+            svg.appendChild(svgEl('line', { x1: plot.left, x2: plot.left + plot.width, y1: y, y2: y, 'stroke-width': 1 }, { stroke: Math.abs(value) < 1e-9 ? 'var(--viz-baseline)' : 'var(--viz-grid)' }));
+            const label = svgEl('text', { x: plot.left - 8, y: y + 4, 'text-anchor': 'end', 'font-size': 11 }, { fill: 'var(--viz-muted)', fontVariantNumeric: 'tabular-nums' });
+            label.textContent = formatters[this.config.axisFormat ?? this.config.format ?? 'number'](value);
+            svg.appendChild(label);
+        }
+        if (minValue < 0) {
+            svg.appendChild(svgEl('line', { x1: plot.left, x2: plot.left + plot.width, y1: yOf(0), y2: yOf(0), 'stroke-width': 1 }, { stroke: 'var(--viz-baseline)' }));
+        }
+
+        const band = plot.width / labels.length;
+        const gap = 3;
+        const barWidth = bars.length ? Math.max(4, Math.min(20, (band * 0.66 - gap * (bars.length - 1)) / bars.length)) : 0;
+        const groupWidth = barWidth * bars.length + gap * Math.max(0, bars.length - 1);
+        const centerOf = (i) => plot.left + band * i + band / 2;
+
+        labels.forEach((label, i) => {
+            bars.forEach((s, j) => {
+                const v = s.values[i] ?? 0;
+                if (v === 0) return;
+                const x = centerOf(i) - groupWidth / 2 + j * (barWidth + gap);
+                const y0 = yOf(0);
+                const y1 = yOf(v);
+                const d = v > 0 ? roundedBar(x, y1, barWidth, y0 - y1, 3, true) : roundedBar(x, y0, barWidth, y1 - y0, 3, false);
+                svg.appendChild(svgEl('path', { d }, { fill: `var(--series-${s.slot})`, pointerEvents: 'none' }));
+            });
+
+            const hit = svgEl('rect', { x: plot.left + band * i, y: plot.top, width: band, height: plot.height, tabindex: 0, role: 'img', 'aria-label': label }, { fill: 'transparent', outline: 'none' });
+            const rows = visible.map((s) => ({ name: s.name, value: s.values[i] === null ? '—' : this.format(s.values[i]), slot: s.slot, kind: s.kind ?? 'bar' }));
+            (this.config.notes ?? []).forEach((note) => rows.push({ name: note.name, value: note.values[i], slot: null, kind: 'total' }));
+            const show = (e) => { this.showTooltip(e, label, rows); hit.style.fill = 'var(--viz-hover)'; };
+            const hide = () => { this.hideTooltip(); hit.style.fill = 'transparent'; };
+            hit.addEventListener('pointermove', show);
+            hit.addEventListener('focus', show);
+            hit.addEventListener('pointerleave', hide);
+            hit.addEventListener('blur', hide);
+            svg.insertBefore(hit, svg.firstChild);
+        });
+
+        lines.forEach((s) => {
+            let d = '';
+            s.values.forEach((v, i) => { if (v !== null) d += `${d ? 'L' : 'M'}${centerOf(i)},${yOf(v)}`; });
+            if (d) svg.appendChild(svgEl('path', { d, fill: 'none', 'stroke-width': 2, 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, { stroke: `var(--series-${s.slot})`, pointerEvents: 'none' }));
+            s.values.forEach((v, i) => {
+                if (v === null) return;
+                svg.appendChild(svgEl('circle', { cx: centerOf(i), cy: yOf(v), r: 3.5, 'stroke-width': 2 }, { fill: `var(--series-${s.slot})`, stroke: 'var(--viz-surface)', pointerEvents: 'none' }));
+            });
+        });
+
+        this.drawXLabels(svg, plot, labels, centerOf);
+    },
+});
+
+export const donut = (config) => ({
+    ...chartBase({ isolatable: true, ...config }),
+
+    render() {
+        const svg = this.$refs.svg;
+        const size = this.config.size ?? 176;
+        svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+        svg.setAttribute('width', size);
+        svg.setAttribute('height', size);
+        svg.replaceChildren();
+
+        const segments = this.config.segments.filter((s) => s.value > 0);
+        const total = segments.reduce((sum, s) => sum + s.value, 0);
+        const cx = size / 2;
+        const cy = size / 2;
+        const outer = size / 2 - 2;
+        const inner = outer * 0.64;
+
+        if (total <= 0) {
+            svg.appendChild(svgEl('circle', { cx, cy, r: (outer + inner) / 2, fill: 'none', 'stroke-width': outer - inner }, { stroke: 'var(--viz-grid)' }));
+            return;
+        }
+
+        const point = (radius, angle) => [cx + radius * Math.cos(angle), cy + radius * Math.sin(angle)];
+        let angle = -Math.PI / 2;
+
+        segments.forEach((s) => {
+            const sweep = (s.value / total) * Math.PI * 2;
+            const pad = segments.length > 1 ? 0.01 : 0;
+            let el;
+            if (segments.length === 1) {
+                el = svgEl('circle', { cx, cy, r: (outer + inner) / 2, fill: 'none', 'stroke-width': outer - inner }, { stroke: `var(--series-${s.slot})` });
+            } else {
+                const a0 = angle + pad;
+                const a1 = angle + sweep - pad;
+                const large = a1 - a0 > Math.PI ? 1 : 0;
+                const [x0, y0] = point(outer, a0);
+                const [x1, y1] = point(outer, a1);
+                const [x2, y2] = point(inner, a1);
+                const [x3, y3] = point(inner, a0);
+                el = svgEl('path', { d: `M${x0},${y0}A${outer},${outer} 0 ${large} 1 ${x1},${y1}L${x2},${y2}A${inner},${inner} 0 ${large} 0 ${x3},${y3}Z`, tabindex: 0, role: 'img', 'aria-label': s.name }, { fill: `var(--series-${s.slot})`, outline: 'none' });
+            }
+            el.style.opacity = this.isDimmed(s.id) ? 0.3 : 1;
+            el.style.transition = 'opacity 150ms';
+            const share = new Intl.NumberFormat('id-ID', { minimumFractionDigits: 1, maximumFractionDigits: 1 }).format((s.value / total) * 100) + '%';
+            const show = (e) => this.showTooltip(e, s.name, [{ name: share, value: this.format(s.value), slot: s.slot, kind: 'bar' }]);
+            el.addEventListener('pointermove', show);
+            el.addEventListener('focus', show);
+            el.addEventListener('pointerleave', () => this.hideTooltip());
+            el.addEventListener('blur', () => this.hideTooltip());
+            el.addEventListener('click', () => this.toggle(s.id));
+            svg.appendChild(el);
+            angle += sweep;
+        });
+    },
+});
+
 const register = () => {
     window.Alpine.data('stackedBar', stackedBar);
     window.Alpine.data('lineTrend', lineTrend);
+    window.Alpine.data('groupedBar', groupedBar);
+    window.Alpine.data('donut', donut);
 };
 
 if (window.Alpine) register();

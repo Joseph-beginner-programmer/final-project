@@ -10,7 +10,7 @@ return new class extends Migration
     {
         Schema::create('purchase_order_receipt_attachments', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('purchase_order_receipt_batch_id')->constrained()->restrictOnDelete();
+            $table->foreignId('purchase_order_receipt_batch_id')->constrained(indexName: 'po_receipt_attachments_batch_fk')->restrictOnDelete();
             $table->string('disk');
             $table->string('path');
             $table->string('original_filename');

@@ -32,4 +32,9 @@ class ProductionResultLabor extends Model
     {
         return $this->belongsTo(Employee::class);
     }
+
+    public function wagePayment(): BelongsTo
+    {
+        return $this->belongsTo(WagePayment::class);
+    }
 }

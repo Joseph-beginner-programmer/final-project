@@ -38,6 +38,14 @@ enum UserRole: string
         };
     }
 
+    public function reportsRoute(): string
+    {
+        return match($this) {
+            self::Manager => 'executive.reports.index',
+            default => 'production.reports.index',
+        };
+    }
+
     public static function operational(): array
     {
         return [

@@ -1,5 +1,7 @@
 @php
     use App\Enums\UserRole;
+
+    $isManager = auth()->user()->role === UserRole::Manager;
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
@@ -18,6 +20,7 @@
 
         <flux:sidebar.nav>
             @foreach (UserRole::cases() as $role)
+                @continue($role === UserRole::SystemAdmin)
                 @can('view-dashboard', $role)
                     <flux:sidebar.group :heading="$role->label()" expandable class="grid">
                         <flux:sidebar.item icon="home" :href="route($role->dashboardRoute())"
@@ -82,12 +85,16 @@
                                 :current="request()->routeIs('accounting.sales-invoices.*')" wire:navigate>
                                 {{ __('Sales Invoices') }}
                             </flux:sidebar.item>
-                            @can('reports.production')
+                            <flux:sidebar.item icon="wallet" :href="route('accounting.wages.index')"
+                                :current="request()->routeIs('accounting.wages.*')" wire:navigate>
+                                {{ __('Wage Payments') }}
+                            </flux:sidebar.item>
+                            @if (! $isManager && Gate::allows('reports.production'))
                                 <flux:sidebar.item icon="document-chart-bar" :href="route('production.reports.index')"
                                     :current="request()->routeIs('production.reports.*')" wire:navigate>
                                     {{ __('Reports') }}
                                 </flux:sidebar.item>
-                            @endcan
+                            @endif
                         @endif
 
                         @if ($role === UserRole::Manager)
@@ -98,6 +105,10 @@
                             <flux:sidebar.item icon="cube" :href="route('management.products.list')"
                                 :current="request()->routeIs('management.products.*')" wire:navigate>
                                 {{ __('Products') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="document-chart-bar" :href="route('executive.reports.index')"
+                                :current="request()->routeIs('executive.reports.*', 'production.reports.*', 'accounting.reports.*')" wire:navigate>
+                                {{ __('Reports') }}
                             </flux:sidebar.item>
                         @endif
 
@@ -120,12 +131,12 @@
                                     {{ __('Purchase Requests') }}
                                 </flux:sidebar.item>
                             @endcan
-                            @can('reports.production')
+                            @if (! $isManager && Gate::allows('reports.production'))
                                 <flux:sidebar.item icon="document-chart-bar" :href="route('production.reports.index')"
                                     :current="request()->routeIs('production.reports.*')" wire:navigate>
                                     {{ __('Reports') }}
                                 </flux:sidebar.item>
-                            @endcan
+                            @endif
                         @endif
 
                         @if ($role === UserRole::Warehouse)

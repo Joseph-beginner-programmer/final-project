@@ -636,6 +636,7 @@ Table production_result_labors [headercolor: #C62828] {
   hours decimal(10,2) [note: 'Jam aktual. Pekerja terencana terisi dari work_order_labors (bisa diubah); pekerja tambahan (pengganti/pembantu) boleh ditambahkan']
   hourly_rate decimal(18,2) [note: 'Diisi saat posting: salinan tarif di work_order_labors, atau untuk pekerja tambahan tarif labor_rates pada production_date']
   total_cost decimal(18,2)
+  wage_payment_id bigint [null, ref: > wage_payments.id, note: 'Diisi saat upah baris ini dibayar; null = belum dibayar. Dikosongkan lagi jika pembayaran dibatalkan']
 
   indexes {
     (production_result_id, employee_id) [unique]
@@ -1003,6 +1004,39 @@ Table sales_payments [headercolor: #EF6C00] {
   updated_at timestamp
 }
 
+// Pembayaran Upah — ✅ DIBANGUN 2026-10-26 (Akuntansi + Manajemen).
+// Upah dikreditkan ke Utang Gaji saat hasil produksi diposting (per production_result_labors).
+// Pembayaran: pilih tanggal batas (kerja sampai) + karyawan; semua baris upah karyawan tsb yang belum dibayar
+// sampai tanggal batas ikut dibayar (hanya hasil produksi yang punya jurnal terposting).
+// Jurnal: Dr Utang Gaji / Cr Kas-Bank. Batal = jurnal pembalik + baris upah kembali "belum dibayar".
+Table wage_payments [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  payment_number varchar [unique, note: 'UPH-{tahun}-{id}']
+  payment_date date
+  period_end date [note: 'Tanggal batas: kerja sampai tanggal ini; <= payment_date']
+  cash_account_id bigint [ref: > accounts.id, note: 'Akun Kas / Bank (harta aktif)']
+  total_amount decimal(18,2)
+  reference varchar [null, note: 'Nomor transfer']
+  status document_status [default: 'posted', note: 'posted / cancelled']
+  created_by bigint [ref: > users.id]
+  cancelled_by bigint [null, ref: > users.id]
+  cancelled_at timestamp [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table wage_payment_lines [headercolor: #EF6C00] {
+  id bigint [pk, increment]
+  wage_payment_id bigint [ref: > wage_payments.id]
+  employee_id bigint [ref: > employees.id]
+  hours decimal(10,2) [note: 'Jumlah jam yang dibayar']
+  amount decimal(18,2) [note: 'Jumlah total_cost baris upah yang dibayar']
+
+  indexes {
+    (wage_payment_id, employee_id) [unique]
+  }
+}
+
 // ============================== GRUP TABEL ==============================
 
 TableGroup Pengguna_Karyawan {
@@ -1070,4 +1104,6 @@ TableGroup Akuntansi {
   purchase_payments
   sales_invoices
   sales_payments
+  wage_payments
+  wage_payment_lines
 }

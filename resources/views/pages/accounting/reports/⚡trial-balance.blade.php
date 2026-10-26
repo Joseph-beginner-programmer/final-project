@@ -68,7 +68,7 @@ new #[Title('Trial Balance')] class extends Component {
 
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
-        <flux:breadcrumbs.item :href="route('production.reports.index')" wire:navigate>{{ __('Reports') }}</flux:breadcrumbs.item>
+        <flux:breadcrumbs.item :href="route(auth()->user()->role->reportsRoute())" wire:navigate>{{ __('Reports') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item>{{ __('Trial Balance') }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>
 

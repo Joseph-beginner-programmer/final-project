@@ -33,8 +33,12 @@ Route::middleware(['auth'])->group(function () {
         ->name('admin.dashboard')
         ->middleware('dashboard.access:system_admin');
 
-    Route::view('/executive/dashboard', 'dashboards.placeholder')
+    Route::livewire('/executive/dashboard', 'pages::executive.dashboard')
         ->name('executive.dashboard')
+        ->middleware('dashboard.access:manager');
+
+    Route::livewire('/executive/reports', 'pages::production.reports.index')
+        ->name('executive.reports.index')
         ->middleware('dashboard.access:manager');
 });
 
@@ -110,6 +114,15 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/accounting/purchase-invoices/{purchaseInvoice}', 'pages::accounting.purchase-invoices.show')
         ->name('accounting.purchase-invoices.show');
+
+    Route::livewire('/accounting/wages', 'pages::accounting.wages.index')
+        ->name('accounting.wages.index');
+
+    Route::livewire('/accounting/wages/pay', 'pages::accounting.wages.pay')
+        ->name('accounting.wages.pay');
+
+    Route::livewire('/accounting/wages/{wagePayment}', 'pages::accounting.wages.show')
+        ->name('accounting.wages.show');
 
     Route::livewire('/accounting/sales-invoices', 'pages::accounting.sales-invoices.list')
         ->name('accounting.sales-invoices.list');

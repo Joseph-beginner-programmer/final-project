@@ -31,6 +31,8 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        $this->loadMigrationsFrom(glob(database_path('migrations/*'), GLOB_ONLYDIR));
+
         Gate::define('view-dashboard', function ($user, UserRole $dashboardRole) {
             return $user->role === $dashboardRole
                 || in_array($user->role, [UserRole::Manager, UserRole::SystemAdmin], true);
@@ -126,6 +128,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('sales.invoice', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
+        Gate::define('wages.pay', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
         Gate::define('sales.invoice.view', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::Sales], true);
         });
@@ -144,6 +149,7 @@ class AppServiceProvider extends ServiceProvider
             'purchase_payment' => \App\Models\PurchasePayment::class,
             'sales_invoice' => \App\Models\SalesInvoice::class,
             'sales_payment' => \App\Models\SalesPayment::class,
+            'wage_payment' => \App\Models\WagePayment::class,
         ]);
     }
 
