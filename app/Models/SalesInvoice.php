@@ -33,6 +33,8 @@ class SalesInvoice extends Model
             'tax_amount' => 'decimal:2',
             'total_amount' => 'decimal:2',
             'amount_paid' => 'decimal:2',
+            'returned_amount' => 'decimal:2',
+            'refunded_amount' => 'decimal:2',
             'posted_at' => 'datetime',
         ];
     }
@@ -74,7 +76,9 @@ class SalesInvoice extends Model
 
     public function balance(): string
     {
-        return bcsub((string) $this->total_amount, (string) $this->amount_paid, 2);
+        $settled = bcadd((string) $this->returned_amount, bcsub((string) $this->amount_paid, (string) $this->refunded_amount, 2), 2);
+
+        return bcsub((string) $this->total_amount, $settled, 2);
     }
 
     public function isOverdue(): bool
@@ -95,8 +99,8 @@ class SalesInvoice extends Model
         $paid = (string) $this->payments()->where('status', DocumentStatus::Posted->value)->sum('amount');
         $this->amount_paid = $paid;
         $this->status = match (true) {
-            bccomp($paid, '0', 2) <= 0 => SalesInvoiceStatus::Unpaid,
-            bccomp($paid, (string) $this->total_amount, 2) >= 0 => SalesInvoiceStatus::Paid,
+            bccomp($this->balance(), '0', 2) <= 0 => SalesInvoiceStatus::Paid,
+            bccomp(bcadd($paid, (string) $this->returned_amount, 2), '0', 2) <= 0 => SalesInvoiceStatus::Unpaid,
             default => SalesInvoiceStatus::PartiallyPaid,
         };
         $this->save();

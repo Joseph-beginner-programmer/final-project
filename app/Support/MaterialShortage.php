@@ -48,10 +48,10 @@ class MaterialShortage
 
         $onOrder = PurchaseOrderItem::query()
             ->whereHas('purchaseOrder', fn ($q) => $q->whereIn('status', self::openPurchaseOrderStatuses()))
-            ->get(['product_id', 'quantity_ordered', 'quantity_received'])
+            ->get(['product_id', 'quantity_ordered', 'quantity_received', 'quantity_returned'])
             ->groupBy('product_id')
             ->map(fn ($rows) => $rows->reduce(function (string $carry, $row) {
-                $open = bcsub((string) $row->quantity_ordered, (string) $row->quantity_received, 2);
+                $open = bcsub((string) $row->quantity_ordered, bcsub((string) $row->quantity_received, (string) $row->quantity_returned, 2), 2);
 
                 return bccomp($open, '0', 2) > 0 ? bcadd($carry, $open, 2) : $carry;
             }, '0'));

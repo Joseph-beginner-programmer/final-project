@@ -8,7 +8,9 @@ use App\Actions\Purchasing\SubmitPurchaseOrderForApprovalAction;
 use App\Actions\Purchasing\UpdatePurchaseOrderChargeAction;
 use App\Actions\Purchasing\UpdatePurchaseOrderItemAction;
 use App\Actions\Purchasing\ApprovePurchaseOrderAction;
+use App\Actions\Purchasing\CancelPurchaseOrderAction;
 use App\Actions\Purchasing\ClosePurchaseOrderAction;
+use App\Exceptions\PurchaseOrderNotCancellableException;
 use App\Actions\Purchasing\RejectPurchaseOrderAction;
 use App\Actions\Purchasing\ReopenPurchaseOrderAction;
 use App\Enums\PurchaseOrderStatus;
@@ -52,11 +54,13 @@ new #[Title('Purchase Order Details')] class extends Component {
 
     public string $closeReason = '';
 
+    public string $cancelReason = '';
+
     public function mount(PurchaseOrder $purchaseOrder): void
     {
         Gate::authorize('view', $purchaseOrder);
 
-        $this->purchaseOrder = $purchaseOrder->load(['supplier', 'createdBy', 'approvedBy', 'closedBy', 'items.product', 'charges']);
+        $this->purchaseOrder = $purchaseOrder->load(['supplier', 'createdBy', 'approvedBy', 'closedBy', 'cancelledBy', 'items.product', 'charges']);
 
         $this->syncItemsFromModel();
         $this->syncChargesFromModel();
@@ -366,6 +370,31 @@ new #[Title('Purchase Order Details')] class extends Component {
         Flux::toast(variant: 'success', text: __('Purchase order closed.'));
     }
 
+    public function cancelOrder(): void
+    {
+        Gate::authorize('cancel', $this->purchaseOrder);
+
+        $this->validate([
+            'cancelReason' => ['required', 'string', 'max:1000'],
+        ], attributes: [
+            'cancelReason' => __('Cancel reason'),
+        ]);
+
+        try {
+            app(CancelPurchaseOrderAction::class)->handle($this->purchaseOrder, Auth::id(), $this->cancelReason);
+        } catch (PurchaseOrderNotCancellableException $e) {
+            Flux::toast(variant: 'danger', text: $e->userMessage());
+
+            return;
+        }
+
+        $this->purchaseOrder->refresh();
+        $this->cancelReason = '';
+        $this->modal('cancel-po')->close();
+
+        Flux::toast(variant: 'success', text: __('Purchase order cancelled.'));
+    }
+
     public function formatRupiah(string $amount): string
     {
         return 'Rp '.number_format((float) $amount, 0, ',', '.');
@@ -457,6 +486,14 @@ new #[Title('Purchase Order Details')] class extends Component {
                 </flux:button>
             @endcan
 
+            @can('cancel', $purchaseOrder)
+                <flux:modal.trigger name="cancel-po">
+                    <flux:button variant="ghost" icon="x-mark" class="text-zinc-500 hover:text-red-600 active:scale-[0.95]">
+                        {{ __('Cancel PO') }}
+                    </flux:button>
+                </flux:modal.trigger>
+            @endcan
+
             @can('close', $purchaseOrder)
                 <flux:modal.trigger name="close-po">
                     <flux:button variant="filled" icon="archive-box" class="active:scale-[0.95]">
@@ -499,6 +536,26 @@ new #[Title('Purchase Order Details')] class extends Component {
                     <flux:button variant="danger" type="submit" wire:loading.attr="disabled" wire:target="reject" class="active:scale-[0.95]">
                         {{ __('Reject Purchase Order') }}
                     </flux:button>
+                </div>
+            </form>
+        </flux:modal>
+    @endcan
+
+    @can('cancel', $purchaseOrder)
+        <flux:modal name="cancel-po" :show="$errors->has('cancelReason')" focusable class="max-w-lg">
+            <form wire:submit="cancelOrder" class="space-y-6">
+                <div>
+                    <flux:heading size="lg">{{ __('Cancel this purchase order?') }}</flux:heading>
+                    <flux:subheading>{{ __('Nothing has been received yet, so the order is simply called off. Purchase requests linked to it go back to Submitted so Purchasing can order them again.') }}</flux:subheading>
+                </div>
+
+                <flux:textarea wire:model="cancelReason" :label="__('Cancel reason')" rows="4" />
+
+                <div class="flex justify-end gap-2">
+                    <flux:modal.close>
+                        <flux:button variant="filled" class="active:scale-[0.95]">{{ __('Back') }}</flux:button>
+                    </flux:modal.close>
+                    <flux:button variant="danger" type="submit" wire:loading.attr="disabled" wire:target="cancelOrder" class="active:scale-[0.95]">{{ __('Cancel PO') }}</flux:button>
                 </div>
             </form>
         </flux:modal>
@@ -589,6 +646,16 @@ new #[Title('Purchase Order Details')] class extends Component {
                     <div class="flex justify-between gap-2">
                         <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Close Reason') }}</dt>
                         <dd class="text-zinc-700 dark:text-zinc-300 text-right">{{ $purchaseOrder->close_reason }}</dd>
+                    </div>
+                @endif
+                @if ($purchaseOrder->cancelledBy)
+                    <div class="flex justify-between gap-2">
+                        <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Cancelled By') }}</dt>
+                        <dd class="text-zinc-700 dark:text-zinc-300">{{ $purchaseOrder->cancelledBy->name }}</dd>
+                    </div>
+                    <div class="flex justify-between gap-2">
+                        <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Cancel reason') }}</dt>
+                        <dd class="text-zinc-700 dark:text-zinc-300 text-right">{{ $purchaseOrder->cancel_reason }}</dd>
                     </div>
                 @endif
             </dl>

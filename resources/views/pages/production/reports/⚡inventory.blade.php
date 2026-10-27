@@ -32,7 +32,7 @@ new #[Title('Warehouse Inventory Report')] class extends Component {
     protected function normalize(): void
     {
         $this->period = ReportPeriod::normalize($this->period);
-        $this->type = ReportPeriod::type($this->type, [ProductType::RawMaterial, ProductType::Wip])?->value ?? '';
+        $this->type = ReportPeriod::type($this->type, InventoryReport::allTypes())?->value ?? '';
     }
 
     public function shiftPeriod(int $months): void
@@ -95,7 +95,7 @@ new #[Title('Warehouse Inventory Report')] class extends Component {
         <div>
             <h1 class="font-display text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">{{ __('Warehouse Inventory Report') }}</h1>
             <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
-            <p class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Raw materials and WIP: stock at the start of the month, what came in, what went out, and what is left.') }}</p>
+            <p class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Raw materials, WIP and finished goods: stock at the start of the month, what came in, what went out, and what is left.') }}</p>
         </div>
         <div class="flex items-center gap-2">
             <flux:button size="sm" variant="filled" icon="document-arrow-down" :href="route('production.reports.inventory.export', ['format' => 'pdf', ...$exportParams])" class="active:scale-[0.95]">PDF</flux:button>
@@ -112,11 +112,12 @@ new #[Title('Warehouse Inventory Report')] class extends Component {
             </div>
             <flux:button size="sm" variant="ghost" icon="chevron-right" wire:click="shiftPeriod(1)" :aria-label="__('Next month')" class="active:scale-[0.95]" />
         </div>
-        <div class="w-80">
+        <div class="w-full sm:w-[28rem]">
             <flux:radio.group wire:model.live="type" variant="segmented" size="sm" :aria-label="__('Product type')">
                 <flux:radio value="" :label="__('All')" />
                 <flux:radio value="raw_material" :label="__('Raw Material')" />
                 <flux:radio value="wip" :label="__('WIP')" />
+                <flux:radio value="finished_goods" :label="__('Finished goods')" />
             </flux:radio.group>
         </div>
     </div>

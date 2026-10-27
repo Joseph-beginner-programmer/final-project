@@ -245,6 +245,7 @@ class DemoSeeder extends Seeder
             ['2003', 'PPN Keluaran', AccountType::Liability, AccountSystemRole::VatOut, false],
             ['3000', 'Modal Usaha', AccountType::Equity, null, false],
             ['4000', 'Penjualan', AccountType::Revenue, AccountSystemRole::SalesRevenue, false],
+            ['4001', 'Retur Penjualan', AccountType::Revenue, AccountSystemRole::SalesReturns, true],
             ['5000', 'Harga Pokok Penjualan', AccountType::Expense, AccountSystemRole::Cogs, false],
             ['5001', 'BOP Dibebankan', AccountType::Expense, AccountSystemRole::OverheadApplied, true],
             ['5002', 'Selisih Bahan', AccountType::Expense, AccountSystemRole::MaterialVariance, false],

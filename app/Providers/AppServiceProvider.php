@@ -128,6 +128,18 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('sales.invoice', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
+        Gate::define('purchasing.return', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Warehouse, UserRole::Manager], true);
+        });
+        Gate::define('purchasing.return.view', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Warehouse, UserRole::Accounting, UserRole::Manager], true);
+        });
+        Gate::define('sales.return', function ($user) {
+            return in_array($user->role, [UserRole::Sales, UserRole::Warehouse, UserRole::Manager], true);
+        });
+        Gate::define('sales.return.view', function ($user) {
+            return in_array($user->role, [UserRole::Sales, UserRole::Warehouse, UserRole::Accounting, UserRole::Manager], true);
+        });
         Gate::define('wages.pay', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
@@ -150,6 +162,10 @@ class AppServiceProvider extends ServiceProvider
             'sales_invoice' => \App\Models\SalesInvoice::class,
             'sales_payment' => \App\Models\SalesPayment::class,
             'wage_payment' => \App\Models\WagePayment::class,
+            'purchase_return' => \App\Models\PurchaseReturn::class,
+            'purchase_return_item' => \App\Models\PurchaseReturnItem::class,
+            'sales_return' => \App\Models\SalesReturn::class,
+            'sales_return_item' => \App\Models\SalesReturnItem::class,
         ]);
     }
 

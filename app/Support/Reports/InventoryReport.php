@@ -23,7 +23,15 @@ class InventoryReport
      */
     public function types(): array
     {
-        return $this->type ? [$this->type] : [ProductType::RawMaterial, ProductType::Wip];
+        return $this->type ? [$this->type] : self::allTypes();
+    }
+
+    /**
+     * @return list<ProductType>
+     */
+    public static function allTypes(): array
+    {
+        return [ProductType::RawMaterial, ProductType::Wip, ProductType::FinishedGoods];
     }
 
     /**
@@ -33,7 +41,7 @@ class InventoryReport
     {
         $products = Product::query()
             ->whereIn('type', array_map(fn (ProductType $t) => $t->value, $this->types()))
-            ->orderBy('type')
+            ->orderByRaw('FIELD(type, '.implode(', ', array_map(fn (ProductType $t) => "'".$t->value."'", self::allTypes())).')')
             ->orderBy('product_code')
             ->get();
         $ids = $products->pluck('id');

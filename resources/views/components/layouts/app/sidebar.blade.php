@@ -43,6 +43,10 @@
                                     {{ __('Purchase Requests') }}
                                 </flux:sidebar.item>
                             @endcan
+                            <flux:sidebar.item icon="arrow-uturn-left" :href="route('purchasing.returns.list')"
+                                :current="request()->routeIs('purchasing.returns.*')" wire:navigate>
+                                {{ __('Purchase Returns') }}
+                            </flux:sidebar.item>
                         @endif
 
                         @if ($role === UserRole::Sales)
@@ -53,6 +57,10 @@
                             <flux:sidebar.item icon="building-storefront" :href="route('sales.customers.list')"
                                 :current="request()->routeIs('sales.customers.*')" wire:navigate>
                                 {{ __('Customers') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="arrow-uturn-left" :href="route('sales.returns.list')"
+                                :current="request()->routeIs('sales.returns.*')" wire:navigate>
+                                {{ __('Sales Returns') }}
                             </flux:sidebar.item>
                         @endif
 
@@ -159,6 +167,14 @@
                             <flux:sidebar.item icon="truck" :href="route('warehouse.outbound.sales-deliveries.list')"
                                 :current="request()->routeIs('warehouse.outbound.sales-deliveries.*')" wire:navigate>
                                 {{ __('Sales Delivery') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="arrow-uturn-left" :href="route('purchasing.returns.list')"
+                                :current="request()->routeIs('purchasing.returns.*')" wire:navigate>
+                                {{ __('Purchase Returns') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="arrow-uturn-right" :href="route('sales.returns.list')"
+                                :current="request()->routeIs('sales.returns.*')" wire:navigate>
+                                {{ __('Sales Returns') }}
                             </flux:sidebar.item>
                         @endif
                     </flux:sidebar.group>

@@ -106,21 +106,30 @@ class SavePurchaseInvoiceDraftAction
             throw new InvalidPurchaseInvoiceException(InvalidPurchaseInvoiceException::EMPTY_RECEIPT);
         }
 
-        return $receipts->map(function (PurchaseOrderReceipt $receipt) use ($unitPrices) {
+        $lines = $receipts->map(function (PurchaseOrderReceipt $receipt) use ($unitPrices) {
             $price = $unitPrices[$receipt->id] ?? (string) $receipt->purchaseOrderItem->unit_price;
             if (! is_numeric($price) || bccomp((string) $price, '0', 2) < 0) {
                 throw new InvalidPurchaseInvoiceException(InvalidPurchaseInvoiceException::INVALID_LINE);
             }
 
+            $returned = $receipt->returned();
+            $quantity = bcsub((string) $receipt->quantity_received, $returned['quantity'], 2);
+
             return [
                 'purchase_order_receipt_id' => $receipt->id,
                 'product_id' => $receipt->purchaseOrderItem->product_id,
-                'quantity' => (string) $receipt->quantity_received,
+                'quantity' => $quantity,
                 'unit_price' => bcadd((string) $price, '0', 2),
-                'amount' => bcadd(bcmul((string) $receipt->quantity_received, (string) $price, 6), '0.005', 2),
-                'received_value' => $receipt->receivedValue(),
+                'amount' => bcadd(bcmul($quantity, (string) $price, 6), '0.005', 2),
+                'received_value' => bcsub($receipt->receivedValue(), $returned['value'], 2),
             ];
-        })->all();
+        })->filter(fn (array $line) => bccomp($line['quantity'], '0', 2) > 0)->values()->all();
+
+        if ($lines === []) {
+            throw new InvalidPurchaseInvoiceException(InvalidPurchaseInvoiceException::EMPTY_RECEIPT);
+        }
+
+        return $lines;
     }
 
     /**

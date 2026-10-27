@@ -24,7 +24,7 @@ new #[Title('Reports')] class extends Component {
                 'route' => 'production.reports.inventory',
                 'icon' => 'archive-box',
                 'title' => __('Warehouse Inventory Report'),
-                'description' => __('Opening, in, out and closing stock of raw materials and WIP for the month.'),
+                'description' => __('Opening, in, out and closing stock of raw materials, WIP and finished goods for the month.'),
                 'scope' => __('Per month'),
             ],
             ...(Gate::allows('reports.finance') ? [

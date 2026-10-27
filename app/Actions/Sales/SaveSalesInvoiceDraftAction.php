@@ -19,6 +19,9 @@ class SaveSalesInvoiceDraftAction
     {
         $invoice?->ensureIsDraft();
         self::checkDates($delivery, $invoiceDate, $dueDate);
+        if (self::lines($delivery) === []) {
+            throw new InvalidSalesInvoiceException(InvalidSalesInvoiceException::FULLY_RETURNED, $delivery->delivery_number);
+        }
 
         return DB::transaction(function () use ($delivery, $invoiceDate, $dueDate, $taxRate, $userId, $invoice) {
             SalesOrder::whereKey($delivery->sales_order_id)->lockForUpdate()->first();
@@ -82,15 +85,22 @@ class SaveSalesInvoiceDraftAction
     public static function lines(SalesDelivery $delivery): array
     {
         return $delivery->items()->with(['product', 'salesOrderItem'])->orderBy('id')->get()
-            ->map(fn (SalesDeliveryItem $item) => [
-                'product_id' => $item->product_id,
-                'product_name' => $item->product->product_name,
-                'product_code' => $item->product->product_code,
-                'unit' => $item->product->unit_of_measure,
-                'quantity' => (string) $item->quantity,
-                'unit_price' => (string) $item->salesOrderItem->unit_price,
-                'amount' => bcadd(bcmul((string) $item->quantity, (string) $item->salesOrderItem->unit_price, 6), '0.005', 2),
-            ])
+            ->map(function (SalesDeliveryItem $item) {
+                $quantity = $item->netQuantity();
+
+                return [
+                    'product_id' => $item->product_id,
+                    'product_name' => $item->product->product_name,
+                    'product_code' => $item->product->product_code,
+                    'unit' => $item->product->unit_of_measure,
+                    'quantity' => $quantity,
+                    'returned' => bcsub((string) $item->quantity, $quantity, 2),
+                    'unit_price' => (string) $item->salesOrderItem->unit_price,
+                    'amount' => bcadd(bcmul($quantity, (string) $item->salesOrderItem->unit_price, 6), '0.005', 2),
+                ];
+            })
+            ->filter(fn (array $line) => bccomp($line['quantity'], '0', 2) > 0)
+            ->values()
             ->all();
     }
 

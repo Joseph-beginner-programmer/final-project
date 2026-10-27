@@ -24,6 +24,9 @@ class CancelSalesInvoiceAction
             }
 
             if ($invoice->status->isPosted()) {
+                if (\App\Models\SalesReturn::where('sales_invoice_id', $invoice->id)->where('status', DocumentStatus::Posted->value)->exists()) {
+                    throw new InvalidSalesInvoiceException(InvalidSalesInvoiceException::HAS_RETURNS);
+                }
                 if ($invoice->payments()->where('status', DocumentStatus::Posted->value)->exists()) {
                     throw new InvalidSalesInvoiceException(InvalidSalesInvoiceException::HAS_PAYMENTS);
                 }

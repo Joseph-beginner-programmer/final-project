@@ -14,6 +14,7 @@ class InvalidPurchaseInvoiceException extends RuntimeException
     public const NOT_EXPENSE_ACCOUNT = 'not_expense_account';
     public const HAS_PAYMENTS = 'has_payments';
     public const NOT_POSTED = 'not_posted';
+    public const HAS_RETURNS = 'has_returns';
     public const EMPTY_RECEIPT = 'empty_receipt';
 
     public function __construct(
@@ -34,6 +35,7 @@ class InvalidPurchaseInvoiceException extends RuntimeException
             self::NOT_EXPENSE_ACCOUNT => __(':name is not an expense account.', ['name' => $this->detail]),
             self::HAS_PAYMENTS => __('This invoice already has payments. Cancel the payments first.'),
             self::NOT_POSTED => __('Only a posted invoice can do this.'),
+            self::HAS_RETURNS => __('Goods on this invoice were already returned. A posted return cannot be undone, so the invoice cannot be cancelled.'),
             self::EMPTY_RECEIPT => __('This receipt has no received items to invoice.'),
             default => __('Invalid purchase invoice.'),
         };

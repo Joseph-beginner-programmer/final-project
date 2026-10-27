@@ -34,6 +34,9 @@ class PostSalesInvoiceAction
 
             $delivery = $invoice->salesDelivery;
             SaveSalesInvoiceDraftAction::checkDates($delivery, $invoice->invoice_date->toDateString(), $invoice->due_date->toDateString());
+            if (SaveSalesInvoiceDraftAction::lines($delivery) === []) {
+                throw new InvalidSalesInvoiceException(InvalidSalesInvoiceException::FULLY_RETURNED, $delivery->delivery_number);
+            }
             $invoice->fill(SaveSalesInvoiceDraftAction::totals($delivery, (string) $invoice->tax_rate, $invoice->id));
 
             $this->postJournalEntry->handle(

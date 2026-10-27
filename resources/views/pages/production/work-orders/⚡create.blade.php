@@ -12,6 +12,7 @@ use App\Exceptions\PlannedStartDateInPastException;
 use App\Exceptions\WorkOrderNotEditableException;
 use App\Exceptions\WorkOrderRequiresLaborException;
 use App\Models\Employee;
+use App\Models\Product;
 use App\Models\ProductionFormula;
 use App\Models\WorkOrder;
 use Flux\Flux;
@@ -42,6 +43,12 @@ new #[Title('Create Work Order')] class extends Component {
 
     public string $plannedMachineHours = '';
 
+    #[Locked]
+    public string $prefillFor = '';
+
+    #[Locked]
+    public string $prefillMissingFormula = '';
+
     public function mount(?WorkOrder $workOrder = null): void
     {
         if ($workOrder?->exists) {
@@ -66,6 +73,30 @@ new #[Title('Create Work Order')] class extends Component {
 
         $this->plannedStartDate = now()->toDateString();
         $this->addLaborRow();
+        $this->prefillFromQuery();
+    }
+
+    protected function prefillFromQuery(): void
+    {
+        $productId = (int) request()->query('product');
+        if ($productId > 0) {
+            $formula = ProductionFormula::where('product_id', $productId)->where('is_active', true)->first();
+            if ($formula) {
+                $this->productionFormulaId = (string) $formula->id;
+            } else {
+                $this->prefillMissingFormula = (string) Product::whereKey($productId)->value('product_name');
+            }
+        }
+
+        $quantity = request()->query('quantity');
+        if (is_string($quantity) && is_numeric($quantity) && bccomp($quantity, '0', 2) > 0) {
+            $this->quantityTarget = $this->formatQuantity(bcadd($quantity, '0', 2));
+        }
+
+        $for = request()->query('for');
+        if (is_string($for) && preg_match('/^WO-\d{4}-\d{6}$/', $for) === 1) {
+            $this->prefillFor = $for;
+        }
     }
 
     public function addLaborRow(): void
@@ -376,6 +407,20 @@ new #[Title('Create Work Order')] class extends Component {
             {{ __('Save Work Order') }}
         </flux:button>
     </div>
+
+    @if ($prefillFor || $prefillMissingFormula)
+        <div class="mt-4 flex items-start gap-2 rounded-lg border px-4 py-2.5 text-xs {{ $prefillMissingFormula ? 'border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 text-amber-900 dark:text-amber-200' : 'border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-300' }}">
+            <flux:icon :name="$prefillMissingFormula ? 'exclamation-triangle' : 'information-circle'" variant="micro" class="mt-px size-4 shrink-0" />
+            <span>
+                @if ($prefillFor)
+                    {{ __('Filled in from the production dashboard to cover the shortage of :wo.', ['wo' => $prefillFor]) }}
+                @endif
+                @if ($prefillMissingFormula)
+                    {{ __(':product has no active production formula yet, so it could not be selected.', ['product' => $prefillMissingFormula]) }}
+                @endif
+            </span>
+        </div>
+    @endif
 
     <div class="mt-6 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 shadow-md shadow-zinc-900/4 dark:shadow-none p-6 sm:p-8 lg:p-10 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-x-10 gap-y-10">

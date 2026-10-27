@@ -21,7 +21,7 @@ enum PurchaseOrderStatus: string
             self::Approved => in_array($target, [self::PartiallyReceived, self::FullyReceived, self::Cancelled], true),
             self::Rejected => $target === self::Draft,
             self::PartiallyReceived => in_array($target, [self::FullyReceived, self::Closed], true),
-            self::FullyReceived => $target === self::Closed,
+            self::FullyReceived => in_array($target, [self::Closed, self::PartiallyReceived], true),
             self::Closed, self::Cancelled => false,
         };
     }

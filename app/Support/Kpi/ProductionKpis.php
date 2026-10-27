@@ -105,23 +105,6 @@ class ProductionKpis
     }
 
     /**
-     * @return Collection<int, array{product: string, good: float, reject: float, reject_rate: float}>
-     */
-    public function rejectRateByProduct(int $limit = 5): Collection
-    {
-        return $this->perProductTotals()
-            ->map(fn ($row) => [
-                'product' => $row['name'],
-                'good' => $row['good'],
-                'reject' => $row['reject'],
-                'reject_rate' => $row['good'] + $row['reject'] > 0 ? $row['reject'] / ($row['good'] + $row['reject']) * 100 : 0.0,
-            ])
-            ->sortByDesc('reject_rate')
-            ->take($limit)
-            ->values();
-    }
-
-    /**
      * @return Collection<int, array{id: int, name: string, good: float, reject: float}>
      */
     public function perProductTotals(): Collection
@@ -255,23 +238,6 @@ class ProductionKpis
         }
 
         return ['months' => $labels, 'overall' => $overall, 'series' => array_values($perProduct)];
-    }
-
-    /**
-     * @return array{months: list<string>, material_variance: list<float>, production_loss: list<float>}
-     */
-    public function lossesTrend(int $months = 6): array
-    {
-        $result = ['months' => [], 'material_variance' => [], 'production_loss' => []];
-
-        foreach ($this->trailingMonths($months) as $month) {
-            $losses = $month->losses();
-            $result['months'][] = $month->start->translatedFormat('M Y');
-            $result['material_variance'][] = (float) $losses['material_variance'];
-            $result['production_loss'][] = (float) $losses['production_loss'];
-        }
-
-        return $result;
     }
 
     /**

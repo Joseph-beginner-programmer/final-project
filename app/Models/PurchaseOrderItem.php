@@ -18,6 +18,7 @@ class PurchaseOrderItem extends Model
         return [
             'quantity_ordered' => 'decimal:2',
             'quantity_received' => 'decimal:2',
+            'quantity_returned' => 'decimal:2',
             'unit_price' => 'decimal:2',
             'subtotal' => 'decimal:2',
         ];
@@ -49,12 +50,17 @@ class PurchaseOrderItem extends Model
     }
     public function remainingQuantity(): string
     {
-        return bcsub((string) $this->quantity_ordered, (string) $this->quantity_received, 2);
+        return bcsub((string) $this->quantity_ordered, $this->netReceived(), 2);
+    }
+
+    public function netReceived(): string
+    {
+        return bcsub((string) $this->quantity_received, (string) $this->quantity_returned, 2);
     }
 
     public function isFullyReceived(): bool
     {
-        return bccomp((string) $this->quantity_received, (string) $this->quantity_ordered, 2) >= 0;
+        return bccomp($this->netReceived(), (string) $this->quantity_ordered, 2) >= 0;
     }
 
     public function chargeShare(): string

@@ -10,6 +10,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
+use Livewire\Attributes\Locked;
 use Livewire\Attributes\Title;
 use Livewire\Component;
 
@@ -18,11 +19,43 @@ new #[Title('Purchase Request')] class extends Component {
 
     public string $neededBy = '';
 
+    #[Locked]
+    public string $prefillFor = '';
+
     public function mount(): void
     {
         Gate::authorize('requisitions.create');
         $this->neededBy = now()->addDays(7)->toDateString();
         $this->addRow();
+        $this->prefillFromQuery();
+    }
+
+    protected function prefillFromQuery(): void
+    {
+        $items = request()->query('items');
+        if (is_string($items) && $items !== '') {
+            $purchasable = $this->products();
+            $lines = [];
+            foreach (explode(',', $items) as $pair) {
+                [$id, $quantity] = array_pad(explode(':', $pair, 2), 2, '');
+                if ($purchasable->has((int) $id) && is_numeric($quantity) && bccomp($quantity, '0', 2) > 0) {
+                    $lines[(int) $id] = ['product_id' => (string) (int) $id, 'quantity' => Decimal::plain(bcadd($quantity, '0', 2))];
+                }
+            }
+            if ($lines !== []) {
+                $this->lines = array_values($lines);
+            }
+        }
+
+        $neededBy = request()->query('needed_by');
+        if (is_string($neededBy) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $neededBy) === 1 && $neededBy >= now()->toDateString()) {
+            $this->neededBy = $neededBy;
+        }
+
+        $for = request()->query('for');
+        if (is_string($for) && preg_match('/^WO-\d{4}-\d{6}$/', $for) === 1) {
+            $this->prefillFor = $for;
+        }
     }
 
     public function addRow(): void
@@ -153,6 +186,13 @@ new #[Title('Purchase Request')] class extends Component {
         </div>
         <flux:button variant="primary" icon="paper-airplane" wire:click="submit" wire:loading.attr="disabled" wire:target="submit" class="active:scale-[0.95]">{{ __('Send to Purchasing') }}</flux:button>
     </div>
+
+    @if ($prefillFor)
+        <div class="mt-4 flex items-start gap-2 rounded-lg border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 px-4 py-2.5 text-xs text-zinc-700 dark:text-zinc-300">
+            <flux:icon.information-circle variant="micro" class="mt-px size-4 shrink-0" />
+            <span>{{ __('Filled in from the production dashboard with the materials :wo is still missing. Check the quantities before sending.', ['wo' => $prefillFor]) }}</span>
+        </div>
+    @endif
 
     <div class="mt-6 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_22rem] gap-6 items-start">
         <div class="space-y-6 min-w-0">

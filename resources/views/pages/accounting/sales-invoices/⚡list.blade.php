@@ -67,7 +67,9 @@ new #[Title('Sales Invoices')] class extends Component {
                     ->orWhereHas('customer', fn (Builder $q) => $q->where('customer_name', 'like', "%{$term}%")))))
             ->with(['salesOrder.customer', 'items.product', 'salesInvoices' => fn ($q) => $q->where('status', SalesInvoiceStatus::Draft->value)])
             ->orderBy('delivered_at')
-            ->get();
+            ->get()
+            ->filter(fn (SalesDelivery $delivery) => $delivery->items->contains(fn ($item) => bccomp($item->netQuantity(), '0', 2) > 0))
+            ->values();
     }
 
     #[Computed]

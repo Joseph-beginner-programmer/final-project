@@ -24,6 +24,9 @@ class CancelPurchaseInvoiceAction
             }
 
             if ($invoice->status->isPosted()) {
+                if (\App\Models\PurchaseReturn::where('purchase_invoice_id', $invoice->id)->where('status', DocumentStatus::Posted->value)->exists()) {
+                    throw new InvalidPurchaseInvoiceException(InvalidPurchaseInvoiceException::HAS_RETURNS);
+                }
                 if ($invoice->payments()->where('status', DocumentStatus::Posted->value)->exists()) {
                     throw new InvalidPurchaseInvoiceException(InvalidPurchaseInvoiceException::HAS_PAYMENTS);
                 }

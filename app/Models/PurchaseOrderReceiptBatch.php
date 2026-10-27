@@ -35,6 +35,11 @@ class PurchaseOrderReceiptBatch extends Model
         return $this->hasMany(PurchaseOrderReceipt::class);
     }
 
+    public function purchaseReturns(): HasMany
+    {
+        return $this->hasMany(PurchaseReturn::class, 'purchase_order_receipt_batch_id');
+    }
+
     public function purchaseInvoices(): HasMany
     {
         return $this->hasMany(PurchaseInvoice::class);

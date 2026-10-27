@@ -66,7 +66,7 @@ new #[Title('Purchase Invoices')] class extends Component {
             ->with(['purchaseOrder.supplier', 'purchaseOrderReceipts.purchaseOrderItem.product', 'purchaseInvoices' => fn ($q) => $q->where('status', PurchaseInvoiceStatus::Draft->value)])
             ->orderBy('received_at')
             ->get()
-            ->filter(fn (PurchaseOrderReceiptBatch $batch) => $batch->purchaseOrderReceipts->isNotEmpty())
+            ->filter(fn (PurchaseOrderReceiptBatch $batch) => $batch->purchaseOrderReceipts->contains(fn ($receipt) => bccomp(bcsub((string) $receipt->quantity_received, $receipt->returned()['quantity'], 2), '0', 2) > 0))
             ->values();
     }
 

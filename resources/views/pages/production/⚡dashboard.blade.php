@@ -1,6 +1,7 @@
 <?php
 
 use App\Enums\ProductType;
+use App\Support\Kpi\OngoingWorkOrders;
 use App\Support\Kpi\ProductionKpis;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -80,12 +81,6 @@ new #[Title('Production Dashboard')] class extends Component {
     }
 
     #[Computed]
-    public function rejectByProduct(): Collection
-    {
-        return $this->kpis->rejectRateByProduct();
-    }
-
-    #[Computed]
     public function attention(): array
     {
         return ProductionKpis::attention(now());
@@ -123,9 +118,9 @@ new #[Title('Production Dashboard')] class extends Component {
     }
 
     #[Computed]
-    public function lossesTrend(): array
+    public function ongoing(): Collection
     {
-        return $this->kpis->lossesTrend();
+        return OngoingWorkOrders::all(now());
     }
 
     #[Computed]
@@ -137,7 +132,11 @@ new #[Title('Production Dashboard')] class extends Component {
     #[Computed]
     public function planVsActual(): Collection
     {
-        return $this->completed->sortByDesc(fn ($row) => abs((float) $row['cost_difference']))->take(10)->values();
+        return $this->completed
+            ->sortByDesc(fn ($row) => abs((float) $row['cost_difference']))
+            ->take(10)
+            ->sortByDesc(fn ($row) => (float) $row['cost_difference'])
+            ->values();
     }
 
     #[Computed]
@@ -159,6 +158,25 @@ new #[Title('Production Dashboard')] class extends Component {
     public function formatQuantity(string|float $quantity): string
     {
         return number_format((float) $quantity, 0, ',', '.');
+    }
+
+    /**
+     * @param  list<array{product: \App\Models\Product, to_order: string}>  $materials
+     */
+    public function requisitionUrl(\App\Models\WorkOrder $workOrder, array $materials): string
+    {
+        return route('purchasing.requisitions.create', [
+            'items' => collect($materials)->map(fn (array $m) => $m['product']->id.':'.\App\Support\Decimal::plain($m['to_order']))->implode(','),
+            'needed_by' => $workOrder->planned_start_date->max(today())->toDateString(),
+            'for' => $workOrder->wo_number,
+        ]);
+    }
+
+    public function formatQty(string|float $value): string
+    {
+        $formatted = number_format((float) $value, 2, ',', '.');
+
+        return str_ends_with($formatted, ',00') ? substr($formatted, 0, -3) : rtrim($formatted, '0');
     }
 
     public function formatPercent(?float $value): string
@@ -297,6 +315,124 @@ new #[Title('Production Dashboard')] class extends Component {
             </div>
         </div>
 
+        @php($ongoing = $this->ongoing)
+        @php($stateMeta = [
+            OngoingWorkOrders::STATE_SHORT => ['label' => __('Short of materials'), 'icon' => 'exclamation-triangle', 'class' => 'text-red-700 dark:text-red-400'],
+            OngoingWorkOrders::STATE_READY => ['label' => __('Materials available'), 'icon' => 'check-circle', 'class' => 'text-green-700 dark:text-green-400'],
+            OngoingWorkOrders::STATE_AWAITING_RESULT => ['label' => __('Waiting for the production result'), 'icon' => 'clock', 'class' => 'text-amber-700 dark:text-amber-400'],
+            OngoingWorkOrders::STATE_RESULT_DRAFT => ['label' => __('Production result in draft'), 'icon' => 'pencil-square', 'class' => 'text-amber-700 dark:text-amber-400'],
+        ])
+        <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;" x-data="{ all: false }">
+            <div class="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300">{{ __('Ongoing work orders') }}</h2>
+                    <p class="{{ $cardSub }}">{{ __('Draft, released and in progress, earliest start first. Stock is reserved for the earliest work order first.') }}</p>
+                </div>
+                @if ($ongoing->isNotEmpty())
+                    <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-600 dark:text-zinc-300">
+                        <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3 rounded-sm" style="background: var(--series-1)"></span>{{ __('Issued') }}</span>
+                        <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3 rounded-sm" style="background: color-mix(in srgb, var(--series-1) 35%, transparent)"></span>{{ __('In stock') }}</span>
+                        <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3 rounded-sm" style="background: var(--div-over)"></span>{{ __('Short') }}</span>
+                    </div>
+                @endif
+            </div>
+
+            @if ($ongoing->isEmpty())
+                <div class="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 px-4 py-3 text-sm text-zinc-500 dark:text-zinc-400">
+                    <span>{{ __('No work orders are open right now.') }}</span>
+                    <a href="{{ route('production.work-orders.create') }}" wire:navigate class="text-xs font-medium text-accent hover:underline underline-offset-2">{{ __('Create work order') }}</a>
+                </div>
+            @else
+                <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    @foreach ($ongoing as $i => $row)
+                        @php($wo = $row['work_order'])
+                        @php($meta = $stateMeta[$row['state']])
+                        <div wire:key="ongoing-{{ $wo->id }}" @if ($i >= 6) x-show="all" x-cloak @endif class="{{ $card }} min-w-0">
+                            <div class="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <a href="{{ route('production.work-orders.show', $wo) }}" wire:navigate class="font-data text-sm font-semibold text-accent hover:underline underline-offset-2">{{ $wo->wo_number }}</a>
+                                        <span class="rounded-full border border-zinc-200 dark:border-white/10 px-2 py-0.5 text-[11px] text-zinc-600 dark:text-zinc-300">{{ $wo->status->label() }}</span>
+                                        @if ($row['overdue'])
+                                            <span class="inline-flex items-center gap-1 rounded-full border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:text-red-400"><flux:icon.exclamation-triangle variant="micro" class="size-3" />{{ __('Late') }}</span>
+                                        @endif
+                                    </div>
+                                    <p class="mt-1 text-sm text-zinc-900 dark:text-white">{{ $wo->product->product_name }} <span class="font-data text-zinc-500 dark:text-zinc-400">× {{ $this->formatQty($wo->quantity_target) }} {{ $wo->product->unit_of_measure }}</span></p>
+                                    <p class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ $wo->planned_start_date->translatedFormat('d M') }} – {{ $wo->planned_end_date->translatedFormat('d M Y') }}</p>
+                                </div>
+                                <span class="inline-flex items-center gap-1 text-xs font-medium {{ $meta['class'] }}"><flux:icon :name="$meta['icon']" variant="micro" class="size-4" />{{ $meta['label'] }}</span>
+                            </div>
+
+                            <div class="mt-4 space-y-3">
+                                @foreach ($row['materials'] as $m)
+                                    @php($planned = max((float) $m['planned'], 0.0001))
+                                    @php($unit = $m['product']->unit_of_measure)
+                                    @php($isShort = bccomp($m['short'], '0', 2) > 0)
+                                    <div>
+                                        <div class="flex items-baseline justify-between gap-3 text-xs">
+                                            <span class="truncate text-zinc-800 dark:text-zinc-200">{{ $m['product']->product_name }}</span>
+                                            <span class="shrink-0 font-data tabular-nums text-zinc-500 dark:text-zinc-400"><span class="text-zinc-900 dark:text-white">{{ $this->formatQty($m['issued']) }}</span> / {{ $this->formatQty($m['planned']) }} {{ $unit }}</span>
+                                        </div>
+                                        <div class="mt-1.5 flex h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-white/5" role="img" aria-label="{{ __(':name: :issued issued, :covered in stock, :short short of :planned', ['name' => $m['product']->product_name, 'issued' => $this->formatQty($m['issued']), 'covered' => $this->formatQty($m['covered']), 'short' => $this->formatQty($m['short']), 'planned' => $this->formatQty($m['planned'])]) }}">
+                                            <div class="h-full" style="width: {{ (float) $m['issued'] / $planned * 100 }}%; background: var(--series-1)"></div>
+                                            <div class="h-full" style="width: {{ (float) $m['covered'] / $planned * 100 }}%; background: color-mix(in srgb, var(--series-1) 35%, transparent)"></div>
+                                            <div class="h-full" style="width: {{ (float) $m['short'] / $planned * 100 }}%; background: var(--div-over)"></div>
+                                        </div>
+                                        @if ($isShort)
+                                            @php($isRaw = $m['product']->type === \App\Enums\ProductType::RawMaterial)
+                                            @php($hasIncoming = bccomp($m['incoming'], '0', 2) > 0)
+                                            @php($toOrder = bccomp($m['to_order'], '0', 2) > 0)
+                                            <p class="mt-1 text-[11px] text-zinc-600 dark:text-zinc-300">
+                                                <span class="font-medium text-red-700 dark:text-red-400">{{ __('Short :qty :unit', ['qty' => $this->formatQty($m['short']), 'unit' => $unit]) }}</span>
+                                                @if ($hasIncoming)
+                                                    · {{ $isRaw ? __(':qty :unit on order (:from)', ['qty' => $this->formatQty($m['incoming']), 'unit' => $unit, 'from' => implode(', ', $m['incoming_from'])]) : __(':from making :qty :unit', ['qty' => $this->formatQty($m['incoming']), 'unit' => $unit, 'from' => implode(', ', $m['incoming_from'])]) }}
+                                                @endif
+                                                @if ($toOrder)
+                                                    · {{ $hasIncoming ? __('still :qty :unit missing', ['qty' => $this->formatQty($m['to_order']), 'unit' => $unit]) : ($isRaw ? __('nothing on order') : __('no work order is making it')) }}
+                                                    @if ($isRaw)
+                                                        @can('requisitions.create')
+                                                            · <a href="{{ $this->requisitionUrl($wo, [$m]) }}" wire:navigate class="font-medium text-accent hover:underline underline-offset-2">{{ __('Request purchase') }}</a>
+                                                        @endcan
+                                                    @else
+                                                        @can('create', \App\Models\WorkOrder::class)
+                                                            · <a href="{{ route('production.work-orders.create', ['product' => $m['product']->id, 'quantity' => \App\Support\Decimal::plain($m['to_order']), 'for' => $wo->wo_number]) }}" wire:navigate class="font-medium text-accent hover:underline underline-offset-2">{{ __('Create work order') }}</a>
+                                                        @endcan
+                                                    @endif
+                                                @endif
+                                            </p>
+                                        @elseif (bccomp($m['covered'], '0', 2) > 0)
+                                            <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('In stock for the remaining :qty :unit', ['qty' => $this->formatQty($m['covered']), 'unit' => $unit]) }}</p>
+                                        @endif
+                                    </div>
+                                @endforeach
+                            </div>
+
+                            @php($rawToOrder = $row['materials']->filter(fn ($m) => $m['product']->type === \App\Enums\ProductType::RawMaterial && bccomp($m['to_order'], '0', 2) > 0))
+                            @if ($rawToOrder->count() > 1)
+                                @can('requisitions.create')
+                                    <div class="mt-4 border-t border-zinc-100 dark:border-white/5 pt-3">
+                                        <a href="{{ $this->requisitionUrl($wo, $rawToOrder->all()) }}" wire:navigate class="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline underline-offset-2"><flux:icon.clipboard-document-list variant="micro" class="size-4" />{{ __('Request all :count missing materials', ['count' => $rawToOrder->count()]) }}</a>
+                                    </div>
+                                @endcan
+                            @endif
+                            @if (in_array($row['state'], [OngoingWorkOrders::STATE_AWAITING_RESULT, OngoingWorkOrders::STATE_RESULT_DRAFT], true))
+                                <div class="mt-4 border-t border-zinc-100 dark:border-white/5 pt-3">
+                                    @if ($row['state'] === OngoingWorkOrders::STATE_RESULT_DRAFT)
+                                        <a href="{{ route('production.results.edit', $wo->productionResult) }}" wire:navigate class="text-xs font-medium text-accent hover:underline underline-offset-2">{{ __('Open result draft') }}</a>
+                                    @else
+                                        <a href="{{ route('production.results.create', $wo) }}" wire:navigate class="text-xs font-medium text-accent hover:underline underline-offset-2">{{ __('Record result') }}</a>
+                                    @endif
+                                </div>
+                            @endif
+                        </div>
+                    @endforeach
+                </div>
+                @if ($ongoing->count() > 6)
+                    <button type="button" x-on:click="all = ! all" class="mt-3 text-xs font-medium text-accent hover:underline underline-offset-2 cursor-pointer" x-text="all ? @js(__('Show fewer')) : @js(__('Show all :count', ['count' => $ongoing->count()]))"></button>
+                @endif
+            @endif
+        </div>
+
         <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6 motion-safe:animate-fade-slide-up" style="animation-delay: 80ms;">
             @php($weekly = $this->weeklyOutput)
             <div wire:key="output-{{ $key }}" class="{{ $card }} lg:col-span-2 min-w-0" x-data="{ table: false }">
@@ -373,11 +509,10 @@ new #[Title('Production Dashboard')] class extends Component {
             </div>
         </div>
 
-        <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6 motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
+        <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6 motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
             @php($rows = $this->planVsActual)
-            @php($maxAbs = max(1, $rows->max(fn ($r) => abs((float) $r['cost_difference'])) ?? 1))
             @php($overCount = $this->completed->where('over_plan', true)->count())
-            <div class="{{ $card }} lg:col-span-2 min-w-0" x-data="{ table: false }">
+            <div wire:key="pva-{{ $key }}" class="{{ $card }} min-w-0" x-data="{ table: false }">
                 <div class="flex items-start justify-between gap-3">
                     <div>
                         <h2 class="{{ $cardTitle }}">{{ __('Plan vs actual cost per work order') }}</h2>
@@ -388,46 +523,47 @@ new #[Title('Production Dashboard')] class extends Component {
                 @if ($rows->isEmpty())
                     <p class="py-16 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No work orders completed in this period.') }}</p>
                 @else
+                    @php($scale = max(1, $rows->max(fn ($r) => max((float) $r['planned_cost'], (float) $r['actual_cost']))))
                     <div x-show="! table">
-                        <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-xs text-zinc-700 dark:text-zinc-300">
-                            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm" style="background: var(--div-under)"></span>{{ __('Under plan') }}</span>
-                            <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm" style="background: var(--div-over)"></span>{{ __('Over plan') }}</span>
-                            <span class="inline-flex items-center gap-1.5"><flux:icon.cube variant="micro" class="size-3.5 text-zinc-500" />{{ __('Material used over plan') }}</span>
+                        <div class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-zinc-600 dark:text-zinc-300">
+                            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3 rounded-sm" style="background: var(--series-1)"></span>{{ __('Actual') }}</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="h-3 w-0.5 rounded-full bg-zinc-900 dark:bg-white"></span>{{ __('Planned') }}</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3 rounded-sm" style="background: var(--div-over)"></span>{{ __('Over plan') }}</span>
+                            <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3 rounded-sm" style="background: color-mix(in srgb, var(--series-1) 22%, transparent)"></span>{{ __('Under plan') }}</span>
                         </div>
-                        <div class="mt-3 space-y-1">
+                        <div class="mt-3 -mx-2 divide-y divide-zinc-100 dark:divide-white/5">
                             @foreach ($rows as $row)
+                                @php($wo = $row['result']->workOrder)
+                                @php($planned = (float) $row['planned_cost'])
+                                @php($actual = (float) $row['actual_cost'])
                                 @php($diff = (float) $row['cost_difference'])
-                                @php($width = abs($diff) / $maxAbs * 50)
-                                <div wire:key="pva-{{ $key }}-{{ $row['result']->id }}" x-data="{ hover: false }" x-on:mouseenter="hover = true" x-on:mouseleave="hover = false" x-on:focusin="hover = true" x-on:focusout="hover = false" class="relative grid grid-cols-[7.5rem_minmax(0,1fr)] sm:grid-cols-[9rem_minmax(0,1fr)] items-center gap-3 rounded-md px-1 py-1 hover:bg-zinc-50 dark:hover:bg-white/[0.03]">
-                                    <div class="min-w-0">
-                                        <a href="{{ route('production.results.show', $row['result']) }}" wire:navigate class="flex items-center gap-1 font-data text-xs text-accent hover:underline underline-offset-2">
-                                            {{ $row['result']->workOrder->wo_number }}
+                                <a wire:key="pva-{{ $key }}-{{ $row['result']->id }}" href="{{ route('production.work-orders.show', $wo) }}" wire:navigate class="group block rounded-md px-2 py-2.5 hover:bg-zinc-50 dark:hover:bg-white/[0.03]">
+                                    <div class="flex items-baseline justify-between gap-3">
+                                        <span class="min-w-0 truncate text-xs">
+                                            <span class="font-data font-medium text-accent group-hover:underline underline-offset-2">{{ $wo->wo_number }}</span>
+                                            <span class="text-zinc-600 dark:text-zinc-300">· {{ $wo->product->product_name }}</span>
                                             @if ($row['materials_over_plan'] > 0)
-                                                <flux:icon.cube variant="micro" class="size-3.5 text-zinc-500" :aria-label="__(':count over plan', ['count' => $row['materials_over_plan']])" />
+                                                <span class="ms-1 inline-flex items-center gap-0.5 text-[10px] text-amber-700 dark:text-amber-400"><flux:icon.cube variant="micro" class="size-3" />{{ __(':count over plan', ['count' => $row['materials_over_plan']]) }}</span>
                                             @endif
-                                        </a>
-                                        <p class="truncate text-[11px] text-zinc-500 dark:text-zinc-400">{{ $row['result']->workOrder->product->product_name }}</p>
+                                        </span>
+                                        <span class="shrink-0 font-data text-xs tabular-nums whitespace-nowrap">
+                                            <span class="text-zinc-500 dark:text-zinc-400">{{ $this->formatRupiah($actual) }}</span>
+                                            <span class="ms-1.5 font-semibold {{ $diff > 0 ? 'text-red-700 dark:text-red-400' : ($diff < 0 ? 'text-green-700 dark:text-green-400' : 'text-zinc-500 dark:text-zinc-400') }}">{{ $diff > 0 ? '+' : '' }}{{ $diff == 0 ? __('On plan') : $this->formatRupiah($diff) }}</span>
+                                        </span>
                                     </div>
-                                    <div class="relative h-6">
-                                        <div class="absolute inset-y-0 left-1/2 w-px" style="background: var(--div-mid)"></div>
-                                        @if ($diff > 0)
-                                            <div class="absolute top-1/2 -translate-y-1/2 left-1/2 h-3.5 rounded-e" style="width: {{ $width }}%; background: var(--div-over)"></div>
-                                            <span class="absolute top-1/2 -translate-y-1/2 right-1/2 pe-1.5 text-[11px] font-medium text-zinc-800 dark:text-zinc-200 whitespace-nowrap">+{{ $this->formatRupiah($diff) }}</span>
-                                        @elseif ($diff < 0)
-                                            <div class="absolute top-1/2 -translate-y-1/2 right-1/2 h-3.5 rounded-s" style="width: {{ $width }}%; background: var(--div-under)"></div>
-                                            <span class="absolute top-1/2 -translate-y-1/2 left-1/2 ps-1.5 text-[11px] font-medium text-zinc-800 dark:text-zinc-200 whitespace-nowrap">{{ $this->formatRupiah($diff) }}</span>
-                                        @else
-                                            <span class="absolute top-1/2 -translate-y-1/2 text-[11px] text-zinc-500 dark:text-zinc-400 ps-1.5" style="left: 50%">{{ __('On plan') }}</span>
+                                    <div class="relative mt-2 h-3" role="img" aria-label="{{ $wo->wo_number }}: {{ __(':actual actual vs :planned planned', ['actual' => $this->formatRupiah($actual), 'planned' => $this->formatRupiah($planned)]) }}">
+                                        <div class="absolute inset-y-0 left-0 rounded-sm" style="width: {{ min($actual, $planned) / $scale * 100 }}%; background: var(--series-1)"></div>
+                                        @if ($actual > $planned)
+                                            <div class="absolute inset-y-0 rounded-e-sm" style="left: {{ $planned / $scale * 100 }}%; width: {{ ($actual - $planned) / $scale * 100 }}%; background: var(--div-over)"></div>
+                                        @elseif ($actual < $planned)
+                                            <div class="absolute inset-y-0 rounded-e-sm" style="left: {{ $actual / $scale * 100 }}%; width: {{ ($planned - $actual) / $scale * 100 }}%; background: color-mix(in srgb, var(--series-1) 22%, transparent)"></div>
                                         @endif
+                                        <div class="absolute -inset-y-1 w-0.5 rounded-full bg-zinc-900 dark:bg-white" style="left: calc({{ $planned / $scale * 100 }}% - 1px)"></div>
                                     </div>
-                                    <div x-show="hover" x-cloak class="pointer-events-none absolute right-2 -top-14 z-10 rounded-lg border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-800 px-3 py-2 text-xs shadow-lg">
-                                        <p class="font-medium text-zinc-900 dark:text-white">{{ $row['result']->workOrder->wo_number }}</p>
-                                        <p class="text-zinc-500 dark:text-zinc-400"><span class="font-semibold text-zinc-900 dark:text-white">{{ $this->formatRupiah($row['planned_cost']) }}</span> {{ __('planned') }} · <span class="font-semibold text-zinc-900 dark:text-white">{{ $this->formatRupiah($row['actual_cost']) }}</span> {{ __('actual') }}</p>
-                                    </div>
-                                </div>
+                                </a>
                             @endforeach
                         </div>
-                        @if ($this->completed->count() > 10)
+                        @if ($this->completed->count() > $rows->count())
                             <p class="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('Showing the 10 largest differences of :total.', ['total' => $this->completed->count()]) }}</p>
                         @endif
                     </div>
@@ -450,29 +586,6 @@ new #[Title('Production Dashboard')] class extends Component {
                 @endif
             </div>
 
-            <div class="{{ $card }} min-w-0">
-                <h2 class="{{ $cardTitle }}">{{ __('Reject rate by product') }}</h2>
-                <p class="{{ $cardSub }}">{{ __('Highest first, this period.') }}</p>
-                <div class="mt-4 space-y-3.5">
-                    @forelse ($this->rejectByProduct as $row)
-                        <div>
-                            <div class="flex items-baseline justify-between gap-3 text-xs">
-                                <span class="truncate text-zinc-700 dark:text-zinc-300">{{ $row['product'] }}</span>
-                                <span class="shrink-0 font-semibold text-zinc-900 dark:text-white">{{ $this->formatPercent($row['reject_rate']) }}</span>
-                            </div>
-                            <div class="mt-1.5 h-1.5 rounded-full overflow-hidden" style="background: var(--meter-track)" role="img" aria-label="{{ $row['product'] }} {{ $this->formatPercent($row['reject_rate']) }}">
-                                <div class="h-full rounded-full" style="width: {{ min(100, $row['reject_rate']) }}%; background: var(--meter-fill)"></div>
-                            </div>
-                            <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">{{ __(':reject of :total units', ['reject' => $this->formatQuantity($row['reject']), 'total' => $this->formatQuantity($row['good'] + $row['reject'])]) }}</p>
-                        </div>
-                    @empty
-                        <p class="py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No production in this period.') }}</p>
-                    @endforelse
-                </div>
-            </div>
-        </div>
-
-        <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6 motion-safe:animate-fade-slide-up" style="animation-delay: 120ms;">
             @php($trend = $this->rejectTrend)
             <div wire:key="reject-{{ $key }}" class="{{ $card }} min-w-0" x-data="{ table: false }">
                 <div class="flex items-start justify-between gap-3">
@@ -504,51 +617,6 @@ new #[Title('Production Dashboard')] class extends Component {
                             <tr class="border-b border-zinc-100 dark:border-white/5"><td class="{{ $td }} font-medium">{{ __('All products') }}</td>@foreach ($trend['overall'] as $v)<td class="{{ $tdNum }}">{{ $this->formatPercent($v) }}</td>@endforeach</tr>
                             @foreach ($trend['series'] as $s)
                                 <tr class="border-b border-zinc-100 dark:border-white/5"><td class="{{ $td }}">{{ $s['name'] }}</td>@foreach ($s['values'] as $v)<td class="{{ $tdNum }}">{{ $this->formatPercent($v) }}</td>@endforeach</tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            @php($lossTrend = $this->lossesTrend)
-            @php($lossSeries = [
-                ['id' => 'material', 'name' => __('Material variance'), 'values' => $lossTrend['material_variance'], 'slot' => 1],
-                ['id' => 'product', 'name' => __('Production loss'), 'values' => $lossTrend['production_loss'], 'slot' => 2],
-            ])
-            <div wire:key="losses-{{ $key }}" class="{{ $card }} min-w-0" x-data="{ table: false }">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h2 class="{{ $cardTitle }}">{{ __('Losses, last 6 months') }}</h2>
-                        <p class="{{ $cardSub }}">{{ __('Material short on return + finished units short at receipt. Below zero = surplus.') }}</p>
-                    </div>
-                    <button type="button" class="{{ $tableToggle }}" x-on:click="table = ! table" x-text="table ? @js(__('Show chart')) : @js(__('Show table'))"></button>
-                </div>
-                @if (collect($lossSeries)->every(fn ($s) => array_sum(array_map('abs', $s['values'])) == 0))
-                    <div x-show="! table" class="py-16 text-center">
-                        <flux:icon.check-circle class="mx-auto size-6 text-green-600 dark:text-green-400" />
-                        <p class="mt-2 text-sm text-zinc-500 dark:text-zinc-400">{{ __('No losses recorded in the last 6 months.') }}</p>
-                    </div>
-                @else
-                    <div wire:ignore x-data="stackedBar(@js(['labels' => $lossTrend['months'], 'series' => $lossSeries, 'isolatable' => false, 'targets' => false, 'format' => 'rupiah', 'axisFormat' => 'compactRupiah', 'totalLabel' => __('Total'), 'targetLabel' => '']))">
-                        <div x-show="! table" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-                            <template x-for="s in config.series" :key="s.id">
-                                <span class="inline-flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300">
-                                    <span class="size-2.5 rounded-sm" :style="`background: var(--series-${s.slot})`"></span><span x-text="s.name"></span>
-                                </span>
-                            </template>
-                        </div>
-                        <div x-show="! table" x-ref="frame" class="relative mt-2 w-full">
-                            <svg x-ref="svg" class="block" height="240" role="group" aria-label="{{ __('Losses, last 6 months') }}"></svg>
-                            <x-chart-tooltip />
-                        </div>
-                    </div>
-                @endif
-                <div x-show="table" x-cloak class="mt-3 overflow-x-auto">
-                    <table class="w-full text-xs">
-                        <thead><tr class="border-b border-zinc-200 dark:border-white/10"><th class="{{ $th }}"></th>@foreach ($lossTrend['months'] as $label)<th class="{{ $th }} text-right">{{ $label }}</th>@endforeach</tr></thead>
-                        <tbody>
-                            @foreach ($lossSeries as $s)
-                                <tr class="border-b border-zinc-100 dark:border-white/5"><td class="{{ $td }}">{{ $s['name'] }}</td>@foreach ($s['values'] as $v)<td class="{{ $tdNum }}">{{ $this->formatRupiah($v) }}</td>@endforeach</tr>
                             @endforeach
                         </tbody>
                     </table>

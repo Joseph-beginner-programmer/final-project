@@ -38,6 +38,11 @@ Enum document_status {
   cancelled
 }
 
+Enum return_condition {
+  good [note: 'Layak jual']
+  damaged [note: 'Rusak']
+}
+
 Enum product_type {
   finished_goods
   wip
@@ -263,6 +268,9 @@ Table purchase_orders [headercolor: #1565C0] {
   closed_at timestamp [null]
   created_at timestamp
   updated_at timestamp
+  cancelled_by bigint [null, ref: > users.id]
+  cancelled_at timestamp [null]
+  cancel_reason text [null, note: 'Batal hanya bila belum ada penerimaan; permintaan pembelian terkait kembali Diajukan']
 }
 
 Table purchase_order_items [headercolor: #1565C0] {
@@ -310,18 +318,27 @@ Table purchase_order_receipts [headercolor: #1565C0] {
   updated_at timestamp
 }
 
-// Jurnal: sebelum faktur -> Dr Barang Diterima Belum Difakturkan / Cr Persediaan Bahan Baku
-//         sesudah faktur -> Dr Utang Usaha / Cr Persediaan Bahan Baku (+ balik PPN Masukan)
+// ✅ DIBANGUN 2026-10-27. Pembelian/Gudang membuat draf dari satu penerimaan, Gudang memposting (barang keluar dari lot penerimaan itu).
+// Jurnal: sebelum faktur -> Dr Barang Diterima Belum Difakturkan / Cr Persediaan (faktur nanti hanya menagih qty bersih)
+//         sesudah faktur -> nota debit: Dr Utang Usaha (sisa tagihan) + Dr Kas/Bank (bila sudah dibayar) / Cr Persediaan / Cr PPN Masukan / ± Selisih Harga Pembelian
+// PO: purchase_order_items.quantity_returned bertambah; PO Diterima Penuh kembali Diterima Sebagian agar barang pengganti bisa diterima (atau Tutup PO).
 Table purchase_returns [headercolor: #1565C0] {
   id bigint [pk, increment]
-  return_number varchar [unique]
+  return_number varchar [unique, note: 'RTB-{tahun}-{id}']
   purchase_order_id bigint [ref: > purchase_orders.id]
+  purchase_order_receipt_batch_id bigint [ref: > purchase_order_receipt_batches.id, note: 'Satu retur = satu penerimaan']
   supplier_id bigint [ref: > suppliers.id]
   return_date date
   reason text
-  total_amount decimal(18,2)
+  total_amount decimal(18,2) [note: 'Nilai stok yang keluar (biaya lot)']
+  purchase_invoice_id bigint [null, ref: > purchase_invoices.id, note: 'Diisi bila penerimaan sudah difakturkan saat posting (nota debit)']
+  debit_note_amount decimal(18,2) [note: 'Harga faktur x qty + PPN; 0 bila belum difakturkan']
+  refund_amount decimal(18,2) [note: 'Bagian nota debit yang dikembalikan tunai karena faktur sudah dibayar']
+  refund_account_id bigint [null, ref: > accounts.id]
   status document_status [default: 'draft']
-  created_by bigint [ref: > users.id]
+  created_by bigint [ref: > users.id, note: 'Pembelian / Gudang / Manajemen']
+  posted_by bigint [null, ref: > users.id, note: 'Gudang / Manajemen']
+  posted_at timestamp [null]
   created_at timestamp
   updated_at timestamp
 }
@@ -329,11 +346,17 @@ Table purchase_returns [headercolor: #1565C0] {
 Table purchase_return_items [headercolor: #1565C0] {
   id bigint [pk, increment]
   purchase_return_id bigint [ref: > purchase_returns.id]
-  purchase_order_receipt_id bigint [ref: > purchase_order_receipts.id, note: 'Baris penerimaan/lot asal barang']
+  purchase_order_receipt_id bigint [ref: > purchase_order_receipts.id, note: 'Baris penerimaan/lot asal barang; qty <= diterima - sudah diretur dan <= sisa lot']
   product_id bigint [ref: > products.id]
-  quantity decimal(18,4)
-  unit_cost decimal(18,2)
-  subtotal decimal(18,2)
+  quantity decimal(12,2)
+  unit_cost decimal(12,2) [note: 'Biaya lot asal']
+  subtotal decimal(18,2) [note: 'Nilai stok yang keluar']
+  invoice_unit_price decimal(14,2) [null, note: 'Harga di faktur (bila sudah difakturkan)']
+  invoice_amount decimal(18,2) [null]
+
+  indexes {
+    (purchase_return_id, purchase_order_receipt_id) [unique]
+  }
 }
 
 // ======================================================================
@@ -770,18 +793,28 @@ Table sales_delivery_items [headercolor: #6A1B9A] {
   }
 }
 
-// Jurnal: Dr Retur Penjualan / Cr Piutang Usaha
-//         Dr Persediaan Barang Jadi / Cr Harga Pokok Penjualan
+// ✅ DIBANGUN 2026-10-27. Penjualan/Gudang membuat draf dari satu pengiriman, Gudang memposting dan menilai kondisi per baris.
+// Jurnal: sesudah faktur -> nota kredit: Dr Retur Penjualan (DPP, akun kontra pendapatan) + Dr PPN Keluaran / Cr Piutang Usaha (sisa) + Cr Kas/Bank (bila sudah dibayar)
+//         layak jual -> Dr Persediaan Barang Jadi / Cr Harga Pokok Penjualan (biaya FIFO asal, lot asal diisi ulang); rusak -> tanpa jurnal biaya
+//         sebelum faktur -> tanpa jurnal pendapatan; faktur nanti hanya menagih qty bersih.
 Table sales_returns [headercolor: #6A1B9A] {
   id bigint [pk, increment]
-  return_number varchar [unique]
+  return_number varchar [unique, note: 'RTJ-{tahun}-{id}']
   sales_order_id bigint [ref: > sales_orders.id]
+  sales_delivery_id bigint [ref: > sales_deliveries.id, note: 'Satu retur = satu pengiriman']
   customer_id bigint [ref: > customers.id]
   return_date date
   reason text
-  total_amount decimal(18,2)
+  total_amount decimal(18,2) [note: 'DPP barang yang diretur (harga SO setelah diskon)']
+  cost_restocked decimal(18,2) [note: 'Biaya FIFO yang kembali ke stok (hanya baris layak jual)']
+  sales_invoice_id bigint [null, ref: > sales_invoices.id, note: 'Diisi bila pengiriman sudah difakturkan saat posting (nota kredit)']
+  credit_note_amount decimal(18,2) [note: 'DPP + PPN; 0 bila belum difakturkan']
+  refund_amount decimal(18,2) [note: 'Bagian nota kredit yang dikembalikan tunai karena faktur sudah dibayar']
+  refund_account_id bigint [null, ref: > accounts.id]
   status document_status [default: 'draft']
-  created_by bigint [ref: > users.id]
+  created_by bigint [ref: > users.id, note: 'Penjualan / Gudang / Manajemen']
+  posted_by bigint [null, ref: > users.id, note: 'Gudang / Manajemen']
+  posted_at timestamp [null]
   created_at timestamp
   updated_at timestamp
 }
@@ -789,12 +822,17 @@ Table sales_returns [headercolor: #6A1B9A] {
 Table sales_return_items [headercolor: #6A1B9A] {
   id bigint [pk, increment]
   sales_return_id bigint [ref: > sales_returns.id]
-  sales_delivery_item_id bigint [ref: > sales_delivery_items.id]
+  sales_delivery_item_id bigint [ref: > sales_delivery_items.id, note: 'qty <= dikirim - sudah diretur']
   product_id bigint [ref: > products.id]
-  quantity decimal(18,4)
-  unit_price decimal(18,2)
-  unit_cost decimal(18,4) [note: 'HPP asal, agar pembalikan memakai biaya yang sama']
+  quantity decimal(12,2)
+  condition return_condition [note: 'good = layak jual (kembali ke lot asal, terakhir diambil lebih dulu); damaged = rusak (tidak masuk stok, biaya tetap di HPP)']
+  unit_price decimal(12,2) [note: 'Harga SO']
   subtotal decimal(18,2)
+  cost_total decimal(18,2) [note: 'Biaya FIFO yang kembali ke stok; 0 bila rusak']
+
+  indexes {
+    (sales_return_id, sales_delivery_item_id) [unique]
+  }
 }
 
 // ======================================================================
@@ -902,6 +940,8 @@ Table purchase_invoices [headercolor: #EF6C00] {
   tax_amount decimal(18,2) [default: 0, note: 'PPN Masukan = DPP x tax_rate; dikreditkan (PT SAI = PKP), tidak masuk biaya persediaan']
   total_amount decimal(18,2) [default: 0]
   amount_paid decimal(18,2) [default: 0, note: 'Σ pembayaran yang belum dibatalkan']
+  returned_amount decimal(18,2) [default: 0, note: 'Σ nota retur (sesudah faktur)']
+  refunded_amount decimal(18,2) [default: 0, note: 'Bagian nota retur yang dikembalikan tunai; sisa = total − retur − (dibayar − dikembalikan)']
   status invoice_status [default: 'draft']
   notes text [null]
   created_by bigint [ref: > users.id]
@@ -978,6 +1018,8 @@ Table sales_invoices [headercolor: #EF6C00] {
   tax_amount decimal(18,2) [default: 0, note: 'PPN Keluaran = DPP x tax_rate']
   total_amount decimal(18,2) [default: 0]
   amount_paid decimal(18,2) [default: 0, note: 'Σ pembayaran yang belum dibatalkan']
+  returned_amount decimal(18,2) [default: 0, note: 'Σ nota retur (sesudah faktur)']
+  refunded_amount decimal(18,2) [default: 0, note: 'Bagian nota retur yang dikembalikan tunai; sisa = total − retur − (dibayar − dikembalikan)']
   status invoice_status [default: 'draft']
   created_by bigint [ref: > users.id]
   posted_by bigint [null, ref: > users.id]

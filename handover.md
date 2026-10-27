@@ -1502,6 +1502,125 @@ Uncommitted. Assistant wrote all code, no code comments. Closes the roadmap's La
 
 **Verified (rolled back, ID counters reset):** logic 20/20 (partial selection, journal, Utang Gaji = unpaid after each step, double pay refused, future date / cut-off after payment date / no employees / inventory account refused, cancel restores everything, cancel twice refused, re-pay after cancel); pages 16/16 (Produksi 403 on index and pay, preselection + totals, cut-off change, validation, post + redirect, show chips/journal, cancel, sidebar). Screenshots checked (index, pay, show with demo data).
 
+**Laporan Persediaan Gudang now includes finished goods (user, 2026-10-27).** `InventoryReport::allTypes()` = raw, WIP, FG is used as the default and as the allowed filter on the page and in `ExportInventoryController`. The page has a fourth segment "Barang Jadi"; rows are sorted in production order (raw → WIP → FG, `FIELD(type, …)`), which applies to the page, PDF and CSV. The texts on the report and its card on the Laporan page are updated (3 old keys replaced). Verified for Oct: per type, the report's closing value = the inventory account in the ledger; the page, filtered CSV and PDF return 200.
+
+**Production dashboard changes (user, 2026-10-27):** removed "Tingkat Reject per Produk" and "Kerugian, 6 Bulan Terakhir" (and their now-unused `ProductionKpis::rejectRateByProduct()` / `lossesTrend()` plus 7 translation keys; the Kerugian tile stays). The reject trend card moved up beside "Biaya rencana vs aktual". **New section "Perintah kerja berjalan"**, right after Perlu perhatian, from **`App\Support\Kpi\OngoingWorkOrders::all($today)`**:
+- **Scope:** every Draft / Released / In progress WO, earliest planned start first.
+- **Stock allocation:** for each material, remaining = planned − posted issued. Stock is **allocated to the earliest WO first** (a running pool per product from `current_stock`), giving `covered` and `short` per WO.
+- **Incoming:** raw = open PO quantity (`MaterialShortage::openPurchaseOrderStatuses()`, with PO numbers); WIP/FG = targets of other open WOs making that product (with WO numbers).
+- **State:** short / ready / awaiting_result (in progress, everything issued, no result) / result_draft.
+- **Display:** one card per WO (link, status, "Terlambat" chip when the planned end has passed, product × target, dates, state with icon), one bar per material (issued solid | in stock light | short red), and a line under each short material: "Kurang X · PO… sedang dipesan" / "WO… sedang membuat X" / "belum ada pesanan · Ajukan permintaan pembelian" (raw) / "belum ada perintah kerja yang membuatnya · Buat perintah kerja" (WIP/FG). Footer "Catat hasil" / "Buka draf hasil"; the first 6 cards show, with "Tampilkan semua".
+- **Follow-up (user):** "Biaya Rencana vs Aktual per Perintah Kerja" briefly became a grouped bar chart. The user found it unattractive and wanted each WO linkable, so it is now **bullet rows**:
+  - one `<a>` row per WO (→ `production.work-orders.show`) with the full WO number, product, and a "bahan melebihi rencana" chip;
+  - a bar = actual cost, a black/white tick = plan, red past the tick = over plan, pale blue up to the tick = under plan; actual Rp and the coloured difference on the right;
+  - the 10 largest |differences|, sorted biggest overrun first.
+
+  That row is `lg:grid-cols-2`, so "Tingkat Reject, 6 Bulan Terakhir" is half width instead of a third. The table toggle is unchanged. Checked light (demo) and dark (dev).
+- 21 translation keys added. Verified: dev WO-2026-000053 (500 Termos Oren, draft) → Badan short 255, Handle short 450, Tutup covered; demo shows the late in-progress "menunggu hasil" WO and raw shortages with incoming POs. Screenshot checked.
+
+**Pre-filled forms from "Perintah kerja berjalan" (user, 2026-10-27):**
+- **`OngoingWorkOrders`:**
+  - Raw-material "incoming" now also counts **submitted purchase requests** (PR numbers in `incoming_from`), so a material that's already been requested stops offering the request link.
+  - Each material gets **`to_order` = short − incoming** (never < 0). Links appear only when `to_order` > 0. With partial incoming, the line reads "… sedang dipesan · masih kurang X".
+  - Bug fixed while testing: an empty Eloquent collection `merge()`d with strings crashed. Both lists are `toBase()` before mapping.
+- **WIP/FG short** → "Buat perintah kerja" → `production.work-orders.create?product={id}&quantity={to_order}&for={WO}`.
+  - The WO form's `prefillFromQuery()` (create mode only) selects the product's **active** formula, sets the target, and shows a banner "Diisi dari dasbor produksi untuk menutup kekurangan WO-…".
+  - With no active formula it shows an amber notice and selects nothing.
+- **Raw short** → "Ajukan permintaan pembelian" → `purchasing.requisitions.create?items={id}:{qty},…&needed_by={WO planned start, not before today}&for={WO}`.
+  - The PR form's `prefillFromQuery()` keeps only active purchasable products with qty > 0 and a needed-by date that isn't in the past, then shows a banner.
+  - When a WO has ≥ 2 raw materials to order, the card footer adds **"Ajukan permintaan untuk N bahan yang kurang"** with all of them in one request.
+- `#[Locked] prefillFor` on both forms; 5 translation keys.
+- **Verified:**
+  - dev WO-53 → Badan × 255 (F-WIP-001) and Handle × 450 (F-WIP-003);
+  - demo WO-177 → PP Merah 356,16 (781,16 short − 425 on order), PP Putih 19,75, plus the combined link; needed-by 29 Oct;
+  - junk query values ignored, and the forms without a query are unchanged;
+  - after a request is submitted (rolled back) `to_order` = 0 and the links disappear.
+
+## Session 37 (2026-10-27) — Retur Pembelian, Retur Penjualan, Batalkan PO — ✅ DONE
+
+Uncommitted. Assistant wrote all code, no code comments.
+
+**Decisions (user):**
+- "closing PO" meant **Cancel PO** (Tutup PO already existed).
+- Sales return condition is **chosen per line** (Layak jual → back to stock / Rusak → not restocked).
+- Returns are allowed **before or after invoicing**: before → the invoice bills the net quantity; after → credit/debit note, with a cash refund for whatever was already paid.
+
+**Assistant defaults:**
+- Pembelian/Penjualan (+ Gudang, Manager) draft; **Gudang posts** (gate `warehouse.return`, the same as material returns).
+- One return = one receipt / one delivery; one open draft per receipt/delivery.
+- Posted returns are final (only drafts can be cancelled).
+- Numbers RTB-/RTJ-{year}-{id:06}.
+
+**Migrations** (plain `php artisan migrate`; also run on `mims_demo`):
+- `purchase/2026_10_27_100000_add_cancel_and_returns_to_purchasing.php`:
+  - `purchase_orders.cancelled_by/at/cancel_reason`
+  - `purchase_order_items.quantity_returned`
+  - `purchase_invoices.returned_amount/refunded_amount`
+  - tables `purchase_returns` + `purchase_return_items`
+- `sales/2026_10_27_100000_create_sales_returns_tables.php`:
+  - `sales_invoices.returned_amount/refunded_amount`
+  - tables `sales_returns` + `sales_return_items` (with `condition`)
+
+**Model rules changed:**
+- `PurchaseOrderItem::netReceived()` = received − returned; `isFullyReceived()` / `remainingQuantity()` use it. `PurchaseOrderStatus` allows **FullyReceived → PartiallyReceived**, so a replacement can be received on the same PO (or use Tutup PO).
+- Invoice `balance()` = total − (returned + paid − refunded); `syncPaymentStatus()`: balance ≤ 0 → Paid. Payment validation already used `balance()`.
+- `PurchaseOrderReceipt::returned()`, `SalesDeliveryItem::returnedQuantity()/netQuantity()`.
+- Open-PO quantity is net of returns in `MaterialShortage` and `OngoingWorkOrders`.
+
+**Invoices:**
+- `SaveSalesInvoiceDraftAction::lines()` / `SavePurchaseInvoiceDraftAction::lines()` bill the **net** quantity (and received value). A fully returned delivery is refused (`FULLY_RETURNED`) and receipt (`EMPTY_RECEIPT`), and both drop off the "not yet invoiced" lists.
+- Cancelling an invoice with a posted return → `HAS_RETURNS`. Cancelling a payment on an invoice with a refund → `HAS_REFUND`.
+- Invoice show pages list "Retur (nota kredit/debit)", "Yang dikembalikan tunai" and links to the returns.
+
+**Actions:**
+- `CancelPurchaseOrderAction`: only with nothing received; otherwise `PurchaseOrderNotCancellableException` "close it instead". Calls `reopenForRejectedOrder()` so linked PRs go back to Diajukan.
+- `SavePurchaseReturnDraftAction` (`returnable(receipt)` = min(received − returned, **lot quantity_remaining**): material already issued can't go back).
+- `PostPurchaseReturnAction` (+ static `plan(return, invoice, refundAccountId, validateRefund)`, `invoiceFor()`, `lotValue()`):
+  - stock OUT `PurchaseReturn` from the receipt's lot (row-locked);
+  - PO item `quantity_returned`, PO status recomputed;
+  - a draft invoice for the batch blocks posting (`DRAFT_INVOICE`).
+  - **Before invoice:** Dr Barang Diterima Belum Difakturkan / Cr Persediaan.
+  - **After invoice:** Dr Utang Usaha (up to the balance) + Dr refund account (rest) / Cr Persediaan (lot value) / Cr PPN Masukan / ± Selisih Harga Pembelian (invoice price vs lot cost).
+- `CancelPurchaseReturnAction`.
+- `SaveSalesReturnDraftAction`.
+- `PostSalesReturnAction` (+ static `plan()`, `refills()`, `reverseDraws()`):
+  - **Layak jual** lines refill the delivery's lots newest-draw-first, skipping what earlier returns already refilled; IN `SalesReturn` at the original movement cost; Dr Persediaan Barang Jadi / Cr HPP.
+  - **Rusak**: no stock, cost stays in HPP.
+  - **After invoice:** Dr Retur Penjualan (DPP after SO discount) + Dr PPN Keluaran / Cr Piutang (up to the balance) + Cr refund account (rest).
+  - No journal when nothing is restocked and nothing is invoiced.
+  - `sales_order_items.quantity_returned` updated.
+- `CancelSalesReturnAction`.
+- New `AccountSystemRole::SalesReturns` (Retur Penjualan, contra revenue); `ReturnCondition` enum.
+- **Account 4001 Retur Penjualan (Pendapatan, kontra, mapped) was created in both `tugas_akhir` and `mims_demo`** via `SaveAccountAction`; it is also added to DemoSeeder.
+- Exceptions `InvalidPurchaseReturnException`, `InvalidSalesReturnException`.
+
+**Wiring:**
+- Gates `purchasing.return` (Purchasing, Warehouse, Manager), `purchasing.return.view` (+Accounting), `sales.return` (Sales, Warehouse, Manager), `sales.return.view` (+Accounting).
+- Morph keys `purchase_return(_item)`, `sales_return(_item)`.
+- Routes `purchasing.returns.list/create/{batch}/edit/show`, `sales.returns.list/create/{salesDelivery}/edit/show`.
+- Sidebar: Pembelian → Retur Pembelian, Penjualan → Retur Penjualan, Gudang → both.
+- PO page: "Batalkan PO" button + reason modal, and cancelled-by / reason in the details.
+
+**Pages** `purchasing/returns/` and `sales/returns/`:
+- `⚡list`: tabs Retur / receipts-or-deliveries that can still be returned (with "Buat retur" / "Buka draf").
+- `⚡form`: lines with received / already returned / still in stock (purchase) or delivered / can return + condition (sales); date + reason.
+- `⚡show`: lines, invoice card explaining what posting does; post modal with journal preview and a refund-account picker only when the invoice is already paid; cancel draft.
+
+102 translation keys. ERD: tables rewritten, enum `return_condition`, invoice/PO columns, journal notes.
+
+**Verified (demo, all rolled back, ID counters reset):**
+- Logic 28/28:
+  - cancel PO + refused with receipts;
+  - purchase debit note on unpaid (AP 721.500 → 577.200), then a refund after paying in full;
+  - pre-invoice return + net invoice (50 − 3 = 47);
+  - sales credit note (Dr Retur Penjualan 192.000 + PPN 21.120 / Cr Piutang 213.120; Dr Persediaan BJ / Cr HPP 114.805,88);
+  - paid invoice good + damaged → refund;
+  - two pre-invoice returns on one line → invoice 70 − 5;
+  - all guards;
+  - **after every scenario: trial balance balanced, every inventory account = Σ lots, every product's stock = Σ lots.**
+- Pages 17/17 (roles, validation, draft → post, refund picker, invoice pages show the notes, PO cancel from the page, sidebar).
+- Dev smoke: 12 touched pages render. Screenshots (sales return form + list).
+
 ## Concepts Already Taught (don't re-explain unless asked)
 - **(Session 25) Opening balances belong together, not one at a time:** posting a single account's starting balance in isolation (e.g. `Dr Kas 1.000.000`) forces a guessed equity plug for the credit side every time, because there's nothing real to net it against. The correct cutover is one entry with every known asset/liability balance as its own line; only the genuine leftover (assets − liabilities) goes to equity (Modal/Laba Ditahan) — a real figure then, not a per-account guess.
 - **(Session 25) Journal entry line mechanics:** per line, debit and credit are mutually exclusive (both filled = "debit and credit the same account," cancels to nothing); across the whole entry both sides are required, but that falls out of the balance check for free (an all-one-side entry can never total to zero on both sides, so there's no separate "needs both" rule to write). The Jurnal Umum create page's Post button is disabled live the entire time the running totals don't match — the actual guarantee; `PostJournalEntryAction`'s own balance check is a defense-in-depth backstop, not the primary gate.

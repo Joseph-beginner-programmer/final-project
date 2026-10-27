@@ -387,6 +387,17 @@ new #[Title('Sales Invoice')] class extends Component {
                     <div class="flex justify-between gap-3 border-t border-zinc-100 dark:border-white/10 pt-2"><dt class="font-medium text-zinc-700 dark:text-zinc-300">{{ __('Tax base (DPP)') }}</dt><dd class="font-data tabular-nums font-medium text-zinc-900 dark:text-white">{{ $this->rupiah($inv->subtotal) }}</dd></div>
                     <div class="flex justify-between gap-3"><dt class="text-zinc-500 dark:text-zinc-400">{{ __('VAT :rate%', ['rate' => $rate]) }}</dt><dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->rupiah($inv->tax_amount) }}</dd></div>
                     <div class="flex justify-between gap-3 border-t-2 border-zinc-200 dark:border-white/20 pt-2 text-sm"><dt class="font-semibold text-zinc-900 dark:text-white">{{ __('Total receivable') }}</dt><dd class="font-data tabular-nums font-semibold text-zinc-900 dark:text-white">{{ $this->rupiah($inv->total_amount) }}</dd></div>
+                    @if (bccomp((string) $inv->returned_amount, '0', 2) > 0)
+                        <div class="flex justify-between gap-3"><dt class="text-zinc-500 dark:text-zinc-400">{{ __('Returns (credit notes)') }}</dt><dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">−{{ $this->rupiah($inv->returned_amount) }}</dd></div>
+                        @if (bccomp((string) $inv->refunded_amount, '0', 2) > 0)
+                            <div class="flex justify-between gap-3"><dt class="text-zinc-500 dark:text-zinc-400">{{ __('Of which refunded') }}</dt><dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->rupiah($inv->refunded_amount) }}</dd></div>
+                        @endif
+                        <div class="flex flex-wrap gap-1.5 pt-1">
+                            @foreach (\App\Models\SalesReturn::where('sales_invoice_id', $inv->id)->where('status', 'posted')->get() as $ret)
+                                <a href="{{ route('sales.returns.show', $ret) }}" wire:navigate class="rounded border border-zinc-200 dark:border-white/10 px-1.5 py-0.5 font-data text-[11px] text-accent hover:underline">{{ $ret->return_number }}</a>
+                            @endforeach
+                        </div>
+                    @endif
                 </dl>
             </div>
 

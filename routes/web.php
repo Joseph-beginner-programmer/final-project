@@ -115,6 +115,30 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/accounting/purchase-invoices/{purchaseInvoice}', 'pages::accounting.purchase-invoices.show')
         ->name('accounting.purchase-invoices.show');
 
+    Route::livewire('/purchasing/returns', 'pages::purchasing.returns.list')
+        ->name('purchasing.returns.list');
+
+    Route::livewire('/purchasing/returns/create/{batch}', 'pages::purchasing.returns.form')
+        ->name('purchasing.returns.create');
+
+    Route::livewire('/purchasing/returns/{purchaseReturn}/edit', 'pages::purchasing.returns.form')
+        ->name('purchasing.returns.edit');
+
+    Route::livewire('/purchasing/returns/{purchaseReturn}', 'pages::purchasing.returns.show')
+        ->name('purchasing.returns.show');
+
+    Route::livewire('/sales/returns', 'pages::sales.returns.list')
+        ->name('sales.returns.list');
+
+    Route::livewire('/sales/returns/create/{salesDelivery}', 'pages::sales.returns.form')
+        ->name('sales.returns.create');
+
+    Route::livewire('/sales/returns/{salesReturn}/edit', 'pages::sales.returns.form')
+        ->name('sales.returns.edit');
+
+    Route::livewire('/sales/returns/{salesReturn}', 'pages::sales.returns.show')
+        ->name('sales.returns.show');
+
     Route::livewire('/accounting/wages', 'pages::accounting.wages.index')
         ->name('accounting.wages.index');
 

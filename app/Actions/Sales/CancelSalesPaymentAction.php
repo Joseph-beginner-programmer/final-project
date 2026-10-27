@@ -24,6 +24,10 @@ class CancelSalesPaymentAction
                 throw new InvalidSalesPaymentException(InvalidSalesPaymentException::ALREADY_CANCELLED);
             }
 
+            if (bccomp((string) $invoice->refunded_amount, '0', 2) > 0) {
+                throw new InvalidSalesPaymentException(InvalidSalesPaymentException::HAS_REFUND);
+            }
+
             $journal = $payment->journalEntries()
                 ->whereNull('reversal_of_id')
                 ->where('status', JournalStatus::Posted->value)

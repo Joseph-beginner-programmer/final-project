@@ -25,6 +25,7 @@ enum AccountSystemRole: string
     case AccountsReceivable = 'accounts_receivable';
     case SalesRevenue = 'sales_revenue';
     case VatOut = 'vat_out';
+    case SalesReturns = 'sales_returns';
 
     public function label(): string
     {
@@ -50,6 +51,7 @@ enum AccountSystemRole: string
             self::AccountsReceivable => 'Piutang Usaha',
             self::SalesRevenue => 'Penjualan',
             self::VatOut => 'PPN Keluaran',
+            self::SalesReturns => 'Retur Penjualan',
         };
     }
 
@@ -77,6 +79,7 @@ enum AccountSystemRole: string
             self::AccountsReceivable => 'Didebit sebesar total faktur penjualan, dikredit saat pelanggan membayar.',
             self::SalesRevenue => 'Dikredit sebesar DPP faktur penjualan (barang setelah diskon ditambah biaya lain).',
             self::VatOut => 'Dikredit sebesar PPN dari faktur penjualan; utang pajak yang dikurangi PPN Masukan setiap bulan.',
+            self::SalesReturns => 'Akun kontra pendapatan: didebit sebesar DPP barang yang diretur pelanggan setelah difakturkan.',
         };
     }
 }
