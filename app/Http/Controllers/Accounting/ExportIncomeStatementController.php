@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Accounting;
 
 use App\Http\Controllers\Controller;
-use App\Support\Reports\Csv;
+use App\Support\Reports\Excel;
 use App\Support\Reports\IncomeStatementReport;
 use App\Support\Reports\ReportPdf;
 use App\Support\Reports\ReportPeriod;
@@ -16,7 +16,7 @@ class ExportIncomeStatementController extends Controller
     public function __invoke(Request $request, string $format): Response
     {
         Gate::authorize('reports.finance');
-        abort_unless(in_array($format, ['pdf', 'csv'], true), 404);
+        abort_unless(in_array($format, ['pdf', 'excel'], true), 404);
 
         $period = ReportPeriod::normalize($request->query('period'));
         $start = ReportPeriod::start($period);
@@ -26,8 +26,8 @@ class ExportIncomeStatementController extends Controller
         $monthLabel = $start->translatedFormat('F Y');
         $ytdLabel = $report->yearStart()->translatedFormat('M').' – '.$start->translatedFormat('M Y');
 
-        if ($format === 'csv') {
-            return Csv::download($filename.'.csv', [__('Code'), __('Account'), $monthLabel, $ytdLabel], IncomeStatementReport::csv($data), [
+        if ($format === 'excel') {
+            return Excel::download($filename.'.xls', [__('Code'), __('Account'), $monthLabel, $ytdLabel], IncomeStatementReport::excel($data), [
                 [__('Income Statement')],
                 [__('Period'), $monthLabel],
             ]);

@@ -27,6 +27,29 @@ new #[Title('Reports')] class extends Component {
                 'description' => __('Opening, in, out and closing stock of raw materials, WIP and finished goods for the month.'),
                 'scope' => __('Per month'),
             ],
+            ...(Gate::allows('reports.purchasing') ? [
+                [
+                    'route' => 'purchasing.reports.orders',
+                    'icon' => 'queue-list',
+                    'title' => __('Purchase Order Report'),
+                    'description' => __('Every purchase order created in the month, how many items each has, its total and current status.'),
+                    'scope' => __('Per month'),
+                ],
+                [
+                    'route' => 'purchasing.reports.register',
+                    'icon' => 'clipboard-document-list',
+                    'title' => __('Purchase Register'),
+                    'description' => __('Every purchase invoice posted in the month, with goods, charges, tax, total, paid and balance per supplier.'),
+                    'scope' => __('Per month'),
+                ],
+                [
+                    'route' => 'purchasing.reports.price-variance',
+                    'icon' => 'scale',
+                    'title' => __('Purchase Price Variance Report'),
+                    'description' => __('Where the invoiced price differed from the lot value at receipt, per invoice line, with a summary per supplier.'),
+                    'scope' => __('Per month'),
+                ],
+            ] : []),
             ...(Gate::allows('reports.finance') ? [
                 [
                     'route' => 'accounting.reports.ledger',
@@ -65,7 +88,7 @@ new #[Title('Reports')] class extends Component {
     <div>
         <h1 class="font-display text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">{{ __('Reports') }}</h1>
         <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
-        <p class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Choose a report. Every report can be exported to PDF and CSV.') }}</p>
+        <p class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Choose a report. Every report can be exported to PDF and Excel.') }}</p>
     </div>
 
     <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

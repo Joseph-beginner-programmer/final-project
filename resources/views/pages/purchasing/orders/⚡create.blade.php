@@ -56,7 +56,26 @@ new #[Title('Create Purchase Order')] class extends Component {
         }
 
         if ($this->requisitionIds === []) {
-            $this->addItemRow();
+            $prefillSupplierId = (int) request()->query('supplier', 0);
+            $prefillProductId = (int) request()->query('product', 0);
+
+            if ($prefillSupplierId && $prefillProductId) {
+                $supplier = Supplier::find($prefillSupplierId);
+                $product = $supplier?->products()->purchasable()->where('products.id', $prefillProductId)->where('products.is_active', true)->first();
+
+                if ($product) {
+                    $this->supplierId = (string) $prefillSupplierId;
+                    $this->items[] = [
+                        'product_id' => (string) $product->id,
+                        'quantity_ordered' => '',
+                        'unit_price' => $product->pivot->price !== null ? bcadd((string) $product->pivot->price, '0', 0) : '',
+                    ];
+                }
+            }
+
+            if ($this->items === []) {
+                $this->addItemRow();
+            }
         }
     }
 

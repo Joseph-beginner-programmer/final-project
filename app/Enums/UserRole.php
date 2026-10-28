@@ -42,6 +42,7 @@ enum UserRole: string
     {
         return match($this) {
             self::Manager => 'executive.reports.index',
+            self::Purchasing => 'purchasing.reports.index',
             default => 'production.reports.index',
         };
     }

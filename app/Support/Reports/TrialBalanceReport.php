@@ -120,18 +120,18 @@ class TrialBalanceReport
      * @param  Collection<int, array<string, mixed>>  $rows
      * @return list<list<string>>
      */
-    public function csv(Collection $rows): array
+    public function excel(Collection $rows): array
     {
         return $rows->map(fn (array $row) => [
             $row['account']->account_code,
             $row['account']->account_name,
             $row['account']->type->label(),
-            Csv::number($row['opening_debit']),
-            Csv::number($row['opening_credit']),
-            Csv::number($row['debit']),
-            Csv::number($row['credit']),
-            Csv::number($row['closing_debit']),
-            Csv::number($row['closing_credit']),
+            Excel::number($row['opening_debit']),
+            Excel::number($row['opening_credit']),
+            Excel::number($row['debit']),
+            Excel::number($row['credit']),
+            Excel::number($row['closing_debit']),
+            Excel::number($row['closing_credit']),
         ])->all();
     }
 }

@@ -47,6 +47,12 @@
                                 :current="request()->routeIs('purchasing.returns.*')" wire:navigate>
                                 {{ __('Purchase Returns') }}
                             </flux:sidebar.item>
+                            @if (! $isManager && Gate::allows('reports.purchasing'))
+                                <flux:sidebar.item icon="document-chart-bar" :href="route('purchasing.reports.index')"
+                                    :current="request()->routeIs('purchasing.reports.*')" wire:navigate>
+                                    {{ __('Reports') }}
+                                </flux:sidebar.item>
+                            @endif
                         @endif
 
                         @if ($role === UserRole::Sales)
@@ -99,7 +105,7 @@
                             </flux:sidebar.item>
                             @if (! $isManager && Gate::allows('reports.production'))
                                 <flux:sidebar.item icon="document-chart-bar" :href="route('production.reports.index')"
-                                    :current="request()->routeIs('production.reports.*')" wire:navigate>
+                                    :current="request()->routeIs('production.reports.*', 'purchasing.reports.*')" wire:navigate>
                                     {{ __('Reports') }}
                                 </flux:sidebar.item>
                             @endif
@@ -115,7 +121,7 @@
                                 {{ __('Products') }}
                             </flux:sidebar.item>
                             <flux:sidebar.item icon="document-chart-bar" :href="route('executive.reports.index')"
-                                :current="request()->routeIs('executive.reports.*', 'production.reports.*', 'accounting.reports.*')" wire:navigate>
+                                :current="request()->routeIs('executive.reports.*', 'production.reports.*', 'accounting.reports.*', 'purchasing.reports.*')" wire:navigate>
                                 {{ __('Reports') }}
                             </flux:sidebar.item>
                         @endif

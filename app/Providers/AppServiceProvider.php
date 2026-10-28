@@ -107,6 +107,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('reports.production', function ($user) {
             return in_array($user->role, [UserRole::Production, UserRole::Manager, UserRole::Accounting], true);
         });
+        Gate::define('reports.purchasing', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::Accounting], true);
+        });
         Gate::define('reports.finance', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });

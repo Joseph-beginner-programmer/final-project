@@ -3,7 +3,7 @@
 namespace App\Http\Controllers\Accounting;
 
 use App\Http\Controllers\Controller;
-use App\Support\Reports\Csv;
+use App\Support\Reports\Excel;
 use App\Support\Reports\ReportPdf;
 use App\Support\Reports\ReportPeriod;
 use App\Support\Reports\TrialBalanceReport;
@@ -16,7 +16,7 @@ class ExportTrialBalanceController extends Controller
     public function __invoke(Request $request, string $format): Response
     {
         Gate::authorize('reports.finance');
-        abort_unless(in_array($format, ['pdf', 'csv'], true), 404);
+        abort_unless(in_array($format, ['pdf', 'excel'], true), 404);
 
         $period = ReportPeriod::normalize($request->query('period'));
         $start = ReportPeriod::start($period);
@@ -25,13 +25,13 @@ class ExportTrialBalanceController extends Controller
         $totals = TrialBalanceReport::totals($rows);
         $filename = 'neraca-saldo-'.$period;
 
-        if ($format === 'csv') {
-            return Csv::download($filename.'.csv', [
+        if ($format === 'excel') {
+            return Excel::download($filename.'.xls', [
                 __('Code'), __('Account'), __('Category'),
                 __('Opening debit'), __('Opening credit'), __('Debit movement'), __('Credit movement'), __('Closing debit'), __('Closing credit'),
             ], [
-                ...$report->csv($rows),
-                ['', __('Total'), '', ...array_map(fn ($v) => Csv::number($v), array_values($totals))],
+                ...$report->excel($rows),
+                ['', __('Total'), '', ...array_map(fn ($v) => Excel::number($v), array_values($totals))],
             ], [
                 [__('Trial Balance')],
                 [__('Period'), $start->translatedFormat('F Y')],

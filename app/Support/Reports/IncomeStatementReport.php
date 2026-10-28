@@ -91,21 +91,21 @@ class IncomeStatementReport
      * @param  array{revenue: Collection, cost_of_sales: Collection, expenses: Collection, totals: array<string, array{month: string, ytd: string}>}  $data
      * @return list<list<string>>
      */
-    public static function csv(array $data): array
+    public static function excel(array $data): array
     {
         $rows = [];
         $section = function (string $title, Collection $lines, string $totalLabel, array $total) use (&$rows) {
             $rows[] = [$title, '', '', ''];
             foreach ($lines as $line) {
-                $rows[] = [$line['account']->account_code, $line['account']->account_name, Csv::number($line['month']), Csv::number($line['ytd'])];
+                $rows[] = [$line['account']->account_code, $line['account']->account_name, Excel::number($line['month']), Excel::number($line['ytd'])];
             }
-            $rows[] = ['', $totalLabel, Csv::number($total['month']), Csv::number($total['ytd'])];
+            $rows[] = ['', $totalLabel, Excel::number($total['month']), Excel::number($total['ytd'])];
         };
         $section(__('Revenue'), $data['revenue'], __('Total revenue'), $data['totals']['revenue']);
         $section(__('Cost of goods sold'), $data['cost_of_sales'], __('Total cost of goods sold'), $data['totals']['cost_of_sales']);
-        $rows[] = ['', __('Gross profit'), Csv::number($data['totals']['gross_profit']['month']), Csv::number($data['totals']['gross_profit']['ytd'])];
+        $rows[] = ['', __('Gross profit'), Excel::number($data['totals']['gross_profit']['month']), Excel::number($data['totals']['gross_profit']['ytd'])];
         $section(__('Operating expenses'), $data['expenses'], __('Total operating expenses'), $data['totals']['expenses']);
-        $rows[] = ['', __('Net profit (loss)'), Csv::number($data['totals']['net_profit']['month']), Csv::number($data['totals']['net_profit']['ytd'])];
+        $rows[] = ['', __('Net profit (loss)'), Excel::number($data['totals']['net_profit']['month']), Excel::number($data['totals']['net_profit']['ytd'])];
 
         return $rows;
     }

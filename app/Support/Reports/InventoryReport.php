@@ -123,7 +123,7 @@ class InventoryReport
     /**
      * @return array{header: list<string>, rows: list<list<string>>}
      */
-    public function csv(bool $withValue): array
+    public function excel(bool $withValue): array
     {
         $rows = $this->rows();
         $header = [__('Code'), __('Item'), __('Type'), __('Unit'), __('Opening'), __('In'), __('Out'), __('Closing')];
@@ -134,15 +134,15 @@ class InventoryReport
         $lines = $rows->map(function ($r) use ($withValue) {
             $line = [
                 $r['product']->product_code, $r['product']->product_name, $r['product']->type->label(), $r['product']->unit_of_measure,
-                Csv::number($r['opening_qty']), Csv::number($r['in_qty']), Csv::number($r['out_qty']), Csv::number($r['closing_qty']),
+                Excel::number($r['opening_qty']), Excel::number($r['in_qty']), Excel::number($r['out_qty']), Excel::number($r['closing_qty']),
             ];
 
-            return $withValue ? [...$line, Csv::number($r['opening_value']), Csv::number($r['in_value']), Csv::number($r['out_value']), Csv::number($r['closing_value'])] : $line;
+            return $withValue ? [...$line, Excel::number($r['opening_value']), Excel::number($r['in_value']), Excel::number($r['out_value']), Excel::number($r['closing_value'])] : $line;
         })->all();
 
         if ($withValue) {
             $t = $this->valueTotals($rows);
-            $lines[] = [__('Total'), '', '', '', '', '', '', '', Csv::number($t['opening_value']), Csv::number($t['in_value']), Csv::number($t['out_value']), Csv::number($t['closing_value'])];
+            $lines[] = [__('Total'), '', '', '', '', '', '', '', Excel::number($t['opening_value']), Excel::number($t['in_value']), Excel::number($t['out_value']), Excel::number($t['closing_value'])];
         }
 
         return ['header' => $header, 'rows' => $lines];

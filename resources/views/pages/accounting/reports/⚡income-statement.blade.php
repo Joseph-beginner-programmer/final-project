@@ -80,7 +80,7 @@ new #[Title('Income Statement')] class extends Component {
         </div>
         <div class="flex items-center gap-2">
             <flux:button size="sm" variant="filled" icon="document-arrow-down" :href="route('accounting.reports.income-statement.export', ['format' => 'pdf', 'period' => $period])" class="active:scale-[0.95]">PDF</flux:button>
-            <flux:button size="sm" variant="filled" icon="table-cells" :href="route('accounting.reports.income-statement.export', ['format' => 'csv', 'period' => $period])" class="active:scale-[0.95]">CSV</flux:button>
+            <flux:button size="sm" variant="filled" icon="table-cells" :href="route('accounting.reports.income-statement.export', ['format' => 'excel', 'period' => $period])" class="active:scale-[0.95]">Excel</flux:button>
         </div>
     </div>
 

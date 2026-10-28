@@ -60,23 +60,23 @@ class BalanceSheetReport
      * @param  array{assets: Collection, liabilities: Collection, equity: Collection, profit: string, totals: array<string, string>, balanced: bool}  $data
      * @return list<list<string>>
      */
-    public static function csv(array $data): array
+    public static function excel(array $data): array
     {
         $rows = [];
         foreach ([['assets', __('Assets'), __('Total assets')], ['liabilities', __('Liabilities'), __('Total liabilities')]] as [$key, $title, $total]) {
             $rows[] = [$title, '', ''];
             foreach ($data[$key] as $line) {
-                $rows[] = [$line['account']->account_code, $line['account']->account_name, Csv::number($line['amount'])];
+                $rows[] = [$line['account']->account_code, $line['account']->account_name, Excel::number($line['amount'])];
             }
-            $rows[] = ['', $total, Csv::number($data['totals'][$key])];
+            $rows[] = ['', $total, Excel::number($data['totals'][$key])];
         }
         $rows[] = [__('Equity'), '', ''];
         foreach ($data['equity'] as $line) {
-            $rows[] = [$line['account']->account_code, $line['account']->account_name, Csv::number($line['amount'])];
+            $rows[] = [$line['account']->account_code, $line['account']->account_name, Excel::number($line['amount'])];
         }
-        $rows[] = ['', __('Current earnings (not yet closed)'), Csv::number($data['profit'])];
-        $rows[] = ['', __('Total equity'), Csv::number($data['totals']['equity'])];
-        $rows[] = ['', __('Total liabilities and equity'), Csv::number($data['totals']['liabilities_and_equity'])];
+        $rows[] = ['', __('Current earnings (not yet closed)'), Excel::number($data['profit'])];
+        $rows[] = ['', __('Total equity'), Excel::number($data['totals']['equity'])];
+        $rows[] = ['', __('Total liabilities and equity'), Excel::number($data['totals']['liabilities_and_equity'])];
 
         return $rows;
     }

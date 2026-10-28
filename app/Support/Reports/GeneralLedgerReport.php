@@ -99,18 +99,18 @@ class GeneralLedgerReport
      * @param  Collection<int, array<string, mixed>>  $rows
      * @return list<list<string>>
      */
-    public function csv(Collection $rows): array
+    public function excel(Collection $rows): array
     {
         return [
-            ['', '', __('Opening balance'), '', '', '', Csv::number($this->opening())],
+            ['', '', __('Opening balance'), '', '', '', Excel::number($this->opening())],
             ...$rows->map(fn (array $row) => [
                 $row['date']->format('Y-m-d'),
                 $row['journal_number'],
                 $row['description'],
                 $row['counter'],
-                Csv::number($row['debit']),
-                Csv::number($row['credit']),
-                Csv::number($row['balance']),
+                Excel::number($row['debit']),
+                Excel::number($row['credit']),
+                Excel::number($row['balance']),
             ])->all(),
         ];
     }

@@ -104,7 +104,7 @@ new #[Title('Production Cost Report')] class extends Component {
         </div>
         <div class="flex items-center gap-2">
             <flux:button size="sm" variant="filled" icon="document-arrow-down" :href="route('production.reports.cost.export', ['format' => 'pdf', ...$exportParams])" class="active:scale-[0.95]">PDF</flux:button>
-            <flux:button size="sm" variant="filled" icon="table-cells" :href="route('production.reports.cost.export', ['format' => 'csv', ...$exportParams])" class="active:scale-[0.95]">CSV</flux:button>
+            <flux:button size="sm" variant="filled" icon="table-cells" :href="route('production.reports.cost.export', ['format' => 'excel', ...$exportParams])" class="active:scale-[0.95]">Excel</flux:button>
         </div>
     </div>
 

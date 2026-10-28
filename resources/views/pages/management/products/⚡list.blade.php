@@ -249,9 +249,14 @@ new #[Title('Products')] class extends Component {
             <h1 class="font-display text-2xl sm:text-3xl font-bold tracking-tight text-zinc-900 dark:text-white leading-tight">{{ __('Products') }}</h1>
             <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
         </div>
-        @can('create', Product::class)
-            <flux:button variant="primary" icon="plus" wire:click="openCreate" class="active:scale-[0.95]">{{ __('New Product') }}</flux:button>
-        @endcan
+        <div class="flex items-center gap-2">
+            @can('viewAny', Product::class)
+                <flux:button variant="filled" icon="calculator" :href="route('management.products.safety-stock')" wire:navigate class="active:scale-[0.95]">{{ __('Safety Stock & Reorder Point') }}</flux:button>
+            @endcan
+            @can('create', Product::class)
+                <flux:button variant="primary" icon="plus" wire:click="openCreate" class="active:scale-[0.95]">{{ __('New Product') }}</flux:button>
+            @endcan
+        </div>
     </div>
 
     <div class="mt-6 flex items-center gap-1.5 overflow-x-auto pb-1 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">

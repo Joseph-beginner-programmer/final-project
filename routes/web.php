@@ -9,7 +9,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::middleware(['auth'])->group(function () {
-    Route::view('/purchasing/dashboard', 'dashboards.placeholder')
+    Route::livewire('/purchasing/dashboard', 'pages::purchasing.dashboard')
         ->name('purchasing.dashboard')
         ->middleware('dashboard.access:purchasing');
 
@@ -126,6 +126,27 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/purchasing/returns/{purchaseReturn}', 'pages::purchasing.returns.show')
         ->name('purchasing.returns.show');
+
+    Route::livewire('/purchasing/reports', 'pages::purchasing.reports.index')
+        ->name('purchasing.reports.index');
+
+    Route::livewire('/purchasing/reports/orders', 'pages::purchasing.reports.orders')
+        ->name('purchasing.reports.orders');
+
+    Route::get('/purchasing/reports/orders/export/{format}', \App\Http\Controllers\Purchasing\ExportPurchaseOrderController::class)
+        ->name('purchasing.reports.orders.export');
+
+    Route::livewire('/purchasing/reports/register', 'pages::purchasing.reports.register')
+        ->name('purchasing.reports.register');
+
+    Route::get('/purchasing/reports/register/export/{format}', \App\Http\Controllers\Purchasing\ExportPurchaseRegisterController::class)
+        ->name('purchasing.reports.register.export');
+
+    Route::livewire('/purchasing/reports/price-variance', 'pages::purchasing.reports.price-variance')
+        ->name('purchasing.reports.price-variance');
+
+    Route::get('/purchasing/reports/price-variance/export/{format}', \App\Http\Controllers\Purchasing\ExportPurchasePriceVarianceController::class)
+        ->name('purchasing.reports.price-variance.export');
 
     Route::livewire('/sales/returns', 'pages::sales.returns.list')
         ->name('sales.returns.list');
@@ -265,6 +286,9 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/management/products', 'pages::management.products.list')
         ->name('management.products.list');
+
+    Route::livewire('/management/products/safety-stock', 'pages::management.products.safety-stock')
+        ->name('management.products.safety-stock');
 
     Route::livewire('/purchasing/suppliers', 'pages::purchasing.suppliers.list')
         ->name('purchasing.suppliers.list');

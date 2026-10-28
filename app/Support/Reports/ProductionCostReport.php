@@ -104,20 +104,20 @@ class ProductionCostReport
     /**
      * @return array{header: list<string>, rows: list<list<string>>}
      */
-    public function csv(): array
+    public function excel(): array
     {
         $rows = $this->rows();
         $lines = $rows->map(fn ($r) => [
-            $r['wo_number'], $r['product'], $r['completed_on']->format('Y-m-d'), Csv::number($r['good']),
-            Csv::number($r['material']), Csv::number($r['labor']), Csv::number($r['overhead']), Csv::number($r['total']),
-            Csv::number($r['unit_cost']), Csv::number($r['planned_conversion']), Csv::number($r['difference']),
+            $r['wo_number'], $r['product'], $r['completed_on']->format('Y-m-d'), Excel::number($r['good']),
+            Excel::number($r['material']), Excel::number($r['labor']), Excel::number($r['overhead']), Excel::number($r['total']),
+            Excel::number($r['unit_cost']), Excel::number($r['planned_conversion']), Excel::number($r['difference']),
         ])->all();
         $t = $this->sum($rows);
-        $lines[] = [__('Total'), '', '', Csv::number($t['good']), Csv::number($t['material']), Csv::number($t['labor']), Csv::number($t['overhead']), Csv::number($t['total']), '', '', Csv::number($t['difference'])];
+        $lines[] = [__('Total'), '', '', Excel::number($t['good']), Excel::number($t['material']), Excel::number($t['labor']), Excel::number($t['overhead']), Excel::number($t['total']), '', '', Excel::number($t['difference'])];
         $lines[] = [];
         $lines[] = [__('Summary per product'), __('Work orders'), __('Good units'), __('Material'), __('Labor'), __('Overhead'), __('Total cost'), __('Average unit cost'), __('Lowest'), __('Highest')];
         foreach ($this->productSummary($rows) as $p) {
-            $lines[] = [$p['product'], (string) $p['work_orders'], Csv::number($p['good']), Csv::number($p['material']), Csv::number($p['labor']), Csv::number($p['overhead']), Csv::number($p['total']), Csv::number($p['average_unit_cost']), Csv::number($p['lowest_unit_cost']), Csv::number($p['highest_unit_cost'])];
+            $lines[] = [$p['product'], (string) $p['work_orders'], Excel::number($p['good']), Excel::number($p['material']), Excel::number($p['labor']), Excel::number($p['overhead']), Excel::number($p['total']), Excel::number($p['average_unit_cost']), Excel::number($p['lowest_unit_cost']), Excel::number($p['highest_unit_cost'])];
         }
 
         return [
