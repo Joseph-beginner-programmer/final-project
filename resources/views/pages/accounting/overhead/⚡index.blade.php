@@ -153,12 +153,16 @@ new #[Title('Actual Overhead')] class extends Component {
         return $this->pendingEntryId ? JournalPreview::reversalOf(JournalEntry::find($this->pendingEntryId)) : [];
     }
 
-    public function cancelEntry(int $entryId): void
+    public function cancelEntry(): void
     {
         Gate::authorize('overhead.manage');
 
+        if (! $this->pendingEntryId) {
+            return;
+        }
+
         try {
-            app(CancelOverheadExpenseAction::class)->handle(JournalEntry::findOrFail($entryId), Auth::id());
+            app(CancelOverheadExpenseAction::class)->handle(JournalEntry::findOrFail($this->pendingEntryId), Auth::id());
         } catch (InvalidOverheadEntryException|InvalidJournalEntryException $e) {
             Flux::toast(variant: 'danger', text: $e->userMessage());
 
@@ -418,7 +422,7 @@ new #[Title('Actual Overhead')] class extends Component {
             <x-journal-confirm :plan="$this->pendingEntryPlan()" />
             <div class="flex justify-end gap-2">
                 <flux:modal.close><flux:button variant="filled">{{ __('Back') }}</flux:button></flux:modal.close>
-                <flux:button variant="danger" wire:click="cancelEntry($pendingEntryId)" wire:loading.attr="disabled" wire:target="cancelEntry">{{ __('Cancel entry') }}</flux:button>
+                <flux:button variant="danger" wire:click="cancelEntry" wire:loading.attr="disabled" wire:target="cancelEntry">{{ __('Cancel entry') }}</flux:button>
             </div>
         </div>
     </flux:modal>

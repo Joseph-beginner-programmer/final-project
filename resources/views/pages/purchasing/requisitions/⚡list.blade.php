@@ -53,7 +53,7 @@ new #[Title('Purchase Requests')] class extends Component {
             ->when($term !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
                 ->where('requisition_number', 'like', "%{$term}%")
                 ->orWhereHas('items.product', fn (Builder $q) => $q->where('product_name', 'like', "%{$term}%"))))
-            ->with(['items.product', 'createdBy', 'purchaseOrder'])
+            ->with(['items.product', 'items.purchaseOrder', 'createdBy', 'purchaseOrder'])
             ->orderBy($this->status === 'submitted' ? 'needed_by' : 'id', $this->status === 'submitted' ? 'asc' : 'desc')
             ->paginate(20);
     }
@@ -75,6 +75,13 @@ new #[Title('Purchase Requests')] class extends Component {
     public function quantity(string $value): string
     {
         return str_contains($value, '.') ? rtrim(rtrim($value, '0'), '.') : $value;
+    }
+
+    public function itemLine(\App\Models\PurchaseRequisitionItem $item): string
+    {
+        $base = $item->product->product_name.' '.$this->quantity((string) $item->quantity).' '.$item->product->unit_of_measure;
+
+        return $item->isFulfilled() ? $base.' ('.__('on :po', ['po' => $item->purchaseOrder->po_number]).')' : $base;
     }
 }; ?>
 
@@ -128,7 +135,7 @@ new #[Title('Purchase Requests')] class extends Component {
                     <p class="text-sm">
                         <a href="{{ route('purchasing.requisitions.show', $req) }}" wire:navigate class="font-data text-accent hover:underline underline-offset-2">{{ $req->requisition_number }}</a>
                     </p>
-                    <p class="mt-0.5 text-xs text-zinc-600 dark:text-zinc-300">{{ $req->items->map(fn ($i) => $i->product->product_name.' '.$this->quantity((string) $i->quantity).' '.$i->product->unit_of_measure)->implode(', ') }}</p>
+                    <p class="mt-0.5 text-xs text-zinc-600 dark:text-zinc-300">{{ $req->items->map(fn ($i) => $this->itemLine($i))->implode(', ') }}</p>
                     <p class="mt-0.5 text-[11px] text-zinc-500 dark:text-zinc-400">
                         {{ __('Requested by :name on :date', ['name' => $req->createdBy->name, 'date' => $req->created_at->translatedFormat('d M Y')]) }}
                         @if ($req->purchaseOrder && $req->status === PurchaseRequisitionStatus::Submitted) · <span class="text-amber-700 dark:text-amber-400">{{ __('PO :n rejected', ['n' => $req->purchaseOrder->po_number]) }}</span>@elseif ($req->purchaseOrder) · {{ __('PO :n', ['n' => $req->purchaseOrder->po_number]) }}@endif

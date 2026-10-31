@@ -25,10 +25,6 @@ Route::middleware(['auth'])->group(function () {
         ->name('production.dashboard')
         ->middleware('dashboard.access:production');
 
-    Route::view('/warehouse/dashboard', 'dashboards.placeholder')
-        ->name('warehouse.dashboard')
-        ->middleware('dashboard.access:warehouse');
-
     Route::view('/admin/dashboard', 'dashboards.placeholder')
         ->name('admin.dashboard')
         ->middleware('dashboard.access:system_admin');
@@ -204,6 +200,12 @@ Route::middleware(['auth'])->group(function () {
 
     Route::get('/accounting/reports/balance-sheet/export/{format}', \App\Http\Controllers\Accounting\ExportBalanceSheetController::class)
         ->name('accounting.reports.balance-sheet.export');
+
+    Route::livewire('/accounting/reports/cash-flow', 'pages::accounting.reports.cash-flow')
+        ->name('accounting.reports.cash-flow');
+
+    Route::get('/accounting/reports/cash-flow/export/{format}', \App\Http\Controllers\Accounting\ExportCashFlowController::class)
+        ->name('accounting.reports.cash-flow.export');
 
     Route::livewire('/production/reports', 'pages::production.reports.index')
         ->name('production.reports.index');

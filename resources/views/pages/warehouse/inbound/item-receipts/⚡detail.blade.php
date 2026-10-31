@@ -32,7 +32,7 @@ new #[Title('Item Receipt Detail')] class extends Component
         return $this->purchaseOrder->items
             ->groupBy(fn ($item) => $item->product->unit_of_measure)
             ->map(fn (Collection $items) => $items->reduce(
-                fn ($carry, $item) => bcadd($carry, $item->quantity_received, 2),
+                fn ($carry, $item) => bcadd($carry, $item->netReceived(), 2),
                 '0'
             ));
     }
@@ -61,7 +61,7 @@ new #[Title('Item Receipt Detail')] class extends Component
         $items = $this->purchaseOrder->items;
 
         $received = $items->filter->isFullyReceived()->count();
-        $partial  = $items->filter(fn ($item) => !$item->isFullyReceived() && (float) $item->quantity_received > 0)->count();
+        $partial  = $items->filter(fn ($item) => !$item->isFullyReceived() && bccomp($item->netReceived(), '0', 2) > 0)->count();
         $total    = $items->count();
 
         return [
@@ -112,7 +112,6 @@ new #[Title('Item Receipt Detail')] class extends Component
 
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
-        <flux:breadcrumbs.item :href="route('warehouse.dashboard')" wire:navigate>{{ __('Warehouse') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item :href="route('warehouse.inbound.item-receipts.list')" wire:navigate>{{ __('Item Receipt') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item>{{ $purchaseOrder->po_number }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>
@@ -302,16 +301,16 @@ new #[Title('Item Receipt Detail')] class extends Component
                                 {{ $this->formatQuantity((string) $item->quantity_ordered) }} {{ $item->product->unit_of_measure }}
                             </td>
                             <td class="py-2.5 px-3 text-right font-data tabular-nums text-zinc-700 dark:text-zinc-300">
-                                {{ $this->formatQuantity((string) $item->quantity_received) }} {{ $item->product->unit_of_measure }}
+                                {{ $this->formatQuantity($item->netReceived()) }} {{ $item->product->unit_of_measure }}
                             </td>
                             <td class="py-2.5 px-3 text-right font-data font-medium tabular-nums {{ $item->isFullyReceived() ? 'text-zinc-400 dark:text-zinc-500' : 'text-accent' }}">
                                 {{ $this->formatQuantity($item->remainingQuantity()) }} {{ $item->product->unit_of_measure }}
                             </td>
                             <td class="py-2.5 px-3">
                                 <span class="inline-flex items-center gap-1.5">
-                                    <span class="size-1.5 rounded-full transition-colors duration-200 {{ $item->isFullyReceived() ? 'bg-green-500' : ((float) $item->quantity_received > 0 ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-600') }}"></span>
+                                    <span class="size-1.5 rounded-full transition-colors duration-200 {{ $item->isFullyReceived() ? 'bg-green-500' : (bccomp($item->netReceived(), '0', 2) > 0 ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-600') }}"></span>
                                     <span class="text-zinc-600 dark:text-zinc-400">
-                                        {{ $item->isFullyReceived() ? __('Received') : ((float) $item->quantity_received > 0 ? __('Partial') : __('Pending')) }}
+                                        {{ $item->isFullyReceived() ? __('Received') : (bccomp($item->netReceived(), '0', 2) > 0 ? __('Partial') : __('Pending')) }}
                                     </span>
                                 </span>
                             </td>
@@ -339,9 +338,9 @@ new #[Title('Item Receipt Detail')] class extends Component
                             <p class="text-sm text-zinc-700 dark:text-zinc-300">{{ $item->product->product_name }}</p>
                         </div>
                         <span class="inline-flex items-center gap-1.5 shrink-0">
-                            <span class="size-1.5 rounded-full {{ $item->isFullyReceived() ? 'bg-green-500' : ((float) $item->quantity_received > 0 ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-600') }}"></span>
+                            <span class="size-1.5 rounded-full {{ $item->isFullyReceived() ? 'bg-green-500' : (bccomp($item->netReceived(), '0', 2) > 0 ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-600') }}"></span>
                             <span class="text-xs text-zinc-600 dark:text-zinc-400">
-                                {{ $item->isFullyReceived() ? __('Received') : ((float) $item->quantity_received > 0 ? __('Partial') : __('Pending')) }}
+                                {{ $item->isFullyReceived() ? __('Received') : (bccomp($item->netReceived(), '0', 2) > 0 ? __('Partial') : __('Pending')) }}
                             </span>
                         </span>
                     </div>
@@ -352,7 +351,7 @@ new #[Title('Item Receipt Detail')] class extends Component
                         </div>
                         <div class="flex items-center justify-between gap-2">
                             <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Received') }}</dt>
-                            <dd class="font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $this->formatQuantity((string) $item->quantity_received) }} {{ $item->product->unit_of_measure }}</dd>
+                            <dd class="font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $this->formatQuantity($item->netReceived()) }} {{ $item->product->unit_of_measure }}</dd>
                         </div>
                         <div class="flex items-center justify-between gap-2">
                             <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Remaining') }}</dt>

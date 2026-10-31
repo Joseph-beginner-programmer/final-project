@@ -134,7 +134,6 @@ new #[Title('Production Receipt')] class extends Component {
 @php($diff = $this->difference())
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
-        <flux:breadcrumbs.item :href="route('warehouse.dashboard')" wire:navigate>{{ __('Warehouse') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item :href="route('warehouse.inbound.production-receipts.list')" wire:navigate>{{ __('Production Receipt') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item>{{ $productionReceiptId ? __('Edit') : __('Create') }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>

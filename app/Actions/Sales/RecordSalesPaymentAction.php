@@ -4,7 +4,6 @@ namespace App\Actions\Sales;
 
 use App\Actions\Accounting\PostJournalEntryAction;
 use App\Enums\AccountSystemRole;
-use App\Enums\AccountType;
 use App\Enums\DocumentStatus;
 use App\Enums\JournalEntryType;
 use App\Enums\PaymentMethod;
@@ -34,7 +33,7 @@ class RecordSalesPaymentAction
         }
 
         $cashAccount = Account::find($cashAccountId);
-        if (! $cashAccount || ! $cashAccount->is_active || $cashAccount->type !== AccountType::Asset || in_array($cashAccount->system_role, self::reservedRoles(), true)) {
+        if (! $cashAccount || ! $cashAccount->is_active || ! $cashAccount->is_cash) {
             throw new InvalidSalesPaymentException(InvalidSalesPaymentException::NOT_CASH_ACCOUNT);
         }
 
@@ -84,17 +83,6 @@ class RecordSalesPaymentAction
 
             return $payment;
         });
-    }
-
-    /**
-     * @return list<AccountSystemRole>
-     */
-    public static function reservedRoles(): array
-    {
-        return [
-            AccountSystemRole::InventoryRaw, AccountSystemRole::InventoryWip, AccountSystemRole::InventoryFinished, AccountSystemRole::InventorySemiFinished,
-            AccountSystemRole::VatIn, AccountSystemRole::AccountsReceivable,
-        ];
     }
 
     /**

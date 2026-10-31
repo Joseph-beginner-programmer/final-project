@@ -102,6 +102,22 @@ new #[Title('Purchase Order Details')] class extends Component {
     }
 
     #[Computed]
+    public function returnsByProduct(): Collection
+    {
+        return \App\Models\PurchaseReturn::where('purchase_order_id', $this->purchaseOrder->id)
+            ->where('status', \App\Enums\DocumentStatus::Posted)
+            ->with('items')
+            ->get()
+            ->flatMap(fn ($return) => $return->items->map(fn ($item) => [
+                'return_number' => $return->return_number,
+                'return_id' => $return->id,
+                'product_id' => $item->product_id,
+                'quantity' => $item->quantity,
+            ]))
+            ->groupBy('product_id');
+    }
+
+    #[Computed]
     public function newItemOptions(): array
     {
         $onOrder = $this->purchaseOrder->items->pluck('product_id')->all();
@@ -748,6 +764,19 @@ new #[Title('Purchase Order Details')] class extends Component {
                                     <span class="size-1.5 rounded-full {{ $item->isFullyReceived() ? 'bg-green-500' : ((float) $item->quantity_received > 0 ? 'bg-amber-500' : 'bg-zinc-300 dark:bg-zinc-600') }}"></span>
                                     {{ $item->quantity_received }} / {{ $item->quantity_ordered }}
                                 </span>
+                                @if ($returns = $this->returnsByProduct->get($item->product_id))
+                                    <p class="mt-0.5 text-[11px] text-amber-700 dark:text-amber-400">
+                                        {{ __(':qty returned', ['qty' => $returns->sum('quantity')]) }} ·
+                                        @foreach ($returns->unique('return_id') as $i => $return)
+                                            @can('purchasing.return.view')
+                                                <a href="{{ route('purchasing.returns.show', $return['return_id']) }}" wire:navigate class="underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-300">{{ $return['return_number'] }}</a>
+                                            @else
+                                                {{ $return['return_number'] }}
+                                            @endcan
+                                            @if (! $loop->last), @endif
+                                        @endforeach
+                                    </p>
+                                @endif
                             </td>
                             @can('update', $purchaseOrder)
                                 <td class="py-2 px-3 pt-2 text-right whitespace-nowrap">
@@ -844,6 +873,19 @@ new #[Title('Purchase Order Details')] class extends Component {
                             </span>
                             <span class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatRupiah((string) $item->subtotal) }}</span>
                         </div>
+                        @if ($returns = $this->returnsByProduct->get($item->product_id))
+                            <p class="mt-1 text-[11px] text-amber-700 dark:text-amber-400">
+                                {{ __(':qty returned', ['qty' => $returns->sum('quantity')]) }} ·
+                                @foreach ($returns->unique('return_id') as $return)
+                                    @can('purchasing.return.view')
+                                        <a href="{{ route('purchasing.returns.show', $return['return_id']) }}" wire:navigate class="underline underline-offset-2">{{ $return['return_number'] }}</a>
+                                    @else
+                                        {{ $return['return_number'] }}
+                                    @endcan
+                                    @if (! $loop->last), @endif
+                                @endforeach
+                            </p>
+                        @endif
                         <flux:button size="sm" variant="ghost" icon="check" class="w-full mt-2 active:scale-[0.97]" wire:click="updateItem({{ $item->id }})" wire:loading.attr="disabled" wire:target="updateItem({{ $item->id }})">
                             {{ __('Save changes') }}
                         </flux:button>
@@ -864,6 +906,22 @@ new #[Title('Purchase Order Details')] class extends Component {
                                     {{ $item->quantity_received }} / {{ $item->quantity_ordered }}
                                 </dd>
                             </div>
+                            @if ($returns = $this->returnsByProduct->get($item->product_id))
+                                <div class="flex justify-between gap-2">
+                                    <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Returned') }}</dt>
+                                    <dd class="font-data tabular-nums text-amber-700 dark:text-amber-400">
+                                        {{ $returns->sum('quantity') }} ·
+                                        @foreach ($returns->unique('return_id') as $return)
+                                            @can('purchasing.return.view')
+                                                <a href="{{ route('purchasing.returns.show', $return['return_id']) }}" wire:navigate class="underline underline-offset-2">{{ $return['return_number'] }}</a>
+                                            @else
+                                                {{ $return['return_number'] }}
+                                            @endcan
+                                            @if (! $loop->last), @endif
+                                        @endforeach
+                                    </dd>
+                                </div>
+                            @endif
                             <div class="flex justify-between gap-2 pt-1.5 mt-1.5 border-t border-zinc-100 dark:border-white/10">
                                 <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Subtotal') }}</dt>
                                 <dd class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatRupiah((string) $item->subtotal) }}</dd>

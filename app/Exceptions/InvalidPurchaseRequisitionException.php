@@ -11,6 +11,7 @@ class InvalidPurchaseRequisitionException extends RuntimeException
     public const NOT_PURCHASABLE = 'not_purchasable';
     public const NEEDED_BY_PAST = 'needed_by_past';
     public const REASON_REQUIRED = 'reason_required';
+    public const PARTIALLY_PROCESSED = 'partially_processed';
 
     public function __construct(
         public readonly string $reason,
@@ -27,6 +28,7 @@ class InvalidPurchaseRequisitionException extends RuntimeException
             self::NOT_PURCHASABLE => __(':name is not a purchasable raw material.', ['name' => $this->detail]),
             self::NEEDED_BY_PAST => __('The needed-by date cannot be in the past.'),
             self::REASON_REQUIRED => __('Give a reason for declining the request.'),
+            self::PARTIALLY_PROCESSED => __(':number already has some materials ordered — only the remaining lines can still be changed.', ['number' => $this->detail]),
             default => __('Invalid purchase request.'),
         };
     }

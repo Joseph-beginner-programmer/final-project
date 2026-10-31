@@ -6,7 +6,6 @@ use App\Actions\Accounting\PostJournalEntryAction;
 use App\Actions\Inventory\CreateStockMovementAction;
 use App\DTO\Inventory\CreateStockMovementData;
 use App\Enums\AccountSystemRole;
-use App\Enums\AccountType;
 use App\Enums\Direction;
 use App\Enums\DocumentStatus;
 use App\Enums\JournalEntryType;
@@ -219,7 +218,7 @@ class PostSalesReturnAction
                 if (! $account) {
                     throw new InvalidSalesReturnException(InvalidSalesReturnException::REFUND_ACCOUNT_REQUIRED);
                 }
-                if (! $account->is_active || $account->type !== AccountType::Asset || in_array($account->system_role, RecordSalesPaymentAction::reservedRoles(), true)) {
+                if (! $account->is_active || ! $account->is_cash) {
                     throw new InvalidSalesReturnException(InvalidSalesReturnException::NOT_CASH_ACCOUNT);
                 }
             }

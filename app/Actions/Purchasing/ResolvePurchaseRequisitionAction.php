@@ -6,6 +6,7 @@ use App\Enums\PurchaseRequisitionStatus;
 use App\Exceptions\InvalidPurchaseRequisitionException;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseRequisition;
+use App\Models\PurchaseRequisitionItem;
 use Illuminate\Support\Facades\DB;
 
 class ResolvePurchaseRequisitionAction
@@ -26,38 +27,64 @@ class ResolvePurchaseRequisitionAction
 
     /**
      * @param  list<int>  $requisitionIds
+     * @param  list<int>  $productIds
      */
-    public function markProcessed(array $requisitionIds, PurchaseOrder $po, int $userId): void
+    public function markProcessed(array $requisitionIds, PurchaseOrder $po, int $userId, array $productIds): void
     {
-        foreach (PurchaseRequisition::whereIn('id', $requisitionIds)->orderBy('id')->lockForUpdate()->get() as $requisition) {
+        foreach (PurchaseRequisition::whereIn('id', $requisitionIds)->with('items.purchaseOrder')->orderBy('id')->lockForUpdate()->get() as $requisition) {
             $requisition->ensureIsSubmitted();
-            $requisition->status = PurchaseRequisitionStatus::Processed;
-            $requisition->purchase_order_id = $po->id;
-            $requisition->processed_by = $userId;
-            $requisition->processed_at = now();
-            $requisition->save();
+
+            foreach ($requisition->items as $item) {
+                if (in_array($item->product_id, $productIds, true) && ! $item->isFulfilled()) {
+                    $item->update(['purchase_order_id' => $po->id]);
+                }
+            }
+
+            if ($requisition->refresh()->load('items.purchaseOrder')->isFullyFulfilled()) {
+                $requisition->status = PurchaseRequisitionStatus::Processed;
+                $requisition->purchase_order_id = $po->id;
+                $requisition->processed_by = $userId;
+                $requisition->processed_at = now();
+                $requisition->save();
+            }
         }
     }
 
     public function reopenForRejectedOrder(PurchaseOrder $po): void
     {
-        PurchaseRequisition::where('purchase_order_id', $po->id)
-            ->where('status', PurchaseRequisitionStatus::Processed->value)
-            ->update(['status' => PurchaseRequisitionStatus::Submitted->value, 'updated_at' => now()]);
+        $this->resyncRequisitionsLinkedTo($po);
     }
 
     public function restoreForReopenedOrder(PurchaseOrder $po): void
     {
-        PurchaseRequisition::where('purchase_order_id', $po->id)
-            ->where('status', PurchaseRequisitionStatus::Submitted->value)
-            ->update(['status' => PurchaseRequisitionStatus::Processed->value, 'updated_at' => now()]);
+        $this->resyncRequisitionsLinkedTo($po);
+    }
+
+    protected function resyncRequisitionsLinkedTo(PurchaseOrder $po): void
+    {
+        $requisitionIds = PurchaseRequisitionItem::where('purchase_order_id', $po->id)
+            ->pluck('purchase_requisition_id')
+            ->unique();
+
+        foreach (PurchaseRequisition::whereIn('id', $requisitionIds)->with('items.purchaseOrder')->lockForUpdate()->get() as $requisition) {
+            $fulfilled = $requisition->isFullyFulfilled();
+
+            if ($fulfilled && $requisition->status !== PurchaseRequisitionStatus::Processed) {
+                $requisition->status = PurchaseRequisitionStatus::Processed;
+                $requisition->save();
+            } elseif (! $fulfilled && $requisition->status === PurchaseRequisitionStatus::Processed) {
+                $requisition->status = PurchaseRequisitionStatus::Submitted;
+                $requisition->save();
+            }
+        }
     }
 
     protected function close(PurchaseRequisition $requisition, PurchaseRequisitionStatus $status, int $userId, ?string $reason = null): PurchaseRequisition
     {
         return DB::transaction(function () use ($requisition, $status, $userId, $reason) {
-            $requisition = PurchaseRequisition::whereKey($requisition->id)->lockForUpdate()->firstOrFail();
+            $requisition = PurchaseRequisition::whereKey($requisition->id)->with('items.purchaseOrder')->lockForUpdate()->firstOrFail();
             $requisition->ensureIsSubmitted();
+            $requisition->ensureNoneFulfilled();
             $requisition->status = $status;
             $requisition->rejection_reason = $reason;
             $requisition->processed_by = $userId;

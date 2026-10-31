@@ -141,7 +141,6 @@ new #[Title('Sales Delivery')] class extends Component {
 @php($order = $this->order)
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
-        <flux:breadcrumbs.item :href="route('warehouse.dashboard')" wire:navigate>{{ __('Warehouse') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item :href="route('warehouse.outbound.sales-deliveries.list')" wire:navigate>{{ __('Sales Delivery') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item>{{ $salesDeliveryId ? __('Edit') : __('Create') }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>

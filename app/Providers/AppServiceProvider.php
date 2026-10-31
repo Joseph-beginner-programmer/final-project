@@ -65,6 +65,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('warehouse.return', function ($user) {
             return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
         });
+        Gate::define('returns.post', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Sales, UserRole::Manager], true);
+        });
         Gate::define('production.view', function ($user) {
             return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
         });
@@ -132,13 +135,13 @@ class AppServiceProvider extends ServiceProvider
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
         Gate::define('purchasing.return', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Warehouse, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
         });
         Gate::define('purchasing.return.view', function ($user) {
             return in_array($user->role, [UserRole::Purchasing, UserRole::Warehouse, UserRole::Accounting, UserRole::Manager], true);
         });
         Gate::define('sales.return', function ($user) {
-            return in_array($user->role, [UserRole::Sales, UserRole::Warehouse, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Sales, UserRole::Manager], true);
         });
         Gate::define('sales.return.view', function ($user) {
             return in_array($user->role, [UserRole::Sales, UserRole::Warehouse, UserRole::Accounting, UserRole::Manager], true);

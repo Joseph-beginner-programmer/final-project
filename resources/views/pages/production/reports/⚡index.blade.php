@@ -79,6 +79,13 @@ new #[Title('Reports')] class extends Component {
                     'description' => __('Assets, liabilities and equity at the end of the month, checking that both sides are equal.'),
                     'scope' => __('Month end'),
                 ],
+                [
+                    'route' => 'accounting.reports.cash-flow',
+                    'icon' => 'banknotes',
+                    'title' => __('Cash Flow Statement'),
+                    'description' => __('Why cash went up or down this month, split into operating and financing activity.'),
+                    'scope' => __('Per month'),
+                ],
             ] : []),
         ];
     }

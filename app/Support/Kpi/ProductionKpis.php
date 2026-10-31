@@ -4,10 +4,13 @@ namespace App\Support\Kpi;
 
 use App\Enums\DocumentStatus;
 use App\Enums\ProductType;
+use App\Enums\SalesOrderStatus;
 use App\Enums\WorkOrderStatus;
 use App\Models\MaterialReturnItem;
+use App\Models\ProductionFormula;
 use App\Models\ProductionReceipt;
 use App\Models\ProductionResult;
+use App\Models\SalesOrder;
 use App\Models\WorkCenter;
 use App\Models\WorkOrder;
 use Carbon\CarbonInterface;
@@ -302,6 +305,70 @@ class ProductionKpis
                     ->contains(fn ($line) => bccomp((string) $line->quantity, (string) $line->quantity_consumed, 2) > 0))
                 ->count(),
         ];
+    }
+
+    /**
+     * @return Collection<int, array{sales_order: SalesOrder, items: Collection<int, array{product_id: int, product_name: string, ordered: string, extra_available: int}>}>
+     */
+    public static function draftSalesOpportunities(): Collection
+    {
+        $draftOrders = SalesOrder::query()
+            ->where('status', SalesOrderStatus::Draft->value)
+            ->with(['customer', 'items.product'])
+            ->orderBy('order_date')
+            ->get();
+
+        $productIds = $draftOrders->flatMap(fn (SalesOrder $order) => $order->items->pluck('product_id'))->unique();
+        if ($productIds->isEmpty()) {
+            return collect();
+        }
+
+        $formulas = ProductionFormula::query()
+            ->where('is_active', true)
+            ->whereIn('product_id', $productIds)
+            ->with('items.materialProduct')
+            ->get()
+            ->keyBy('product_id');
+
+        return $draftOrders
+            ->map(function (SalesOrder $order) use ($formulas) {
+                $items = $order->items
+                    ->map(function ($item) use ($formulas) {
+                        $formula = $formulas->get($item->product_id);
+                        $extra = $formula ? self::producibleUnits($formula) : 0;
+
+                        return $extra > 0 ? [
+                            'product_id' => $item->product_id,
+                            'product_name' => $item->product->product_name,
+                            'ordered' => (string) $item->quantity_ordered,
+                            'extra_available' => $extra,
+                        ] : null;
+                    })
+                    ->filter()
+                    ->values();
+
+                return ['sales_order' => $order, 'items' => $items];
+            })
+            ->filter(fn (array $row) => $row['items']->isNotEmpty())
+            ->values();
+    }
+
+    protected static function producibleUnits(ProductionFormula $formula): int
+    {
+        if ($formula->items->isEmpty() || bccomp((string) $formula->output_quantity, '0', 2) <= 0) {
+            return 0;
+        }
+
+        $max = null;
+        foreach ($formula->items as $item) {
+            if (bccomp((string) $item->quantity, '0', 2) <= 0) {
+                continue;
+            }
+            $unitsFromThisMaterial = bcdiv(bcmul((string) $item->materialProduct->current_stock, (string) $formula->output_quantity, 6), (string) $item->quantity, 0);
+            $max = $max === null ? $unitsFromThisMaterial : (bccomp($unitsFromThisMaterial, $max, 0) < 0 ? $unitsFromThisMaterial : $max);
+        }
+
+        return (int) ($max ?? '0');
     }
 
     /**

@@ -51,4 +51,34 @@ class PurchaseRequisition extends Model
             throw new InvalidPurchaseRequisitionException(InvalidPurchaseRequisitionException::NOT_OPEN, $this->requisition_number);
         }
     }
+
+    public function ensureNoneFulfilled(): void
+    {
+        if ($this->items->contains(fn (PurchaseRequisitionItem $item) => $item->isFulfilled())) {
+            throw new InvalidPurchaseRequisitionException(InvalidPurchaseRequisitionException::PARTIALLY_PROCESSED, $this->requisition_number);
+        }
+    }
+
+    public function isFullyFulfilled(): bool
+    {
+        return $this->items->every(fn (PurchaseRequisitionItem $item) => $item->isFulfilled());
+    }
+
+    public function singleCommonSupplierId(): ?int
+    {
+        $openItems = $this->items->reject(fn (PurchaseRequisitionItem $item) => $item->isFulfilled());
+
+        if ($openItems->isEmpty()) {
+            return null;
+        }
+
+        $commonSupplierIds = $openItems->reduce(
+            fn (?\Illuminate\Support\Collection $carry, PurchaseRequisitionItem $item) => $carry === null
+                ? $item->product->suppliers->pluck('id')
+                : $carry->intersect($item->product->suppliers->pluck('id')),
+            null
+        );
+
+        return $commonSupplierIds->count() === 1 ? $commonSupplierIds->first() : null;
+    }
 }

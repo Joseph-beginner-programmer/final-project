@@ -45,13 +45,30 @@ new #[Title('Create Purchase Order')] class extends Component {
 
         $ids = collect(explode(',', (string) request()->query('requisitions', '')))->map(fn ($id) => (int) $id)->filter()->unique()->values();
         if ($ids->isNotEmpty() && Gate::allows('requisitions.process')) {
-            $open = PurchaseRequisition::whereIn('id', $ids)->where('status', 'submitted')->with('items')->get();
+            $open = PurchaseRequisition::whereIn('id', $ids)->where('status', 'submitted')->with('items.purchaseOrder')->get();
             if ($open->count() < $ids->count()) {
                 Flux::toast(variant: 'warning', text: __('Some selected requests are no longer open and were left out.'));
             }
             $this->requisitionIds = $open->pluck('id')->all();
             foreach ($open->flatMap->items as $item) {
+                if ($item->isFulfilled()) {
+                    continue;
+                }
                 $this->requestedLines[$item->product_id] = bcadd($this->requestedLines[$item->product_id] ?? '0', (string) $item->quantity, 2);
+            }
+
+            $prefillSupplierId = (int) request()->query('supplier', 0);
+            if ($prefillSupplierId && Supplier::find($prefillSupplierId)) {
+                $this->supplierId = (string) $prefillSupplierId;
+                foreach ($this->availableProducts as $product) {
+                    if (isset($this->requestedLines[$product->id])) {
+                        $this->items[] = [
+                            'product_id' => (string) $product->id,
+                            'quantity_ordered' => \App\Support\Decimal::plain($this->requestedLines[$product->id]),
+                            'unit_price' => $product->pivot->price !== null ? bcadd((string) $product->pivot->price, '0', 0) : '',
+                        ];
+                    }
+                }
             }
         }
 
@@ -82,18 +99,56 @@ new #[Title('Create Purchase Order')] class extends Component {
     #[Computed]
     public function sourceRequisitions(): Collection
     {
-        return PurchaseRequisition::whereIn('id', $this->requisitionIds)->with(['items.product'])->orderBy('needed_by')->get();
+        return PurchaseRequisition::whereIn('id', $this->requisitionIds)->with(['items.product', 'items.purchaseOrder'])->orderBy('needed_by')->get();
     }
 
     #[Computed]
-    public function unsuppliedRequested(): Collection
+    public function pendingRequestedLines(): Collection
     {
-        if (! $this->supplierId) {
-            return collect();
-        }
-        $supplied = $this->availableProducts->pluck('id')->all();
+        $addedProductIds = collect($this->items)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all();
+        $suppliedProductIds = $this->supplierId ? $this->availableProducts->pluck('id')->all() : [];
 
-        return \App\Models\Product::whereIn('id', array_keys($this->requestedLines))->whereNotIn('id', $supplied)->get();
+        return $this->sourceRequisitions
+            ->flatMap(fn (PurchaseRequisition $req) => $req->items
+                ->reject(fn ($item) => $item->isFulfilled())
+                ->map(fn ($item) => [
+                    'product' => $item->product,
+                    'quantity' => (string) $item->quantity,
+                    'requisition_number' => $req->requisition_number,
+                    'needed_by' => $req->needed_by,
+                ]))
+            ->groupBy(fn (array $row) => $row['product']->id)
+            ->map(fn (Collection $rows) => [
+                'product' => $rows->first()['product'],
+                'quantity' => $rows->reduce(fn (string $carry, array $row) => bcadd($carry, $row['quantity'], 2), '0'),
+                'requisition_numbers' => $rows->pluck('requisition_number')->unique()->implode(', '),
+                'needed_by' => $rows->pluck('needed_by')->sort()->first(),
+                'added' => in_array($rows->first()['product']->id, $addedProductIds, true),
+                'suppliedByThisSupplier' => $this->supplierId ? in_array($rows->first()['product']->id, $suppliedProductIds, true) : null,
+            ])
+            ->sortBy(fn (array $row) => $row['product']->product_name)
+            ->values();
+    }
+
+    public function addRequestedLine(int $productId): void
+    {
+        if (! isset($this->requestedLines[$productId])) {
+            return;
+        }
+        if (collect($this->items)->pluck('product_id')->contains((string) $productId)) {
+            return;
+        }
+
+        $product = $this->availableProducts->firstWhere('id', $productId);
+        if (! $product) {
+            return;
+        }
+
+        $this->items[] = [
+            'product_id' => (string) $productId,
+            'quantity_ordered' => \App\Support\Decimal::plain($this->requestedLines[$productId]),
+            'unit_price' => $product->pivot->price !== null ? bcadd((string) $product->pivot->price, '0', 0) : '',
+        ];
     }
 
     public function addItemRow(): void
@@ -128,20 +183,8 @@ new #[Title('Create Purchase Order')] class extends Component {
     public function updatedSupplierId(): void
     {
         if ($this->requisitionIds !== []) {
-            unset($this->selectedSupplier, $this->availableProducts, $this->unsuppliedRequested);
+            unset($this->selectedSupplier, $this->availableProducts, $this->pendingRequestedLines);
             $this->items = [];
-            foreach ($this->availableProducts as $product) {
-                if (isset($this->requestedLines[$product->id])) {
-                    $this->items[] = [
-                        'product_id' => (string) $product->id,
-                        'quantity_ordered' => \App\Support\Decimal::plain($this->requestedLines[$product->id]),
-                        'unit_price' => $product->pivot->price !== null ? bcadd((string) $product->pivot->price, '0', 0) : '',
-                    ];
-                }
-            }
-            if ($this->items === []) {
-                $this->addItemRow();
-            }
 
             return;
         }
@@ -336,7 +379,7 @@ new #[Title('Create Purchase Order')] class extends Component {
         );
 
         try {
-            app(CreatePurchaseOrderAction::class)->handle($data);
+            $purchaseOrder = app(CreatePurchaseOrderAction::class)->handle($data);
         } catch (NonPurchasableProductException $e) {
             $this->addError('items', $e->userMessage());
 
@@ -353,7 +396,7 @@ new #[Title('Create Purchase Order')] class extends Component {
 
         Flux::toast(variant: 'success', text: __('Purchase order created.'));
 
-        $this->redirect(route('purchasing.orders.list'), navigate: true);
+        $this->redirect(route('purchasing.orders.show', $purchaseOrder), navigate: true);
     }
 }; ?>
 
@@ -396,18 +439,31 @@ new #[Title('Create Purchase Order')] class extends Component {
     @if ($requisitionIds !== [])
         <div class="mt-5 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
             <p class="font-medium text-zinc-900 dark:text-white">{{ __('From purchase requests') }}</p>
-            <ul class="mt-1 space-y-0.5">
-                @foreach ($this->sourceRequisitions as $req)
-                    <li><span class="font-data text-accent">{{ $req->requisition_number }}</span> · {{ __('needed by :date', ['date' => $req->needed_by->translatedFormat('d M Y')]) }} — {{ $req->items->map(fn ($i) => $i->product->product_name.' '.\App\Support\Decimal::plain($i->quantity).' '.$i->product->unit_of_measure)->implode(', ') }}</li>
+            <p class="mt-1 text-zinc-500 dark:text-zinc-400">{{ $supplierId ? __('Add each material you want on this PO. Materials this supplier doesn\'t sell stay on the request, open for another supplier.') : __('Choose a supplier, then add the requested materials it sells one by one.') }}</p>
+            <ul class="mt-2 divide-y divide-accent/10">
+                @foreach ($this->pendingRequestedLines as $line)
+                    <li wire:key="pending-line-{{ $line['product']->id }}" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
+                        <span class="min-w-0">
+                            <span class="font-medium text-zinc-900 dark:text-white">{{ $line['product']->product_name }}</span>
+                            <span class="font-data text-zinc-500 dark:text-zinc-400"> · {{ \App\Support\Decimal::plain($line['quantity']) }} {{ $line['product']->unit_of_measure }}</span>
+                            <span class="block text-[11px] text-zinc-500 dark:text-zinc-400">{{ $line['requisition_numbers'] }} · {{ __('needed by :date', ['date' => $line['needed_by']->translatedFormat('d M Y')]) }}</span>
+                        </span>
+                        @if ($line['added'])
+                            <span class="inline-flex shrink-0 items-center gap-1 font-medium text-green-700 dark:text-green-400">
+                                <flux:icon.check variant="micro" class="size-3.5" />{{ __('Added') }}
+                            </span>
+                        @elseif (! $supplierId)
+                            <span class="shrink-0 text-zinc-400 dark:text-zinc-500">{{ __('Choose a supplier first') }}</span>
+                        @elseif ($line['suppliedByThisSupplier'])
+                            <flux:button size="sm" variant="filled" wire:click="addRequestedLine({{ $line['product']->id }})" wire:loading.attr="disabled" wire:target="addRequestedLine({{ $line['product']->id }})" class="shrink-0 active:scale-[0.95]">{{ __('Add') }}</flux:button>
+                        @else
+                            <span class="inline-flex shrink-0 items-center gap-1 text-amber-700 dark:text-amber-400">
+                                <flux:icon.exclamation-triangle variant="micro" class="size-3.5" />{{ __('Not sold by this supplier') }}
+                            </span>
+                        @endif
+                    </li>
                 @endforeach
             </ul>
-            <p class="mt-1.5 text-zinc-500 dark:text-zinc-400">{{ $supplierId ? __('Lines are filled from these requests with this supplier\'s prices. Saving the PO marks the requests as processed.') : __('Choose a supplier — the requested materials it sells are filled in automatically.') }}</p>
-            @if ($this->unsuppliedRequested->isNotEmpty())
-                <p class="mt-1.5 flex items-start gap-1.5 text-amber-800 dark:text-amber-300">
-                    <flux:icon.exclamation-triangle variant="micro" class="mt-0.5 size-3.5 shrink-0" />
-                    {{ __('This supplier does not sell: :items. Order them from another supplier — the requests are still marked processed when this PO is saved.', ['items' => $this->unsuppliedRequested->pluck('product_name')->implode(', ')]) }}
-                </p>
-            @endif
         </div>
     @endif
 

@@ -125,7 +125,6 @@ new #[Title('Material Return')] class extends Component {
 @php($showCost = auth()->user()->can('costs.view'))
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
-        <flux:breadcrumbs.item :href="route('warehouse.dashboard')" wire:navigate>{{ __('Warehouse') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item>{{ __('Material Return') }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>
 

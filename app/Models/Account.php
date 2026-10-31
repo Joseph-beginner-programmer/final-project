@@ -23,11 +23,17 @@ class Account extends Model
             'system_role' => AccountSystemRole::class,
             'is_active' => 'boolean',
             'is_contra' => 'boolean',
+            'is_cash' => 'boolean',
         ];
     }
 
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);
+    }
+
+    public function scopeCash(Builder $query): Builder
+    {
+        return $query->where('is_cash', true);
     }
 }

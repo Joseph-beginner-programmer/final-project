@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PurchaseOrderStatus;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -26,5 +27,16 @@ class PurchaseRequisitionItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function purchaseOrder(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseOrder::class);
+    }
+
+    public function isFulfilled(): bool
+    {
+        return $this->purchase_order_id !== null
+            && ! in_array($this->purchaseOrder->status, [PurchaseOrderStatus::Rejected, PurchaseOrderStatus::Cancelled], true);
     }
 }

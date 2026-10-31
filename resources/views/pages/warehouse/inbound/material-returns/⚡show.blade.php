@@ -125,7 +125,6 @@ new #[Title('Material Return')] class extends Component {
 @php($label = 'text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400')
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
-        <flux:breadcrumbs.item :href="route('warehouse.dashboard')" wire:navigate>{{ __('Warehouse') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item :href="route('warehouse.inbound.material-returns.list', ['tab' => 'documents'])" wire:navigate>{{ __('Material Return') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item>{{ $return->return_number }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>

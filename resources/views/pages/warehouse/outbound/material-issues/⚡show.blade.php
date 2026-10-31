@@ -126,7 +126,6 @@ new #[Title('Material Issue')] class extends Component {
 @php($posted = $issue->status === DocumentStatus::Posted)
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
-        <flux:breadcrumbs.item :href="route('warehouse.dashboard')" wire:navigate>{{ __('Warehouse') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item :href="route('warehouse.outbound.material-issues.list', ['tab' => 'documents'])" wire:navigate>{{ __('Material Issue') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item>{{ $issue->issue_number }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>

@@ -51,7 +51,8 @@ class CreatePurchaseOrderAction
             $po->recalculateTotal();
 
             if ($data->requisitionIds !== []) {
-                app(ResolvePurchaseRequisitionAction::class)->markProcessed($data->requisitionIds, $po, $data->createdBy);
+                $productIds = array_map(fn (array $item) => (int) $item['product_id'], $data->items);
+                app(ResolvePurchaseRequisitionAction::class)->markProcessed($data->requisitionIds, $po, $data->createdBy, $productIds);
             }
 
             return $po->load(['items', 'charges']);

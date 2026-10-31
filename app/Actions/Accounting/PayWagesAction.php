@@ -2,9 +2,7 @@
 
 namespace App\Actions\Accounting;
 
-use App\Actions\Sales\RecordSalesPaymentAction;
 use App\Enums\AccountSystemRole;
-use App\Enums\AccountType;
 use App\Enums\DocumentStatus;
 use App\Enums\JournalEntryType;
 use App\Exceptions\InvalidWagePaymentException;
@@ -40,7 +38,7 @@ class PayWagesAction
         }
 
         $cashAccount = Account::find($cashAccountId);
-        if (! $cashAccount || ! $cashAccount->is_active || $cashAccount->type !== AccountType::Asset || in_array($cashAccount->system_role, RecordSalesPaymentAction::reservedRoles(), true)) {
+        if (! $cashAccount || ! $cashAccount->is_active || ! $cashAccount->is_cash) {
             throw new InvalidWagePaymentException(InvalidWagePaymentException::NOT_CASH_ACCOUNT);
         }
 

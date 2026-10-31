@@ -87,46 +87,15 @@ new #[Title('Production Dashboard')] class extends Component {
     }
 
     #[Computed]
-    public function seriesProducts(): Collection
+    public function draftSalesOpportunities(): Collection
     {
-        return $this->kpis->seriesProducts()->values()->map(fn ($p, $i) => [...$p, 'slot' => $i + 1]);
-    }
-
-    #[Computed]
-    public function weeklyOutput(): array
-    {
-        $data = $this->kpis->weeklyOutput($this->seriesProducts);
-        $slots = $this->seriesProducts->pluck('slot', 'id');
-
-        return [
-            'labels' => $data['weeks'],
-            'series' => collect($data['series'])->map(fn ($s) => [...$s, 'slot' => $slots[$s['id']] ?? ProductionKpis::MAX_PRODUCT_SERIES + 1])->all(),
-        ];
-    }
-
-    #[Computed]
-    public function rejectTrend(): array
-    {
-        $data = $this->kpis->rejectTrend($this->seriesProducts);
-        $slots = $this->seriesProducts->pluck('slot', 'id');
-
-        return [
-            'labels' => $data['months'],
-            'overall' => $data['overall'],
-            'series' => collect($data['series'])->map(fn ($s) => [...$s, 'slot' => $slots[$s['id']]])->all(),
-        ];
+        return ProductionKpis::draftSalesOpportunities();
     }
 
     #[Computed]
     public function ongoing(): Collection
     {
         return OngoingWorkOrders::all(now());
-    }
-
-    #[Computed]
-    public function utilisation(): Collection
-    {
-        return $this->kpis->workCenterUtilisation();
     }
 
     #[Computed]
@@ -433,82 +402,6 @@ new #[Title('Production Dashboard')] class extends Component {
             @endif
         </div>
 
-        <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-6 motion-safe:animate-fade-slide-up" style="animation-delay: 80ms;">
-            @php($weekly = $this->weeklyOutput)
-            <div wire:key="output-{{ $key }}" class="{{ $card }} lg:col-span-2 min-w-0" x-data="{ table: false }">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h2 class="{{ $cardTitle }}">{{ __('Good units per week') }}</h2>
-                        <p class="{{ $cardSub }}">{{ __('Click a product to isolate it and see its target.') }}</p>
-                    </div>
-                    <button type="button" class="{{ $tableToggle }}" x-on:click="table = ! table" x-text="table ? @js(__('Show chart')) : @js(__('Show table'))"></button>
-                </div>
-                @if (collect($weekly['series'])->isEmpty())
-                    <p class="py-16 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No production in this period.') }}</p>
-                @else
-                    <div wire:ignore x-data="stackedBar(@js([...$weekly, 'isolatable' => true, 'targets' => true, 'format' => 'number', 'totalLabel' => __('Total'), 'targetLabel' => __('Target')]))">
-                        <div x-show="! table" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-                            <template x-for="s in config.series" :key="s.id">
-                                <button type="button" x-on:click="toggle(s.id)" :aria-pressed="isolated === s.id" class="inline-flex items-center gap-1.5 text-xs cursor-pointer transition-opacity" :class="isDimmed(s.id) ? 'opacity-40' : ''">
-                                    <span class="size-2.5 rounded-sm" :style="`background: var(--series-${s.slot})`"></span>
-                                    <span class="text-zinc-700 dark:text-zinc-300" x-text="s.name"></span>
-                                </button>
-                            </template>
-                            <span x-show="isolated !== null" class="inline-flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300">
-                                <span class="h-0.5 w-3.5 rounded-full" style="background: var(--viz-ink)"></span>{{ __('Target') }}
-                            </span>
-                        </div>
-                        <div x-show="! table" x-ref="frame" class="relative mt-2 w-full">
-                            <svg x-ref="svg" class="block" height="240" role="group" aria-label="{{ __('Good units per week') }}"></svg>
-                            <x-chart-tooltip />
-                        </div>
-                    </div>
-                    <div x-show="table" x-cloak class="mt-3 overflow-x-auto">
-                        <table class="w-full text-xs">
-                            <thead><tr class="border-b border-zinc-200 dark:border-white/10"><th class="{{ $th }}">{{ __('Product') }}</th>@foreach ($weekly['labels'] as $label)<th class="{{ $th }} text-right">{{ $label }}</th>@endforeach</tr></thead>
-                            <tbody>
-                                @foreach ($weekly['series'] as $s)
-                                    <tr class="border-b border-zinc-100 dark:border-white/5"><td class="{{ $td }}">{{ $s['name'] }}</td>@foreach ($s['values'] as $i => $v)<td class="{{ $tdNum }}">{{ $this->formatQuantity($v) }} <span class="text-zinc-400">/ {{ $this->formatQuantity($s['targets'][$i]) }}</span></td>@endforeach</tr>
-                                @endforeach
-                            </tbody>
-                        </table>
-                        <p class="mt-2 text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('Good units / target (target counted in the week of the planned end date).') }}</p>
-                    </div>
-                @endif
-            </div>
-
-            <div class="{{ $card }} min-w-0">
-                <h2 class="{{ $cardTitle }}">{{ __('Work center utilisation') }}</h2>
-                <p class="{{ $cardSub }}">{{ __('Machine hours used vs the monthly budget in the overhead rate.') }}</p>
-                <div class="mt-4 space-y-4">
-                    @forelse ($this->utilisation as $center)
-                        <div>
-                            <div class="flex items-baseline justify-between gap-3 text-xs">
-                                <span class="font-medium text-zinc-800 dark:text-zinc-200">{{ $center['name'] }}</span>
-                                <span class="font-semibold text-zinc-900 dark:text-white">{{ $this->formatPercent($center['utilisation']) }}</span>
-                            </div>
-                            @if ($center['budget'])
-                                <div class="mt-1.5 h-2 rounded-full overflow-hidden" style="background: var(--meter-track)" role="img" aria-label="{{ $center['name'] }} {{ $this->formatPercent($center['utilisation']) }}">
-                                    <div class="h-full rounded-full" style="width: {{ min(100, $center['utilisation']) }}%; background: {{ $center['utilisation'] > 100 ? 'var(--status-warning)' : 'var(--meter-fill)' }}"></div>
-                                </div>
-                                <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                                    {{ __(':actual of :budget hours', ['actual' => $this->formatQuantity($center['actual']), 'budget' => $this->formatQuantity($center['budget'])]) }}
-                                    @if ($center['utilisation'] > 100)
-                                        · <span class="inline-flex items-center gap-0.5 font-medium text-amber-700 dark:text-amber-400"><flux:icon.exclamation-triangle variant="micro" class="size-3" />{{ __('over budget') }}</span>
-                                    @endif
-                                </p>
-                            @else
-                                <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">{{ __(':actual hours · no budgeted hours set', ['actual' => $this->formatQuantity($center['actual'])]) }}</p>
-                            @endif
-                        </div>
-                    @empty
-                        <p class="py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No work centers yet.') }}</p>
-                    @endforelse
-                </div>
-                <p class="mt-4 border-t border-zinc-100 dark:border-white/5 pt-3 text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('Below 100% means machines ran less than budgeted, so the real overhead per hour is higher than the rate.') }}</p>
-            </div>
-        </div>
-
         <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6 motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
             @php($rows = $this->planVsActual)
             @php($overCount = $this->completed->where('over_plan', true)->count())
@@ -586,40 +479,39 @@ new #[Title('Production Dashboard')] class extends Component {
                 @endif
             </div>
 
-            @php($trend = $this->rejectTrend)
-            <div wire:key="reject-{{ $key }}" class="{{ $card }} min-w-0" x-data="{ table: false }">
-                <div class="flex items-start justify-between gap-3">
-                    <div>
-                        <h2 class="{{ $cardTitle }}">{{ __('Reject rate, last 6 months') }}</h2>
-                        <p class="{{ $cardSub }}">{{ __('All products; click a product to compare.') }}</p>
-                    </div>
-                    <button type="button" class="{{ $tableToggle }}" x-on:click="table = ! table" x-text="table ? @js(__('Show chart')) : @js(__('Show table'))"></button>
-                </div>
-                <div wire:ignore x-data="lineTrend(@js([...$trend, 'isolatable' => true, 'format' => 'percent', 'axisFormat' => 'percentAxis', 'overallLabel' => __('All products'), 'ariaLabel' => __('Reject rate, last 6 months')]))">
-                    <div x-show="! table" class="mt-3 flex flex-wrap gap-x-4 gap-y-1.5">
-                        <span class="inline-flex items-center gap-1.5 text-xs text-zinc-700 dark:text-zinc-300"><span class="h-0.5 w-3.5 rounded-full" style="background: var(--viz-ink-secondary)"></span>{{ __('All products') }}</span>
-                        <template x-for="s in config.series" :key="s.id">
-                            <button type="button" x-on:click="toggle(s.id)" :aria-pressed="isolated === s.id" class="inline-flex items-center gap-1.5 text-xs cursor-pointer transition-opacity" :class="isolated === s.id ? '' : 'opacity-50'">
-                                <span class="h-0.5 w-3.5 rounded-full" :style="`background: var(--series-${s.slot})`"></span>
-                                <span class="text-zinc-700 dark:text-zinc-300" x-text="s.name"></span>
-                            </button>
-                        </template>
-                    </div>
-                    <div x-show="! table" x-ref="frame" class="relative mt-2 w-full">
-                        <svg x-ref="svg" class="block" height="220" role="group" aria-label="{{ __('Reject rate, last 6 months') }}"></svg>
-                        <x-chart-tooltip />
-                    </div>
-                </div>
-                <div x-show="table" x-cloak class="mt-3 overflow-x-auto">
-                    <table class="w-full text-xs">
-                        <thead><tr class="border-b border-zinc-200 dark:border-white/10"><th class="{{ $th }}">{{ __('Product') }}</th>@foreach ($trend['labels'] as $label)<th class="{{ $th }} text-right">{{ $label }}</th>@endforeach</tr></thead>
-                        <tbody>
-                            <tr class="border-b border-zinc-100 dark:border-white/5"><td class="{{ $td }} font-medium">{{ __('All products') }}</td>@foreach ($trend['overall'] as $v)<td class="{{ $tdNum }}">{{ $this->formatPercent($v) }}</td>@endforeach</tr>
-                            @foreach ($trend['series'] as $s)
-                                <tr class="border-b border-zinc-100 dark:border-white/5"><td class="{{ $td }}">{{ $s['name'] }}</td>@foreach ($s['values'] as $v)<td class="{{ $tdNum }}">{{ $this->formatPercent($v) }}</td>@endforeach</tr>
-                            @endforeach
-                        </tbody>
-                    </table>
+            @php($opportunities = $this->draftSalesOpportunities)
+            <div wire:key="draft-so-{{ $key }}" class="{{ $card }} min-w-0">
+                <h2 class="{{ $cardTitle }}">{{ __('Draft orders ready to fulfil') }}</h2>
+                <p class="{{ $cardSub }}">{{ __('Draft sales orders where current material stock covers more than what was ordered.') }}</p>
+                <div class="mt-4 space-y-4">
+                    @forelse ($opportunities as $opportunity)
+                        @php($order = $opportunity['sales_order'])
+                        <div class="border-b border-zinc-100 dark:border-white/5 pb-3 last:border-0 last:pb-0">
+                            <div class="flex items-baseline justify-between gap-3 text-xs">
+                                @can('sales.manage')
+                                    <a href="{{ route('sales.orders.show', $order) }}" wire:navigate class="font-medium text-zinc-800 dark:text-zinc-200 hover:underline">{{ $order->so_number }} · {{ $order->customer->customer_name }}</a>
+                                @else
+                                    <span class="font-medium text-zinc-800 dark:text-zinc-200">{{ $order->so_number }} · {{ $order->customer->customer_name }}</span>
+                                @endcan
+                                <span class="text-zinc-500 dark:text-zinc-400">{{ $order->order_date->translatedFormat('d M Y') }}</span>
+                            </div>
+                            <div class="mt-2 space-y-1.5">
+                                @foreach ($opportunity['items'] as $item)
+                                    <div>
+                                        <div class="flex items-baseline justify-between gap-3 text-xs">
+                                            <span class="text-zinc-700 dark:text-zinc-300">{{ $item['product_name'] }}</span>
+                                            <span class="text-zinc-500 dark:text-zinc-400">{{ __('ordered :ordered · up to :extra more available', ['ordered' => $this->formatQuantity($item['ordered']), 'extra' => $this->formatQuantity($item['extra_available'])]) }}</span>
+                                        </div>
+                                        @can('create', \App\Models\WorkOrder::class)
+                                            <a href="{{ route('production.work-orders.create', ['product' => $item['product_id'], 'quantity' => \App\Support\Decimal::plain($item['ordered'])]) }}" wire:navigate class="text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create work order') }}</a>
+                                        @endcan
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @empty
+                        <p class="py-4 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No draft orders with spare material capacity right now.') }}</p>
+                    @endforelse
                 </div>
             </div>
         </div>

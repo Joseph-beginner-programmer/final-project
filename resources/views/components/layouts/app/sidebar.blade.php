@@ -23,10 +23,12 @@
                 @continue($role === UserRole::SystemAdmin)
                 @can('view-dashboard', $role)
                     <flux:sidebar.group :heading="$role->label()" expandable class="grid">
-                        <flux:sidebar.item icon="home" :href="route($role->dashboardRoute())"
-                            :current="request()->routeIs($role->dashboardRoute())" wire:navigate>
-                            {{ __('Dashboard') }}
-                        </flux:sidebar.item>
+                        @unless ($role === UserRole::Warehouse)
+                            <flux:sidebar.item icon="home" :href="route($role->dashboardRoute())"
+                                :current="request()->routeIs($role->dashboardRoute())" wire:navigate>
+                                {{ __('Dashboard') }}
+                            </flux:sidebar.item>
+                        @endunless
 
                         @if ($role === UserRole::Purchasing)
                             <flux:sidebar.item icon="queue-list" :href="route('purchasing.orders.list')"
@@ -173,14 +175,6 @@
                             <flux:sidebar.item icon="truck" :href="route('warehouse.outbound.sales-deliveries.list')"
                                 :current="request()->routeIs('warehouse.outbound.sales-deliveries.*')" wire:navigate>
                                 {{ __('Sales Delivery') }}
-                            </flux:sidebar.item>
-                            <flux:sidebar.item icon="arrow-uturn-left" :href="route('purchasing.returns.list')"
-                                :current="request()->routeIs('purchasing.returns.*')" wire:navigate>
-                                {{ __('Purchase Returns') }}
-                            </flux:sidebar.item>
-                            <flux:sidebar.item icon="arrow-uturn-right" :href="route('sales.returns.list')"
-                                :current="request()->routeIs('sales.returns.*')" wire:navigate>
-                                {{ __('Sales Returns') }}
                             </flux:sidebar.item>
                         @endif
                     </flux:sidebar.group>

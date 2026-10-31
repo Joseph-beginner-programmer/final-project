@@ -43,6 +43,8 @@ new #[Title('Chart of Accounts')] class extends Component {
 
     public bool $isContra = false;
 
+    public bool $isCash = false;
+
     public function mount(): void
     {
         Gate::authorize('viewAny', Account::class);
@@ -150,13 +152,14 @@ new #[Title('Chart of Accounts')] class extends Component {
         $this->systemRole = $account->system_role?->value;
         $this->isActive = $account->is_active;
         $this->isContra = $account->is_contra;
+        $this->isCash = $account->is_cash;
         $this->modal('account-form')->show();
     }
 
     protected function resetForm(): void
     {
         $this->resetValidation();
-        $this->reset('editingId', 'accountCode', 'accountName', 'accountType', 'systemRole', 'isActive', 'isContra');
+        $this->reset('editingId', 'accountCode', 'accountName', 'accountType', 'systemRole', 'isActive', 'isContra', 'isCash');
     }
 
     protected function rules(): array
@@ -194,6 +197,7 @@ new #[Title('Chart of Accounts')] class extends Component {
             'system_role' => $this->systemRole ? AccountSystemRole::from($this->systemRole) : null,
             'is_active' => $this->isActive,
             'is_contra' => $this->isContra,
+            'is_cash' => $this->accountType === AccountType::Asset->value && $this->isCash,
         ];
 
         app(SaveAccountAction::class)->handle($fields, $account);
@@ -290,6 +294,9 @@ new #[Title('Chart of Accounts')] class extends Component {
                                 @if ($account->system_role)
                                     <span class="ml-1.5 inline-flex items-center rounded-full bg-accent/10 px-1.5 py-0.5 font-data text-[10px] text-accent">{{ $account->system_role->label() }}</span>
                                 @endif
+                                @if ($account->is_cash)
+                                    <span class="ml-1.5 inline-flex items-center rounded-full border border-green-200 dark:border-green-500/20 bg-green-50 dark:bg-green-500/10 px-1.5 py-0.5 font-data text-[10px] text-green-700 dark:text-green-400">{{ __('Cash') }}</span>
+                                @endif
                             </td>
                             <td class="py-2 px-3"><span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap {{ $account->type->badgeClasses() }}">{{ $account->type->label() }}</span></td>
                             <td class="py-2 px-3 text-zinc-600 dark:text-zinc-300 whitespace-nowrap">
@@ -351,6 +358,10 @@ new #[Title('Chart of Accounts')] class extends Component {
 
             @php($previewType = \App\Enums\AccountType::tryFrom($accountType))
             <flux:checkbox wire:model.live="isContra" :label="__('Contra account')" :description="__('A \'minus\' account inside its category, e.g. Akumulasi Penyusutan under Harta or BOP Dibebankan under Beban. Its normal balance is the opposite side of the category.')" />
+
+            @if ($previewType === \App\Enums\AccountType::Asset)
+                <flux:checkbox wire:model="isCash" :label="__('Cash account')" :description="__('Kas or Bank — an account money actually moves through. Used to pick valid \'pay from\' accounts and to build the Cash Flow Statement.')" />
+            @endif
 
             @if ($previewType)
                 <div class="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2.5 text-xs dark:border-white/10 dark:bg-white/5">

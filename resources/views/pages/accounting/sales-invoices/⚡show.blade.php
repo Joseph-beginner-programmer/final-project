@@ -228,10 +228,15 @@ new #[Title('Sales Invoice')] class extends Component {
             ->whereNull('reversal_of_id')->where('status', 'posted')->first());
     }
 
-    public function cancelPayment(int $paymentId): void
+    public function cancelPayment(): void
     {
         Gate::authorize('sales.invoice');
-        $payment = SalesPayment::where('sales_invoice_id', $this->salesInvoice->id)->findOrFail($paymentId);
+
+        if (! $this->pendingPaymentId) {
+            return;
+        }
+
+        $payment = SalesPayment::where('sales_invoice_id', $this->salesInvoice->id)->findOrFail($this->pendingPaymentId);
 
         try {
             app(CancelSalesPaymentAction::class)->handle($payment, Auth::id());
@@ -524,7 +529,7 @@ new #[Title('Sales Invoice')] class extends Component {
                 <x-journal-confirm :plan="$this->pendingPaymentPlan()" />
                 <div class="flex justify-end gap-2">
                     <flux:modal.close><flux:button variant="filled">{{ __('Back') }}</flux:button></flux:modal.close>
-                    <flux:button variant="danger" wire:click="cancelPayment($pendingPaymentId)" wire:loading.attr="disabled" wire:target="cancelPayment">{{ __('Cancel payment') }}</flux:button>
+                    <flux:button variant="danger" wire:click="cancelPayment" wire:loading.attr="disabled" wire:target="cancelPayment">{{ __('Cancel payment') }}</flux:button>
                 </div>
             </div>
         </flux:modal>

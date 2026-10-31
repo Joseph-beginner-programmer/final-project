@@ -76,7 +76,7 @@ new #[Title('Purchase Return')] class extends Component {
 
     public function post(): void
     {
-        Gate::authorize('warehouse.return');
+        Gate::authorize('returns.post');
 
         try {
             app(PostPurchaseReturnAction::class)->handle($this->purchaseReturn, Auth::id(), filled($this->refundAccountId) ? (int) $this->refundAccountId : null);
@@ -149,7 +149,7 @@ new #[Title('Purchase Return')] class extends Component {
                 @can('purchasing.return')
                     <flux:button size="sm" variant="filled" icon="pencil-square" :href="route('purchasing.returns.edit', $ret)" wire:navigate class="active:scale-[0.95]">{{ __('Edit') }}</flux:button>
                 @endcan
-                @can('warehouse.return')
+                @can('returns.post')
                     <flux:modal.trigger name="post-return"><flux:button size="sm" variant="primary" icon="check" class="active:scale-[0.95]">{{ __('Post return') }}</flux:button></flux:modal.trigger>
                 @endcan
                 @can('purchasing.return')
@@ -199,7 +199,11 @@ new #[Title('Purchase Return')] class extends Component {
                 <h2 class="text-sm font-semibold text-zinc-900 dark:text-white">{{ __('Invoice') }}</h2>
                 @if ($invoiced)
                     <p class="mt-2 text-xs text-zinc-600 dark:text-zinc-300">
-                        <a href="{{ route('accounting.purchase-invoices.show', $invoice) }}" wire:navigate class="font-data text-accent hover:underline underline-offset-2">{{ $invoice->internal_number }}</a>
+                        @can('purchasing.invoice')
+                            <a href="{{ route('accounting.purchase-invoices.show', $invoice) }}" wire:navigate class="font-data text-accent hover:underline underline-offset-2">{{ $invoice->internal_number }}</a>
+                        @else
+                            <span class="font-data">{{ $invoice->internal_number }}</span>
+                        @endcan
                         · {{ $invoice->status->label() }} · {{ __('balance :amount', ['amount' => $this->rupiah($invoice->balance())]) }}
                     </p>
                     @if ($isPosted)
@@ -238,7 +242,7 @@ new #[Title('Purchase Return')] class extends Component {
     </div>
 
     @if ($isDraft)
-        @can('warehouse.return')
+        @can('returns.post')
             <flux:modal name="post-return" class="max-w-xl">
                 @php($preview = JournalPreview::resolve($plan['lines'], null, __('Choose a cash or bank account')))
                 @php($unmapped = collect($preview)->where('unmapped', true))

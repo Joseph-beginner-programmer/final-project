@@ -119,7 +119,6 @@ new #[Title('Material Issue')] class extends Component {
 
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
-        <flux:breadcrumbs.item :href="route('warehouse.dashboard')" wire:navigate>{{ __('Warehouse') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item>{{ __('Material Issue') }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>
 

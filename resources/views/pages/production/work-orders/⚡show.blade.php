@@ -106,6 +106,12 @@ new #[Title('Work Order Detail')] class extends Component {
             $shortage = bcsub($stillNeeded, $stock, 2);
             $incoming = collect($this->incoming[$material->product_id] ?? [])
                 ->reduce(fn (string $carry, array $row) => bcadd($carry, $row['quantity'], 2), '0');
+            $status = match (true) {
+                ! $checkShortage => null,
+                bccomp($shortage, '0', 2) <= 0 => 'enough',
+                bccomp(bcadd($stock, $incoming, 2), $stillNeeded, 2) >= 0 => 'incoming',
+                default => 'short',
+            };
 
             return [
                 'product' => $material->product,
@@ -114,12 +120,8 @@ new #[Title('Work Order Detail')] class extends Component {
                 'stock' => $stock,
                 'shortage' => $checkShortage && bccomp($shortage, '0', 2) > 0 ? $shortage : null,
                 'incoming' => $incoming,
-                'status' => match (true) {
-                    ! $checkShortage => null,
-                    bccomp($shortage, '0', 2) <= 0 => 'enough',
-                    bccomp(bcadd($stock, $incoming, 2), $stillNeeded, 2) >= 0 => 'incoming',
-                    default => 'short',
-                },
+                'status' => $status,
+                'to_order' => $status === 'short' ? bcsub($shortage, $incoming, 2) : '0',
             ];
         });
     }
@@ -605,6 +607,11 @@ new #[Title('Work Order Detail')] class extends Component {
                             </td>
                             <td class="py-2 px-3 whitespace-nowrap">
                                 <x-material-status :status="$row['status']" :shortage="$row['shortage']" :unit="$unitOfMeasure" />
+                                @if ($row['status'] === 'short' && $row['product']->type !== \App\Enums\ProductType::RawMaterial)
+                                    @can('create', \App\Models\WorkOrder::class)
+                                        <a href="{{ route('production.work-orders.create', ['product' => $row['product']->id, 'quantity' => \App\Support\Decimal::plain($row['to_order']), 'for' => $workOrder->wo_number]) }}" wire:navigate class="ms-1.5 text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create work order') }}</a>
+                                    @endcan
+                                @endif
                             </td>
                         </tr>
                     @endforeach
@@ -628,7 +635,14 @@ new #[Title('Work Order Detail')] class extends Component {
                         </div>
                     </div>
                     <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
-                        <x-material-status :status="$row['status']" :shortage="$row['shortage']" :unit="$unitOfMeasure" />
+                        <div class="flex items-center gap-1.5">
+                            <x-material-status :status="$row['status']" :shortage="$row['shortage']" :unit="$unitOfMeasure" />
+                            @if ($row['status'] === 'short' && $row['product']->type !== \App\Enums\ProductType::RawMaterial)
+                                @can('create', \App\Models\WorkOrder::class)
+                                    <a href="{{ route('production.work-orders.create', ['product' => $row['product']->id, 'quantity' => \App\Support\Decimal::plain($row['to_order']), 'for' => $workOrder->wo_number]) }}" wire:navigate class="text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create work order') }}</a>
+                                @endcan
+                            @endif
+                        </div>
                         <div class="flex items-center gap-3 font-data tabular-nums">
                             <span class="{{ $row['shortage'] ? 'text-red-600 dark:text-red-400' : 'text-zinc-600 dark:text-zinc-400' }}">{{ __('In Stock') }} {{ $this->formatQuantity($row['stock']) }}</span>
                             @if (bccomp($row['incoming'], '0', 2) > 0)

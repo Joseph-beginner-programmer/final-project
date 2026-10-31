@@ -229,7 +229,6 @@ new #[Title('Material Issue')] class extends Component {
 @php($wo = $this->workOrder)
 <section class="w-full max-w-6xl mx-auto">
     <flux:breadcrumbs>
-        <flux:breadcrumbs.item :href="route('warehouse.dashboard')" wire:navigate>{{ __('Warehouse') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item :href="route('warehouse.outbound.material-issues.list')" wire:navigate>{{ __('Material Issue') }}</flux:breadcrumbs.item>
         <flux:breadcrumbs.item>{{ $materialIssueId ? __('Edit') : __('Create') }}</flux:breadcrumbs.item>
     </flux:breadcrumbs>

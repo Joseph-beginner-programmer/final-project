@@ -4,7 +4,6 @@ namespace App\Actions\Purchasing;
 
 use App\Actions\Accounting\PostJournalEntryAction;
 use App\Enums\AccountSystemRole;
-use App\Enums\AccountType;
 use App\Enums\DocumentStatus;
 use App\Enums\JournalEntryType;
 use App\Enums\PaymentMethod;
@@ -34,8 +33,7 @@ class RecordPurchasePaymentAction
         }
 
         $cashAccount = Account::find($cashAccountId);
-        $reserved = [AccountSystemRole::InventoryRaw, AccountSystemRole::InventoryWip, AccountSystemRole::InventoryFinished, AccountSystemRole::VatIn];
-        if (! $cashAccount || ! $cashAccount->is_active || $cashAccount->type !== AccountType::Asset || in_array($cashAccount->system_role, $reserved, true)) {
+        if (! $cashAccount || ! $cashAccount->is_active || ! $cashAccount->is_cash) {
             throw new InvalidPurchasePaymentException(InvalidPurchasePaymentException::NOT_CASH_ACCOUNT);
         }
 

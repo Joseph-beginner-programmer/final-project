@@ -18,7 +18,7 @@ new #[Title('Purchase Request')] class extends Component {
     public function mount(PurchaseRequisition $purchaseRequisition): void
     {
         Gate::authorize('requisitions.view');
-        $this->requisition = $purchaseRequisition->load(['items.product', 'createdBy', 'processedBy', 'purchaseOrder']);
+        $this->requisition = $purchaseRequisition->load(['items.product.suppliers', 'items.purchaseOrder', 'createdBy', 'processedBy', 'purchaseOrder']);
     }
 
     public function cancel(): void
@@ -85,7 +85,7 @@ new #[Title('Purchase Request')] class extends Component {
         @if ($open)
             <div class="flex flex-wrap items-center gap-2">
                 @can('requisitions.process')
-                    <flux:button variant="primary" icon="shopping-cart" :href="route('purchasing.orders.create', ['requisitions' => $r->id])" wire:navigate class="active:scale-[0.95]">{{ __('Create PO') }}</flux:button>
+                    <flux:button variant="primary" icon="shopping-cart" :href="route('purchasing.orders.create', array_filter(['requisitions' => $r->id, 'supplier' => $r->singleCommonSupplierId()]))" wire:navigate class="active:scale-[0.95]">{{ __('Create PO') }}</flux:button>
                     <flux:modal.trigger name="reject-request"><flux:button variant="filled" icon="x-mark" class="active:scale-[0.95]">{{ __('Decline') }}</flux:button></flux:modal.trigger>
                 @endcan
                 @can('requisitions.create')
@@ -125,6 +125,7 @@ new #[Title('Purchase Request')] class extends Component {
                     <th class="py-2 px-3">{{ __('Material') }}</th>
                     <th class="py-2 px-3 text-right">{{ __('Requested') }}</th>
                     <th class="py-2 px-3 text-right">{{ __('In stock now') }}</th>
+                    <th class="py-2 px-3 text-right">{{ __('Order status') }}</th>
                 </tr>
             </thead>
             <tbody>
@@ -133,6 +134,13 @@ new #[Title('Purchase Request')] class extends Component {
                         <td class="py-2.5 px-3"><span class="text-zinc-900 dark:text-white">{{ $item->product->product_name }}</span> <span class="font-data text-[11px] text-zinc-500">{{ $item->product->product_code }}</span></td>
                         <td class="py-2.5 px-3 text-right font-data tabular-nums font-semibold text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->quantity((string) $item->quantity) }} {{ $item->product->unit_of_measure }}</td>
                         <td class="py-2.5 px-3 text-right font-data tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{{ $this->quantity((string) $item->product->current_stock) }} {{ $item->product->unit_of_measure }}</td>
+                        <td class="py-2.5 px-3 text-right whitespace-nowrap">
+                            @if ($item->isFulfilled())
+                                <a href="{{ route('purchasing.orders.show', $item->purchaseOrder) }}" wire:navigate class="font-data text-accent hover:underline underline-offset-2">{{ $item->purchaseOrder->po_number }}</a>
+                            @else
+                                <span class="text-zinc-400 dark:text-zinc-500">{{ __('Not yet ordered') }}</span>
+                            @endif
+                        </td>
                     </tr>
                 @endforeach
             </tbody>

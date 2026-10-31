@@ -74,7 +74,7 @@ new #[Title('Sales Return')] class extends Component {
 
     public function post(): void
     {
-        Gate::authorize('warehouse.return');
+        Gate::authorize('returns.post');
 
         try {
             app(PostSalesReturnAction::class)->handle($this->salesReturn, Auth::id(), filled($this->refundAccountId) ? (int) $this->refundAccountId : null);
@@ -146,7 +146,7 @@ new #[Title('Sales Return')] class extends Component {
                 @can('sales.return')
                     <flux:button size="sm" variant="filled" icon="pencil-square" :href="route('sales.returns.edit', $ret)" wire:navigate class="active:scale-[0.95]">{{ __('Edit') }}</flux:button>
                 @endcan
-                @can('warehouse.return')
+                @can('returns.post')
                     <flux:modal.trigger name="post-return"><flux:button size="sm" variant="primary" icon="check" class="active:scale-[0.95]">{{ __('Post return') }}</flux:button></flux:modal.trigger>
                 @endcan
                 @can('sales.return')
@@ -241,7 +241,7 @@ new #[Title('Sales Return')] class extends Component {
     </div>
 
     @if ($isDraft)
-        @can('warehouse.return')
+        @can('returns.post')
             <flux:modal name="post-return" class="max-w-xl">
                 @php($preview = JournalPreview::resolve($plan['lines'], null, __('Choose a cash or bank account')))
                 @php($unmapped = collect($preview)->where('unmapped', true))
