@@ -2,11 +2,9 @@
 
 namespace App\Support;
 
-use App\Enums\DocumentStatus;
 use App\Enums\PurchaseOrderStatus;
 use App\Enums\PurchaseRequisitionStatus;
 use App\Enums\WorkOrderStatus;
-use App\Models\MaterialIssueItem;
 use App\Models\Product;
 use App\Models\PurchaseOrderItem;
 use App\Models\PurchaseRequisitionItem;
@@ -20,26 +18,15 @@ class MaterialShortage
      */
     public static function suggestions(): Collection
     {
-        $openWorkOrders = [WorkOrderStatus::Draft->value, WorkOrderStatus::Released->value, WorkOrderStatus::InProgress->value];
-
         $planned = WorkOrderMaterial::query()
-            ->whereHas('workOrder', fn ($q) => $q->whereIn('status', $openWorkOrders))
+            ->whereHas('workOrder', fn ($q) => $q->where('status', WorkOrderStatus::Draft->value))
             ->with('workOrder:id,wo_number')
             ->get();
-
-        $issued = MaterialIssueItem::query()
-            ->join('material_issues', 'material_issues.id', '=', 'material_issue_items.material_issue_id')
-            ->where('material_issues.status', DocumentStatus::Posted->value)
-            ->whereIn('material_issues.work_order_id', $planned->pluck('work_order_id')->unique())
-            ->groupBy('material_issues.work_order_id', 'material_issue_items.product_id')
-            ->selectRaw('material_issues.work_order_id as wo, material_issue_items.product_id as product, SUM(material_issue_items.quantity) as qty')
-            ->get()
-            ->mapWithKeys(fn ($row) => [$row->wo.'-'.$row->product => (string) $row->qty]);
 
         $needed = [];
         $workOrders = [];
         foreach ($planned as $line) {
-            $remaining = self::positive(bcsub((string) $line->quantity_planned, $issued[$line->work_order_id.'-'.$line->product_id] ?? '0', 2));
+            $remaining = (string) $line->quantity_planned;
             if (bccomp($remaining, '0', 2) > 0) {
                 $needed[$line->product_id] = bcadd($needed[$line->product_id] ?? '0', $remaining, 2);
                 $workOrders[$line->product_id][] = $line->workOrder->wo_number;

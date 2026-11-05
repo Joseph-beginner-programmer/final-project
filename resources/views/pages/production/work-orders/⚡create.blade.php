@@ -831,7 +831,7 @@ new #[Title('Create Work Order')] class extends Component {
                             @if ($this->shortMaterialCount > 0)
                                 <p wire:key="short-notice" wire:transition class="mt-3 flex items-start gap-1.5 text-xs text-red-600 dark:text-red-400">
                                     <flux:icon.exclamation-triangle variant="micro" class="size-3.5 mt-px shrink-0" />
-                                    {{ trans_choice(':count material is short for this target. You can still save the work order; stock is only consumed when materials are issued.|:count materials are short for this target. You can still save the work order; stock is only consumed when materials are issued.', $this->shortMaterialCount) }}
+                                    {{ trans_choice(':count material is short for this target. You can still save the work order; stock is checked again when it is released.|:count materials are short for this target. You can still save the work order; stock is checked again when it is released.', $this->shortMaterialCount) }}
                                 </p>
                             @endif
                         </div>
@@ -869,14 +869,14 @@ new #[Title('Create Work Order')] class extends Component {
 
                         <div class="px-4 py-4 bg-accent">
                             <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Target Output') }}</p>
-                            <p wire:key="target-{{ $quantityTarget }}" wire:transition.duration.300ms class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">
-                                {{ $this->hasValidTarget() ? $quantityTarget : '0' }} {{ $this->selectedFormula?->product->unit_of_measure }}
+                            <p wire:key="target-{{ $quantityTarget }}" wire:transition.duration.300ms class="font-display text-2xl font-semibold tabular-nums text-accent-foreground mt-0.5">
+                                {{ $this->hasValidTarget() ? $quantityTarget : '0' }} <span class="text-sm font-medium">{{ $this->selectedFormula?->product->unit_of_measure }}</span>
                             </p>
                         </div>
                     </div>
 
                     <p class="text-xs text-zinc-500 dark:text-zinc-400 px-1 mt-3">
-                        {{ __('The formula is a starting template. Actual materials and quantities are recorded when materials are issued to this work order.') }}
+                        {{ __('The formula is a starting template. These quantities are drawn from stock the moment this work order is released.') }}
                     </p>
                 </div>
             </div>

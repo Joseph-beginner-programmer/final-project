@@ -9,10 +9,11 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
-    --font-sans: 'Open Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
-    /* Display face — page titles and section headers only, used sparingly */
-    --font-display: 'Roboto', 'Open Sans', sans-serif;
+    /* Display face — page titles, section headers, and lead figures (big
+       numbers meant to be scanned, not read) — used sparingly elsewhere */
+    --font-display: 'Space Grotesk', 'Inter', sans-serif;
 
     /* Data face — money, quantities, PO/product codes, IDs, timestamps.
        Pair with `tabular-nums` on numeric columns. */
@@ -33,9 +34,12 @@
     /* MIMS design system (see design-system/mims/MASTER.md) — recolors
        Flux's own accent variable, which drives primary buttons, checked
        checkboxes/radios, and focus rings across every Flux component in
-       the app, not just one page. */
-    --color-accent: #C2540C;
-    --color-accent-content: #C2540C;
+       the app, not just one page. "Steel Blue" — chosen over the prior
+       orange because it sits ~160° from the amber warning color on the
+       hue wheel (orange sat only ~14° away) and still clears AA with
+       headroom: 7.6:1 here vs. the prior 4.6:1. */
+    --color-accent: #0C5A7A;
+    --color-accent-content: #0C5A7A;
     --color-accent-foreground: #ffffff;
 
 }
@@ -56,11 +60,11 @@
 @layer theme {
     .dark {
         /* Lightened for contrast against dark backgrounds, not inverted —
-           stays recognizably "the same orange" either way. Foreground
-           flips to near-black: white text on this lighter orange fails
-           4.5:1, black passes ~7:1. */
-        --color-accent: #DB7C3D;
-        --color-accent-content: #DB7C3D;
+           stays recognizably "the same blue" either way. Foreground
+           flips to near-black: white text on this lighter blue fails
+           4.5:1, black passes ~7.5:1. */
+        --color-accent: #5EB3D6;
+        --color-accent-content: #5EB3D6;
         --color-accent-foreground: #18181B;
 
         --color-primary: #94A3B8;

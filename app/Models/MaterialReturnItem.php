@@ -30,9 +30,9 @@ class MaterialReturnItem extends Model
         return $this->belongsTo(MaterialReturn::class);
     }
 
-    public function materialIssueItem(): BelongsTo
+    public function workOrderMaterial(): BelongsTo
     {
-        return $this->belongsTo(MaterialIssueItem::class);
+        return $this->belongsTo(WorkOrderMaterial::class);
     }
 
     public function product(): BelongsTo

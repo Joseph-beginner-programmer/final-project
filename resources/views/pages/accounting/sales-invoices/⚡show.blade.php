@@ -5,7 +5,6 @@ use App\Actions\Sales\CancelSalesPaymentAction;
 use App\Actions\Sales\PostSalesInvoiceAction;
 use App\Actions\Sales\RecordSalesPaymentAction;
 use App\Actions\Sales\SaveSalesInvoiceDraftAction;
-use App\Enums\AccountType;
 use App\Enums\DocumentStatus;
 use App\Enums\PaymentMethod;
 use App\Enums\SalesInvoiceStatus;
@@ -108,11 +107,8 @@ new #[Title('Sales Invoice')] class extends Component {
     #[Computed]
     public function cashAccounts(): array
     {
-        $reserved = array_map(fn ($role) => $role->value, RecordSalesPaymentAction::reservedRoles());
-
         return Account::active()
-            ->where('type', AccountType::Asset->value)
-            ->where(fn ($q) => $q->whereNull('system_role')->orWhereNotIn('system_role', $reserved))
+            ->where('is_cash', true)
             ->orderBy('account_code')
             ->get()
             ->map(fn (Account $a) => ['id' => (string) $a->id, 'title' => $a->account_name, 'subtitle' => $a->account_code, 'meta' => null, 'disabled_reason' => null])
@@ -309,16 +305,16 @@ new #[Title('Sales Invoice')] class extends Component {
         @endif
     </div>
 
-    <div class="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="mt-6 grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 divide-x divide-y lg:divide-y-0 divide-zinc-100 dark:divide-white/5">
         @foreach ([
             [__('Total receivable'), $this->rupiah($inv->total_amount), __('incl. VAT :rate%', ['rate' => $rate])],
             [__('Amount received'), $this->rupiah($inv->amount_paid), __(':count payments', ['count' => $this->payments->where('status', DocumentStatus::Posted)->count()])],
             [__('Balance'), $status->isPosted() ? $this->rupiah($inv->balance()) : '—', $status->isPosted() ? __('due :date', ['date' => $inv->due_date->translatedFormat('d M Y')]) : __('not posted yet')],
             [__('Invoice date'), $inv->invoice_date->translatedFormat('d M Y'), __('Terms: :terms', ['terms' => $inv->salesOrder->payment_terms?->label() ?? '—'])],
         ] as [$tileLabel, $value, $note])
-            <div class="rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-4">
+            <div class="px-4 py-3.5">
                 <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ $tileLabel }}</p>
-                <p class="mt-2 text-lg font-semibold text-zinc-900 dark:text-white">{{ $value }}</p>
+                <p class="mt-1.5 font-display text-lg font-semibold text-zinc-900 dark:text-white">{{ $value }}</p>
                 <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ $note }}</p>
             </div>
         @endforeach

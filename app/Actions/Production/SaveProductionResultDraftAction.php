@@ -5,10 +5,8 @@ namespace App\Actions\Production;
 use App\DTO\Production\ProductionResultData;
 use App\Enums\DocumentStatus;
 use App\Exceptions\WorkOrderNotRecordableException;
-use App\Models\MaterialIssueItem;
 use App\Models\ProductionResult;
 use App\Models\WorkOrder;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -58,11 +56,19 @@ class SaveProductionResultDraftAction
             }
 
             $result->materials()->delete();
-            foreach (self::allocate($workOrder->postedIssueItems(), $data->materialsUsed) as [$item, $quantity]) {
+            foreach ($workOrder->materials as $material) {
+                $used = $data->materialsUsed[$material->product_id] ?? '0';
+                $returned = $data->materialsReturned[$material->product_id] ?? '0';
+
+                if (bccomp($used ?: '0', '0', 2) <= 0 && bccomp($returned ?: '0', '0', 2) <= 0) {
+                    continue;
+                }
+
                 $result->materials()->create([
-                    'material_issue_item_id' => $item->id,
-                    'product_id' => $item->product_id,
-                    'quantity' => $quantity,
+                    'work_order_material_id' => $material->id,
+                    'product_id' => $material->product_id,
+                    'quantity' => $used ?: '0',
+                    'quantity_returned' => $returned ?: '0',
                 ]);
             }
 
@@ -75,31 +81,5 @@ class SaveProductionResultDraftAction
 
             return $result->load(['materials', 'labors']);
         });
-    }
-
-    /**
-     * @param  Collection<int, MaterialIssueItem>  $issueLines  ordered oldest issue first
-     * @param  array<int, string>  $usedByProduct
-     * @return list<array{0: MaterialIssueItem, 1: string}>
-     */
-    public static function allocate(Collection $issueLines, array $usedByProduct): array
-    {
-        $allocation = [];
-
-        foreach ($usedByProduct as $productId => $used) {
-            $stillToCharge = $used ?: '0';
-
-            foreach ($issueLines->where('product_id', $productId) as $item) {
-                if (bccomp($stillToCharge, '0', 2) <= 0) {
-                    break;
-                }
-
-                $take = bccomp((string) $item->quantity, $stillToCharge, 2) <= 0 ? (string) $item->quantity : $stillToCharge;
-                $allocation[] = [$item, $take];
-                $stillToCharge = bcsub($stillToCharge, $take, 2);
-            }
-        }
-
-        return $allocation;
     }
 }

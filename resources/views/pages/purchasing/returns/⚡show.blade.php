@@ -2,8 +2,6 @@
 
 use App\Actions\Purchasing\CancelPurchaseReturnAction;
 use App\Actions\Purchasing\PostPurchaseReturnAction;
-use App\Actions\Sales\RecordSalesPaymentAction;
-use App\Enums\AccountType;
 use App\Enums\DocumentStatus;
 use App\Enums\PurchaseInvoiceStatus;
 use App\Exceptions\InsufficientStockException;
@@ -59,10 +57,7 @@ new #[Title('Purchase Return')] class extends Component {
     #[Computed]
     public function cashAccounts(): array
     {
-        $reserved = array_map(fn ($role) => $role->value, RecordSalesPaymentAction::reservedRoles());
-
-        return Account::active()->where('type', AccountType::Asset->value)
-            ->where(fn ($q) => $q->whereNull('system_role')->orWhereNotIn('system_role', $reserved))
+        return Account::active()->where('is_cash', true)
             ->orderBy('account_code')->get()
             ->map(fn (Account $a) => ['id' => (string) $a->id, 'title' => $a->account_name, 'subtitle' => $a->account_code, 'meta' => null, 'disabled_reason' => null])
             ->all();

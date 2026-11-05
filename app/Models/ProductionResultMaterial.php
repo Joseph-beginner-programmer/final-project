@@ -18,6 +18,7 @@ class ProductionResultMaterial extends Model
     {
         return [
             'quantity' => 'decimal:2',
+            'quantity_returned' => 'decimal:2',
             'unit_cost' => 'decimal:2',
             'total_cost' => 'decimal:2',
         ];
@@ -28,9 +29,9 @@ class ProductionResultMaterial extends Model
         return $this->belongsTo(ProductionResult::class);
     }
 
-    public function materialIssueItem(): BelongsTo
+    public function workOrderMaterial(): BelongsTo
     {
-        return $this->belongsTo(MaterialIssueItem::class);
+        return $this->belongsTo(WorkOrderMaterial::class);
     }
 
     public function product(): BelongsTo

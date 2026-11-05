@@ -2,11 +2,9 @@
 
 namespace App\Support\Kpi;
 
-use App\Enums\DocumentStatus;
 use App\Enums\ProductType;
 use App\Enums\PurchaseRequisitionStatus;
 use App\Enums\WorkOrderStatus;
-use App\Models\MaterialIssueItem;
 use App\Models\Product;
 use App\Models\PurchaseOrderItem;
 use App\Models\PurchaseRequisitionItem;
@@ -30,7 +28,7 @@ class OngoingWorkOrders
      */
     public static function openStatuses(): array
     {
-        return [WorkOrderStatus::Draft->value, WorkOrderStatus::Released->value, WorkOrderStatus::InProgress->value];
+        return [WorkOrderStatus::Draft->value, WorkOrderStatus::InProgress->value];
     }
 
     /**
@@ -44,15 +42,6 @@ class OngoingWorkOrders
             ->orderBy('planned_start_date')
             ->orderBy('id')
             ->get();
-
-        $issued = MaterialIssueItem::query()
-            ->join('material_issues', 'material_issues.id', '=', 'material_issue_items.material_issue_id')
-            ->where('material_issues.status', DocumentStatus::Posted->value)
-            ->whereIn('material_issues.work_order_id', $orders->pluck('id'))
-            ->groupBy('material_issues.work_order_id', 'material_issue_items.product_id')
-            ->selectRaw('material_issues.work_order_id as wo, material_issue_items.product_id as product, SUM(material_issue_items.quantity) as qty')
-            ->get()
-            ->mapWithKeys(fn ($row) => [$row->wo.'-'.$row->product => (string) $row->qty]);
 
         $materialIds = $orders->flatMap(fn (WorkOrder $wo) => $wo->materials->pluck('product_id'))->unique()->values();
         $pool = Product::whereIn('id', $materialIds)->pluck('current_stock', 'id')->map(fn ($v) => bcadd((string) $v, '0', 2))->all();
@@ -69,10 +58,10 @@ class OngoingWorkOrders
             ->with('purchaseRequisition:id,requisition_number')
             ->get();
 
-        return $orders->map(function (WorkOrder $wo) use ($issued, &$pool, $producing, $onOrder, $requested, $today) {
-            $materials = $wo->materials->map(function ($material) use ($wo, $issued, &$pool, $producing, $onOrder, $requested) {
+        return $orders->map(function (WorkOrder $wo) use (&$pool, $producing, $onOrder, $requested, $today) {
+            $materials = $wo->materials->map(function ($material) use ($wo, &$pool, $producing, $onOrder, $requested) {
                 $planned = bcadd((string) $material->quantity_planned, '0', 2);
-                $done = $issued[$wo->id.'-'.$material->product_id] ?? '0';
+                $done = $wo->status === WorkOrderStatus::InProgress ? $planned : '0';
                 $remaining = self::positive(bcsub($planned, $done, 2));
                 $available = self::positive($pool[$material->product_id] ?? '0');
                 $covered = bccomp($available, $remaining, 2) >= 0 ? $remaining : $available;

@@ -99,6 +99,9 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/accounting/overhead', 'pages::accounting.overhead.index')
         ->name('accounting.overhead.index');
 
+    Route::livewire('/accounting/ppn', 'pages::accounting.ppn.index')
+        ->name('accounting.ppn.index');
+
     Route::livewire('/accounting/purchase-invoices', 'pages::accounting.purchase-invoices.list')
         ->name('accounting.purchase-invoices.list');
 
@@ -223,18 +226,6 @@ Route::middleware(['auth'])->group(function () {
         ->name('production.reports.inventory.export');
 
 
-    Route::livewire('/warehouse/outbound/material-issues', 'pages::warehouse.outbound.material-issues.list')
-        ->name('warehouse.outbound.material-issues.list');
-
-    Route::livewire('/warehouse/outbound/material-issues/create/{workOrder}', 'pages::warehouse.outbound.material-issues.form')
-        ->name('warehouse.outbound.material-issues.create');
-
-    Route::livewire('/warehouse/outbound/material-issues/{materialIssue}/edit', 'pages::warehouse.outbound.material-issues.form')
-        ->name('warehouse.outbound.material-issues.edit');
-
-    Route::livewire('/warehouse/outbound/material-issues/{materialIssue}', 'pages::warehouse.outbound.material-issues.show')
-        ->name('warehouse.outbound.material-issues.show');
-
     Route::livewire('/warehouse/inbound/material-returns', 'pages::warehouse.inbound.material-returns.list')
         ->name('warehouse.inbound.material-returns.list');
 
@@ -258,6 +249,12 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/warehouse/inbound/production-receipts/{productionReceipt}', 'pages::warehouse.inbound.production-receipts.show')
         ->name('warehouse.inbound.production-receipts.show');
+
+    Route::livewire('/warehouse/stock-counts', 'pages::warehouse.stock-counts.list')
+        ->name('warehouse.stock-counts.list');
+
+    Route::livewire('/warehouse/stock-counts/{stockCount}', 'pages::warehouse.stock-counts.show')
+        ->name('warehouse.stock-counts.show');
 
     Route::livewire('/sales/customers', 'pages::sales.customers.list')
         ->name('sales.customers.list');

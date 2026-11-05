@@ -1,8 +1,6 @@
 <?php
 
 use App\Actions\Accounting\PayWagesAction;
-use App\Actions\Sales\RecordSalesPaymentAction;
-use App\Enums\AccountType;
 use App\Exceptions\InvalidJournalEntryException;
 use App\Exceptions\InvalidWagePaymentException;
 use App\Models\Account;
@@ -77,11 +75,8 @@ new #[Title('Pay Wages')] class extends Component {
     #[Computed]
     public function cashAccounts(): array
     {
-        $reserved = array_map(fn ($role) => $role->value, RecordSalesPaymentAction::reservedRoles());
-
         return Account::active()
-            ->where('type', AccountType::Asset->value)
-            ->where(fn ($q) => $q->whereNull('system_role')->orWhereNotIn('system_role', $reserved))
+            ->where('is_cash', true)
             ->orderBy('account_code')
             ->get()
             ->map(fn (Account $a) => ['id' => (string) $a->id, 'title' => $a->account_name, 'subtitle' => $a->account_code, 'meta' => null, 'disabled_reason' => null])

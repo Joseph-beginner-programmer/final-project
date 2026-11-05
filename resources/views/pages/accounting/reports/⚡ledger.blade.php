@@ -143,16 +143,16 @@ new #[Title('General Ledger')] class extends Component {
                 <span>{{ __('Normal balance: :side. A figure in brackets is on the opposite side.', ['side' => $acc->normal_balance->label()]) }}</span>
             </div>
 
-            <div class="mt-4 grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="mt-4 grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 divide-x divide-y lg:divide-y-0 divide-zinc-100 dark:divide-white/5">
                 @foreach ([
                     [__('Opening balance'), $this->rupiah($s['opening'])],
                     [__('Debit movement'), $this->rupiah($s['debit'])],
                     [__('Credit movement'), $this->rupiah($s['credit'])],
                     [__('Closing balance'), $this->rupiah($s['closing'])],
                 ] as [$label, $value])
-                    <div class="rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-4">
+                    <div class="px-4 py-3.5">
                         <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ $label }}</p>
-                        <p class="mt-2 text-lg font-semibold text-zinc-900 dark:text-white">{{ $value }}</p>
+                        <p class="mt-1.5 font-display text-lg font-semibold text-zinc-900 dark:text-white">{{ $value }}</p>
                     </div>
                 @endforeach
             </div>

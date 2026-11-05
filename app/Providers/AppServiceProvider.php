@@ -6,12 +6,11 @@ use Laravel\Fortify\Contracts\LoginResponse as LoginResponseContract;
 use App\Http\Responses\LoginResponse;
 use Carbon\CarbonImmutable;
 use App\Enums\UserRole;
-use App\Models\MaterialIssue;
-use App\Models\MaterialIssueItem;
 use App\Models\MaterialReturn;
 use App\Models\MaterialReturnItem;
 use App\Models\ProductionReceipt;
 use App\Models\ProductionResult;
+use App\Models\WorkOrderMaterial;
 use App\Models\SalesDelivery;
 use App\Models\SalesDeliveryItem;
 use App\Models\PurchaseOrderReceipt;
@@ -65,6 +64,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('warehouse.return', function ($user) {
             return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
         });
+        Gate::define('warehouse.count', function ($user) {
+            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
+        });
         Gate::define('returns.post', function ($user) {
             return in_array($user->role, [UserRole::Purchasing, UserRole::Sales, UserRole::Manager], true);
         });
@@ -81,6 +83,9 @@ class AppServiceProvider extends ServiceProvider
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
         Gate::define('overhead.manage', function ($user) {
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+        });
+        Gate::define('ppn.manage', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
         });
         Gate::define('products.manage', function ($user) {
@@ -155,13 +160,13 @@ class AppServiceProvider extends ServiceProvider
 
         Relation::morphMap([
             'purchase_order_receipt' => PurchaseOrderReceipt::class,
-            'material_issue_item' => MaterialIssueItem::class,
             'material_return_item' => MaterialReturnItem::class,
             'production_receipt' => ProductionReceipt::class,
             'sales_delivery_item' => SalesDeliveryItem::class,
-            'material_issue' => MaterialIssue::class,
+            'work_order_material' => WorkOrderMaterial::class,
             'production_result' => ProductionResult::class,
             'material_return' => MaterialReturn::class,
+            'stock_count_item' => \App\Models\StockCountItem::class,
             'sales_delivery' => SalesDelivery::class,
             'purchase_invoice' => \App\Models\PurchaseInvoice::class,
             'purchase_payment' => \App\Models\PurchasePayment::class,

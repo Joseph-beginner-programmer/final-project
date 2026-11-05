@@ -42,7 +42,7 @@
             padding: 6px 16px; border-radius: 6px; border: 1px solid #52525b;
             background: #27272a; color: #fff;
         }
-        .toolbar button.primary { background: #C2540C; border-color: #C2540C; }
+        .toolbar button.primary { background: #0C5A7A; border-color: #0C5A7A; }
 
         /* header */
         .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; border-bottom: 2px solid #18181b; padding-bottom: 8px; }
@@ -144,14 +144,13 @@
             </div>
         </div>
 
-        <h2>{{ __('Materials') }} <small>— {{ __('fill in the issued and used columns by hand') }}</small></h2>
+        <h2>{{ __('Materials') }} <small>— {{ __('drawn from stock in full when released; fill in the used column by hand') }}</small></h2>
         <table>
             <thead>
                 <tr>
                     <th class="w-no">#</th>
                     <th>{{ __('Material') }}</th>
-                    <th class="right" style="width: 18%">{{ __('Planned') }}</th>
-                    <th class="right" style="width: 18%">{{ __('Issued') }}</th>
+                    <th class="right" style="width: 18%">{{ __('Drawn') }}</th>
                     <th class="right" style="width: 18%">{{ __('Used') }}</th>
                 </tr>
             </thead>
@@ -162,11 +161,10 @@
                         <td>{{ $material->product->product_name }} <span class="mono muted">{{ $material->product->product_code }}</span></td>
                         <td class="right mono">{{ $qty($material->quantity_planned) }} {{ $material->product->unit_of_measure }}</td>
                         <td class="fill"></td>
-                        <td class="fill"></td>
                     </tr>
                 @endforeach
                 @for ($i = 0; $i < 2; $i++)
-                    <tr class="blank"><td class="w-no"></td><td></td><td></td><td></td><td></td></tr>
+                    <tr class="blank"><td class="w-no"></td><td></td><td></td><td></td></tr>
                 @endfor
             </tbody>
         </table>

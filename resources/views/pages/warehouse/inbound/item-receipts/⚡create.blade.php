@@ -499,7 +499,7 @@ new #[Title('Create Item Receipt')] class extends Component
             </div>
             <div class="px-4 py-3.5 bg-accent mt-auto">
                 <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Total') }}</p>
-                <p class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">
+                <p class="font-display text-2xl font-semibold tabular-nums text-accent-foreground mt-0.5">
                     {{ $this->formatRupiah((string) $purchaseOrder->total_amount) }}
                 </p>
             </div>

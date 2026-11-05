@@ -127,19 +127,27 @@ new #[Title('Production Cost Report')] class extends Component {
     </div>
 
     <div wire:loading.class="opacity-50" wire:target="period,type,shiftPeriod" class="transition-opacity">
-        <div class="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
-            @foreach ([
-                [__('Total production cost'), $this->rupiah($t['total']), __(':count work orders', ['count' => $this->rows->count()])],
-                [__('Material'), $this->rupiah($t['material']), __(':share of total', ['share' => $this->percent(ProductionCostReport::share($t['material'], $t['total']))])],
-                [__('Labor'), $this->rupiah($t['labor']), __(':share of total', ['share' => $this->percent(ProductionCostReport::share($t['labor'], $t['total']))])],
-                [__('Overhead'), $this->rupiah($t['overhead']), __(':share of total', ['share' => $this->percent(ProductionCostReport::share($t['overhead'], $t['total']))])],
-            ] as [$label, $value, $note])
-                <div class="rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-4">
-                    <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ $label }}</p>
-                    <p class="mt-2 text-xl font-semibold text-zinc-900 dark:text-white">{{ $value }}</p>
-                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ $note }}</p>
+        <div class="mt-6 rounded-xl border border-zinc-200 dark:border-white/10 bg-gradient-to-br from-accent/[0.07] to-transparent dark:from-accent/10 p-5 sm:p-6">
+            <div class="flex flex-wrap items-start justify-between gap-6">
+                <div>
+                    <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ __('Total production cost') }}</p>
+                    <p class="mt-1.5 font-display text-4xl font-semibold tracking-tight text-zinc-900 dark:text-white">{{ $this->rupiah($t['total']) }}</p>
+                    <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ __(':count work orders', ['count' => $this->rows->count()]) }}</p>
                 </div>
-            @endforeach
+                <div class="flex gap-6 text-right">
+                    @foreach ([
+                        [__('Material'), $this->rupiah($t['material']), ProductionCostReport::share($t['material'], $t['total'])],
+                        [__('Labor'), $this->rupiah($t['labor']), ProductionCostReport::share($t['labor'], $t['total'])],
+                        [__('Overhead'), $this->rupiah($t['overhead']), ProductionCostReport::share($t['overhead'], $t['total'])],
+                    ] as [$label, $value, $share])
+                        <div>
+                            <p class="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ $label }}</p>
+                            <p class="mt-1 font-display text-lg font-semibold text-zinc-900 dark:text-white">{{ $value }}</p>
+                            <p class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ $this->percent($share) }}</p>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
         </div>
 
         <h2 class="mt-8 text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300">{{ __('Per work order') }}</h2>

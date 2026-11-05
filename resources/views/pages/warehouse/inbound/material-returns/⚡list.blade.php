@@ -53,17 +53,13 @@ new #[Title('Material Return')] class extends Component {
             ->when($term !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
                 ->where('result_number', 'like', "%{$term}%")
                 ->orWhereHas('workOrder', fn (Builder $q) => $q->where('wo_number', 'like', "%{$term}%"))))
-            ->with(['workOrder.product', 'materialReturns' => fn ($q) => $q->where('status', DocumentStatus::Draft->value)])
+            ->with(['workOrder.product', 'materials.product', 'materialReturns' => fn ($q) => $q->where('status', DocumentStatus::Draft->value)])
             ->orderBy('posted_at')
             ->get()
             ->map(function (ProductionResult $result) {
-                $perProduct = $result->workOrder->postedIssueItems()
-                    ->groupBy('product_id')
-                    ->map(fn ($lines) => [
-                        'product' => $lines->first()->product,
-                        'leftover' => $lines->reduce(fn (string $carry, $line) => bcadd($carry, bcsub((string) $line->quantity, (string) $line->quantity_consumed, 2), 2), '0'),
-                    ])
-                    ->filter(fn ($row) => bccomp($row['leftover'], '0', 2) > 0)
+                $perProduct = $result->materials
+                    ->filter(fn ($row) => bccomp((string) $row->quantity_returned, '0', 2) > 0)
+                    ->map(fn ($row) => ['product' => $row->product, 'leftover' => (string) $row->quantity_returned])
                     ->values();
 
                 $result->setAttribute('leftover_rows', $perProduct);

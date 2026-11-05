@@ -43,6 +43,8 @@ new #[Title('Production Result')] class extends Component {
 
     public array $used = [];
 
+    public array $returned = [];
+
     public array $hours = [];
 
     public array $extras = [];
@@ -72,7 +74,7 @@ new #[Title('Production Result')] class extends Component {
             return;
         }
 
-        $issued = $workOrder->issuedQuantities();
+        $planned = $workOrder->materials->pluck('quantity_planned', 'product_id')->map(fn ($v) => (string) $v)->all();
 
         if ($productionResult?->exists) {
             $this->productionDate = today()->toDateString();
@@ -83,8 +85,10 @@ new #[Title('Production Result')] class extends Component {
             $this->notes = (string) $productionResult->notes;
 
             $usedSoFar = $productionResult->usedQuantities();
-            foreach ($issued as $productId => $quantity) {
+            $returnedSoFar = $productionResult->returnedQuantities();
+            foreach ($planned as $productId => $quantity) {
                 $this->used[$productId] = ['quantity' => $this->formatQuantity($usedSoFar[$productId] ?? '0')];
+                $this->returned[$productId] = ['quantity' => $this->formatQuantity($returnedSoFar[$productId] ?? '0')];
             }
 
             $actual = $productionResult->labors->pluck('hours', 'employee_id');
@@ -99,8 +103,9 @@ new #[Title('Production Result')] class extends Component {
         } else {
             $this->productionDate = today()->toDateString();
 
-            foreach ($issued as $productId => $quantity) {
+            foreach ($planned as $productId => $quantity) {
                 $this->used[$productId] = ['quantity' => $this->formatQuantity($quantity)];
+                $this->returned[$productId] = ['quantity' => '0'];
             }
 
             foreach ($workOrder->labors as $labor) {
@@ -118,22 +123,19 @@ new #[Title('Production Result')] class extends Component {
     #[Computed]
     public function materialRows(): Collection
     {
-        $issued = $this->workOrder->issuedQuantities();
         $planned = $this->workOrder->materials->keyBy('product_id');
-        $productIds = $planned->keys()->merge(array_keys($issued))->unique();
-        $products = Product::whereIn('id', $productIds)->get()->keyBy('id');
+        $products = Product::whereIn('id', $planned->keys())->get()->keyBy('id');
 
-        return $productIds->map(function ($productId) use ($issued, $planned, $products) {
-            $issuedQty = $issued[$productId] ?? '0';
+        return $planned->keys()->map(function ($productId) use ($planned, $products) {
+            $plannedQty = (string) $planned[$productId]->quantity_planned;
             $usedQty = $this->used[$productId]['quantity'] ?? '0';
-            $leftover = is_numeric($usedQty) ? bcsub($issuedQty, (string) $usedQty, 2) : $issuedQty;
+            $returnedQty = $this->returned[$productId]['quantity'] ?? '0';
+            $accounted = bcadd(is_numeric($usedQty) ? (string) $usedQty : '0', is_numeric($returnedQty) ? (string) $returnedQty : '0', 2);
 
             return [
                 'product' => $products[$productId],
-                'planned' => $planned->has($productId) ? (string) $planned[$productId]->quantity_planned : null,
-                'issued' => $issuedQty,
-                'leftover' => $leftover,
-                'over' => bccomp($leftover, '0', 2) < 0,
+                'planned' => $plannedQty,
+                'over' => bccomp($accounted, $plannedQty, 2) > 0,
             ];
         })->values();
     }
@@ -212,6 +214,7 @@ new #[Title('Production Result')] class extends Component {
             'machineHours' => ['required', 'numeric', 'min:0'],
             'notes' => ['nullable', 'string', 'max:1000'],
             'used.*.quantity' => ['required', 'numeric', 'min:0'],
+            'returned.*.quantity' => ['required', 'numeric', 'min:0'],
             'hours.*.hours' => ['nullable', 'numeric', 'min:0'],
             'extras.*.employee_id' => ['required', 'distinct', 'exists:employees,id'],
             'extras.*.hours' => ['required', 'numeric', 'gt:0'],
@@ -227,6 +230,7 @@ new #[Title('Production Result')] class extends Component {
             'machineHours' => __('Machine Hours'),
             'notes' => __('Notes'),
             'used.*.quantity' => __('Used'),
+            'returned.*.quantity' => __('Returned'),
             'hours.*.hours' => __('Actual hours'),
             'extras.*.employee_id' => __('Worker'),
             'extras.*.hours' => __('Actual hours'),
@@ -260,6 +264,7 @@ new #[Title('Production Result')] class extends Component {
             machineHours: $this->machineHours,
             materialsUsed: collect($this->used)->mapWithKeys(fn ($row, $productId) => [(int) $productId => (string) $row['quantity']])->all(),
             laborHours: $laborHours,
+            materialsReturned: collect($this->returned)->mapWithKeys(fn ($row, $productId) => [(int) $productId => (string) $row['quantity']])->all(),
             rejectReason: $this->rejectReason,
             notes: $this->notes,
         );
@@ -432,61 +437,55 @@ new #[Title('Production Result')] class extends Component {
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-3">{{ __('Materials') }}</h2>
 
-        @php($grid = 'grid grid-cols-3 md:grid-cols-[minmax(0,1fr)_6.5rem_6.5rem_9rem_6.5rem] gap-x-3 gap-y-2 items-start')
+        @php($grid = 'grid grid-cols-2 md:grid-cols-[minmax(0,1fr)_6.5rem_9rem_9rem] gap-x-3 gap-y-2 items-start')
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <div class="{{ $grid }} hidden md:grid px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10 rounded-t-xl">
                 <span>{{ __('Material') }}</span>
                 <span class="text-right">{{ __('Planned') }}</span>
-                <span class="text-right">{{ __('Issued') }}</span>
                 <span class="text-right">{{ __('Used') }}</span>
-                <span class="text-right">{{ __('Leftover') }}</span>
+                <span class="text-right">{{ __('Returned (waste/reject)') }}</span>
             </div>
 
             @forelse ($this->materialRows as $row)
                 @php($p = $row['product'])
                 <div wire:key="material-{{ $p->id }}" class="{{ $grid }} px-4 py-3 border-b border-zinc-100 dark:border-white/5 last:border-0">
-                    <div class="col-span-3 md:col-span-1 min-w-0">
-                        <p class="text-sm text-zinc-900 dark:text-white">
-                            {{ $p->product_name }}
-                            @if ($row['planned'] === null)
-                                <span class="ml-1 inline-flex items-center rounded-full border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/10 px-1.5 py-px text-[10px] font-medium text-amber-700 dark:text-amber-400">{{ __('Outside plan') }}</span>
-                            @endif
-                        </p>
+                    <div class="col-span-2 md:col-span-1 min-w-0">
+                        <p class="text-sm text-zinc-900 dark:text-white">{{ $p->product_name }}</p>
                         <p class="font-data text-[11px] text-accent">{{ $p->product_code }}</p>
                     </div>
 
-                    @foreach ([__('Planned') => $row['planned'], __('Issued') => $row['issued']] as $label => $value)
-                        <div class="md:text-right text-xs">
-                            <p class="md:hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ $label }}</p>
-                            <p class="md:pt-2 font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $value === null ? '—' : $this->formatQuantity($value).' '.$p->unit_of_measure }}</p>
-                        </div>
-                    @endforeach
-
-                    <div class="col-span-3 md:col-span-1 md:col-start-4 md:row-start-1">
-                        <p class="md:hidden mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Used') }}</p>
-                        @if (array_key_exists($p->id, $used))
-                            <flux:input.group>
-                                <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" placeholder="0" input:class="text-right font-data tabular-nums" :loading="false"
-                                    wire:model.live.debounce.400ms="used.{{ $p->id }}.quantity" :aria-label="__('Used').' — '.$p->product_name" />
-                                <flux:input.group.suffix class="px-2 text-xs">{{ $p->unit_of_measure }}</flux:input.group.suffix>
-                            </flux:input.group>
-                            @error("used.{$p->id}.quantity") <flux:error class="mt-1" :message="$message" /> @enderror
-                        @else
-                            <p class="md:pt-2 md:text-right text-xs text-zinc-500 dark:text-zinc-400">{{ __('Not issued') }}</p>
-                        @endif
+                    <div class="md:text-right text-xs">
+                        <p class="md:hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Planned') }}</p>
+                        <p class="md:pt-2 font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $this->formatQuantity($row['planned']) }} {{ $p->unit_of_measure }}</p>
                     </div>
 
-                    <div class="md:text-right text-xs md:col-start-5 md:row-start-1">
-                        <p class="md:hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Leftover') }}</p>
-                        <p class="md:pt-2 font-data tabular-nums {{ $row['over'] ? 'text-red-600 dark:text-red-400' : (bccomp($row['leftover'], '0', 2) > 0 ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-500 dark:text-zinc-400') }}">
-                            {{ $this->formatQuantity($row['leftover']) }} {{ $p->unit_of_measure }}
-                        </p>
+                    <div class="col-span-2 md:col-span-1">
+                        <p class="md:hidden mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Used') }}</p>
+                        <flux:input.group>
+                            <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" placeholder="0" input:class="text-right font-data tabular-nums" :loading="false"
+                                wire:model.live.debounce.400ms="used.{{ $p->id }}.quantity" :aria-label="__('Used').' — '.$p->product_name" />
+                            <flux:input.group.suffix class="px-2 text-xs">{{ $p->unit_of_measure }}</flux:input.group.suffix>
+                        </flux:input.group>
+                        @error("used.{$p->id}.quantity") <flux:error class="mt-1" :message="$message" /> @enderror
+                    </div>
+
+                    <div class="col-span-2 md:col-span-1">
+                        <p class="md:hidden mb-1 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Returned (waste/reject)') }}</p>
+                        <flux:input.group>
+                            <flux:input size="sm" type="text" inputmode="decimal" pattern="[0-9]*\.?[0-9]*" placeholder="0" input:class="text-right font-data tabular-nums" :loading="false"
+                                wire:model.live.debounce.400ms="returned.{{ $p->id }}.quantity" :aria-label="__('Returned').' — '.$p->product_name" />
+                            <flux:input.group.suffix class="px-2 text-xs">{{ $p->unit_of_measure }}</flux:input.group.suffix>
+                        </flux:input.group>
+                        @error("returned.{$p->id}.quantity") <flux:error class="mt-1" :message="$message" /> @enderror
+                        @if ($row['over'])
+                            <p class="mt-1 text-[11px] text-red-600 dark:text-red-400">{{ __('Used plus returned exceeds what was planned.') }}</p>
+                        @endif
                     </div>
                 </div>
             @empty
-                <p class="px-4 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No materials were issued to this work order.') }}</p>
+                <p class="px-4 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No materials are planned for this work order.') }}</p>
             @endforelse
         </div>
-        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Used starts at what the warehouse issued. Lower it when material is left over — the leftover goes back to the warehouse.') }}</p>
+        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Used defaults to the full planned quantity. Lower it and enter the rest as returned (waste/reject) when material is left over — that amount goes back to raw material stock once the warehouse receives it.') }}</p>
     </div>
 </section>

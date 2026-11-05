@@ -419,6 +419,48 @@ Table stock_movements [headercolor: #2E7D32] {
   created_at timestamp
 }
 
+// Stok Opname (ditambahkan 2026-11-04): satu dokumen = hitung fisik SEMUA produk aktif sekaligus
+// (bukan per-kategori). Draf dibuat dengan snapshot current_stock tiap produk ke system_quantity;
+// Gudang mengisi counted_quantity per baris — baris tanpa isian memblokir posting.
+// Saat Posting, system_quantity & variance_quantity dihitung ULANG dari current_stock TERKINI
+// (bukan snapshot draf) supaya tahan terhadap mutasi stok lain yang terjadi selagi draf masih berjalan:
+//   - Kekurangan (counted < system): ditarik FIFO dari inventory_lots seperti Pengeluaran Bahan;
+//     unit_cost & adjustment_value (negatif) berasal dari biaya FIFO lot yang benar-benar ditarik.
+//   - Kelebihan (counted > system): membuat lot baru, dinilai otomatis di Products::averageUnitCost()
+//     (rata-rata tertimbang lot yang masih tersisa; jatuh ke biaya lot terakhir, lalu ke 0 jika produk
+//     belum pernah punya lot sama sekali).
+// Satu jurnal per dokumen: baris per inventory role (raw/wip/semi_finished/finished) dari NET
+// kekurangan+kelebihan produk dengan role itu, lalu selisih bersihnya ke Selisih Stok Opname
+// (role baru inventory_adjustment, akun 5005) — didebit jika bersih kelebihan (gain), dikredit jika
+// bersih kekurangan (loss). Hanya satu stok opname Draft boleh berjalan di seluruh sistem sekaligus.
+Table stock_counts [headercolor: #2E7D32] {
+  id bigint [pk, increment]
+  count_number varchar [unique, note: 'SC-{tahun}-{id}']
+  status document_status [default: 'draft']
+  count_date date
+  created_by bigint [ref: > users.id]
+  posted_by bigint [ref: > users.id, null]
+  posted_at timestamp [null]
+  notes text [null]
+  created_at timestamp
+  updated_at timestamp
+}
+
+Table stock_count_items [headercolor: #2E7D32] {
+  id bigint [pk, increment]
+  stock_count_id bigint [ref: > stock_counts.id]
+  product_id bigint [ref: > products.id]
+  system_quantity decimal(18,4) [note: 'Snapshot saat draf dibuat; ditulis ulang dari current_stock terkini saat posting']
+  counted_quantity decimal(18,4) [null, note: 'Diisi Gudang; null = belum dihitung, memblokir posting']
+  variance_quantity decimal(18,4) [default: 0, note: 'counted_quantity - system_quantity (saat posting)']
+  unit_cost decimal(18,4) [default: 0]
+  adjustment_value decimal(18,2) [default: 0, note: 'Positif = kelebihan (debit persediaan), negatif = kekurangan (kredit persediaan)']
+
+  indexes {
+    (stock_count_id, product_id) [unique]
+  }
+}
+
 // ======================================================================
 // PRODUKSI (ERD 4)
 // Use case: Mengelola Formula Produksi, Menyusun Perintah Kerja
@@ -515,14 +557,17 @@ Table work_orders [headercolor: #C62828] {
 // Rencana bahan WO: salinan formula (production_formula_items) yang sudah diskalakan ke quantity_target,
 // dibuat saat WO dibuat. Disalin, bukan dihitung ulang dari formula, agar perubahan formula di kemudian
 // hari tidak mengubah rencana WO lama (pola yang sama dengan salinan tarif tenaga kerja dan BOP).
-// Realisasi dibandingkan per product_id: material_issue_items (dikeluarkan gudang) dan
-// production_result_materials (dipakai produksi). Bahan tambahan di luar rencana (mis. untuk menutup
-// barang rusak) tidak punya baris di sini, sehingga terlihat sebagai pemakaian di luar rencana.
+// Saat WO dirilis (ReleaseWorkOrderAction), SELURUH quantity_planned diambil dari stok sekaligus (FIFO) —
+// tidak ada dokumen Pengeluaran Barang terpisah lagi. total_cost mencatat nilai FIFO yang diambil;
+// quantity_consumed diisi saat Hasil Produksi diposting. Hanya bahan dari formula yang bisa diambil;
+// tidak ada lagi jalur bahan tambahan di luar rencana.
 Table work_order_materials [headercolor: #C62828] {
   id bigint [pk, increment]
   work_order_id bigint [ref: > work_orders.id]
   product_id bigint [ref: > products.id, note: 'raw_material atau wip']
   quantity_planned decimal(18,4) [note: 'production_formula_items.quantity x quantity_target / output_quantity']
+  total_cost decimal(18,2) [default: 0, note: 'Nilai FIFO yang diambil dari stok saat WO dirilis (stock_movements reference_type=work_order_material)']
+  quantity_consumed decimal(18,4) [default: 0, note: 'Diisi saat Hasil Produksi diposting (pemakaian aktual)']
 
   indexes {
     (work_order_id, product_id) [unique]
@@ -539,34 +584,12 @@ Table work_order_labors [headercolor: #C62828] {
   planned_cost decimal(18,2)
 }
 
-// Gudang: Mencatat Pengeluaran Barang, yaitu mengeluarkan bahan untuk WO (tanpa jurnal).
-// Draf -> Posting: stok baru keluar saat diposting (FIFO, satu stock_movements OUT per lot).
-// Satu WO bisa menerima beberapa pengeluaran; posting pertama mengubah WO menjadi in_progress.
-Table material_issues [headercolor: #C62828] {
-  id bigint [pk, increment]
-  issue_number varchar [unique]
-  work_order_id bigint [ref: > work_orders.id]
-  created_by bigint [ref: > users.id, note: 'Pembuat draf']
-  issued_at timestamp [null, note: 'Diisi saat posting']
-  issued_by bigint [ref: > users.id, null, note: 'Diisi saat posting']
-  status document_status [default: 'draft']
-  created_at timestamp
-  updated_at timestamp
-}
-
-Table material_issue_items [headercolor: #C62828] {
-  id bigint [pk, increment]
-  material_issue_id bigint [ref: > material_issues.id]
-  product_id bigint [ref: > products.id, note: 'raw_material atau wip dari tahap sebelumnya']
-  quantity decimal(18,4)
-  total_cost decimal(18,2) [note: 'Jumlah nilai stock_movements (lot FIFO) untuk baris ini']
-  quantity_consumed decimal(18,4) [default: 0, note: 'Diisi sekali saat hasil produksi dicatat (pemakaian aktual, FIFO: baris pengeluaran terlama dulu). Sisa = quantity - quantity_consumed dikembalikan lewat material_returns']
-  note text [null, note: 'Wajib untuk bahan di luar rencana WO (mis. menutup barang rusak)']
-
-  indexes {
-    (material_issue_id, product_id) [unique]
-  }
-}
+// Fitur Pengeluaran Barang (material_issues/material_issue_items) sudah dihapus total pada
+// 2026-11-04 — digantikan oleh pengambilan stok otomatis saat WO dirilis (lihat work_order_materials).
+// Kedua tabel ini sempat dipertahankan non-destruktif selama masih ada baris historis yang
+// menunjuk ke sana, lalu benar-benar DIHAPUS setelah reset katalog produk membuat baris itu
+// kosong (lihat Stok Opname di atas untuk konteks reset itu) — kolom material_issue_item_id pada
+// material_return_items dan production_result_materials juga ikut dihapus bersamaan.
 
 // Gudang: pengembalian sisa bahan dari produksi (dokumen terpisah, diposting oleh gudang).
 // Hanya pergerakan persediaan: WO tidak menunggu retur (tidak ada status WO tambahan).
@@ -598,15 +621,15 @@ Table material_returns [headercolor: #C62828] {
 Table material_return_items [headercolor: #C62828] {
   id bigint [pk, increment]
   material_return_id bigint [ref: > material_returns.id]
-  material_issue_item_id bigint [ref: > material_issue_items.id, note: 'Baris pengeluaran yang dikembalikan; menentukan lot yang diisi ulang']
+  work_order_material_id bigint [ref: > work_order_materials.id, note: 'Menentukan lot yang diisi ulang']
   product_id bigint [ref: > products.id]
-  quantity_expected decimal(18,4) [note: 'Sisa menurut hasil produksi = material_issue_items.quantity - quantity_consumed']
+  quantity_expected decimal(18,4) [note: 'Jumlah dikembalikan yang diketik di production_result_materials.quantity_returned saat Hasil Produksi dicatat']
   quantity decimal(18,4) [note: 'Jumlah aktual yang diterima gudang']
   total_cost decimal(18,2) [note: 'Jumlah nilai stock_movements IN, dengan biaya lot yang diisi ulang (bukan biaya rata-rata baris)']
   variance_value decimal(18,2) [default: 0, note: 'Nilai sisa yang dilaporkan - total_cost; positif = kurang (kerugian), negatif = lebih. Dijurnal ke Selisih Bahan']
 
   indexes {
-    (material_return_id, material_issue_item_id) [unique]
+    (material_return_id, work_order_material_id) [unique]
   }
 }
 
@@ -619,7 +642,7 @@ Table production_results [headercolor: #C62828] {
   id bigint [pk, increment]
   result_number varchar [unique, note: 'RES-{tahun}-{id}']
   work_order_id bigint [ref: - work_orders.id, note: 'Satu hasil per WO']
-  production_date date [note: 'Tanggal pekerjaan selesai; tidak boleh di masa depan atau sebelum pengeluaran bahan pertama']
+  production_date date [note: 'Tanggal pekerjaan selesai; tidak boleh di masa depan atau sebelum work_orders.released_at']
   quantity_good decimal(18,4)
   quantity_reject decimal(18,4) [default: 0, note: 'Satu jenis reject; biayanya diserap unit baik (tidak ada pembedaan normal/abnormal)']
   reject_reason text [null, note: 'Keterangan cacat']
@@ -645,11 +668,12 @@ Table production_results [headercolor: #C62828] {
 Table production_result_materials [headercolor: #C62828] {
   id bigint [pk, increment]
   production_result_id bigint [ref: > production_results.id]
-  material_issue_item_id bigint [ref: > material_issue_items.id]
+  work_order_material_id bigint [ref: > work_order_materials.id, note: 'Satu per bahan pada WO']
   product_id bigint [ref: > products.id]
-  quantity decimal(18,4) [note: 'Pemakaian aktual menurut laporan produksi (bukan dihitung dari formula). Dialokasikan FIFO ke baris pengeluaran: terlama dulu']
+  quantity decimal(18,4) [note: 'Pemakaian aktual, diketik langsung oleh pencatat hasil produksi (bukan dihitung sistem)']
+  quantity_returned decimal(18,4) [default: 0, note: 'Sisa/waste/reject yang diketik langsung oleh pencatat; jumlah ini yang nanti dikembalikan lewat material_returns']
   unit_cost decimal(18,4) [note: 'total_cost / quantity']
-  total_cost decimal(18,2) [note: 'Nilai baris pengeluaran dikurangi nilai sisanya; sisa dinilai dengan biaya lot yang terakhir diambil (aturan yang sama dengan material_returns), bukan biaya rata-rata']
+  total_cost decimal(18,2) [note: 'work_order_materials.total_cost dikurangi nilai quantity_returned; sisa dinilai dengan biaya lot yang terakhir diambil (aturan yang sama dengan material_returns), bukan biaya rata-rata']
 }
 
 Table production_result_labors [headercolor: #C62828] {
@@ -849,7 +873,8 @@ Table sales_return_items [headercolor: #6A1B9A] {
 // finished_goods_inventory, wip_in_transit, fg_in_transit, applied_labor,
 // applied_overhead, overhead_variance, discrepancy_loss, material_variance, grni, purchase_price_variance,
 // vat_out, accounts_receivable, sales_revenue, (vat_in, accounts_payable, purchase_price_variance: dibuat 2026-10-21)
-// sales_return, cogs
+// sales_return, cogs, vat_payable (dibuat 2026-11-02, lihat Penyelesaian PPN di bawah),
+// inventory_adjustment (dibuat 2026-11-04, lihat Stok Opname di atas)
 // Mengelola Akun Perusahaan (Akuntansi): akun bebas dibuat, diubah, dihapus oleh user.
 // normal_balance dihitung otomatis dari type, tidak bisa dipilih bebas. Flat per 2026-10-18 —
 // tanpa sub-akun (parent_id) untuk saat ini, bisa ditambahkan nanti tanpa mengubah data yang ada.
@@ -885,11 +910,23 @@ Table accounts [headercolor: #EF6C00] {
 //     ditutup terkunci: tagihan terlambat dicatat di bulan berikutnya yang masih terbuka.
 //   - Anggaran per kategori = jumlah overhead_rate_components dari tarif yang berlaku tiap pusat kerja.
 
+// Akuntansi: Penyelesaian PPN (menutup PPN Masukan vs PPN Keluaran per bulan) — ✅ DIBANGUN 2026-11-02
+// Meniru pola Penutupan BOP di atas persis — TANPA TABEL BARU, hanya journal_entries/journal_entry_lines:
+//   - PPN Masukan (vat_in, didebit oleh faktur pembelian) dan PPN Keluaran (vat_out, dikredit oleh faktur
+//     penjualan) menumpuk begitu saja tiap bulan sampai ditutup; retur pembelian/penjualan membalik baris
+//     ini secara wajar (App\Support\PpnPeriod::balance() generik, sama seperti OverheadPeriod::balance()).
+//   - Penutupan = satu journal_entries entry_type = 'closing', source_type = 'ppn_closing', source_id = YYYYMM,
+//     entry_date = hari terakhir periode: Dr PPN Keluaran (menolkan) / Cr PPN Masukan (menolkan) / selisihnya
+//     ke Utang PPN (role baru vat_payable) — kredit jika Keluaran > Masukan (kurang bayar, utang ke kas
+//     negara), debit jika Masukan > Keluaran (lebih bayar, dibawa ke bulan depan). Periode yang sudah
+//     ditutup terkunci (App\Support\PpnPeriod::isClosed()); tidak ada input manual sama sekali — PPN Masukan
+//     dan PPN Keluaran murni berasal dari faktur yang sudah diposting.
+
 // Mengelola Jurnal Umum: jurnal otomatis (dari fitur lain), manual,
 // penyesuaian, penutup, dan saldo awal (dibedakan lewat entry_type)
 // ✅ DIBANGUN (2026-10-18): App\Actions\Accounting\PostJournalEntryAction menolak entri jika
 // baris < 2, satu baris punya debit DAN kredit, atau total debit ≠ total kredit (bcmath).
-// Dipakai otomatis oleh 6 Action yang sudah ada (ReceivePurchaseOrderAction, PostMaterialIssueAction,
+// Dipakai otomatis oleh Action yang sudah ada (ReceivePurchaseOrderAction, ReleaseWorkOrderAction,
 // PostProductionResultAction, PostProductionReceiptAction, PostMaterialReturnAction,
 // PostSalesDeliveryAction, via App\Support\AccountResolver::forRole()) dan oleh halaman Jurnal Umum manual.
 Table journal_entries [headercolor: #EF6C00] {
@@ -1105,6 +1142,8 @@ TableGroup Persediaan {
   products
   inventory_lots
   stock_movements
+  stock_counts
+  stock_count_items
 }
 
 TableGroup Produksi {
@@ -1116,8 +1155,6 @@ TableGroup Produksi {
   work_orders
   work_order_materials
   work_order_labors
-  material_issues
-  material_issue_items
   material_returns
   material_return_items
   production_results

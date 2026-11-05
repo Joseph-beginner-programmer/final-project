@@ -38,7 +38,7 @@ class WorkOrderPolicy
     public function cancel(User $user, WorkOrder $workOrder): bool
     {
         return $user->can('production.create')
-            && in_array($workOrder->status, [WorkOrderStatus::Draft, WorkOrderStatus::Released], true);
+            && in_array($workOrder->status, [WorkOrderStatus::Draft, WorkOrderStatus::InProgress], true);
     }
 
     public function release(User $user, WorkOrder $workOrder): bool

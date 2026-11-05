@@ -193,7 +193,7 @@ new #[Title('Management Dashboard')] class extends Component {
                 <div>
                     <div class="min-w-0">
                         <p class="{{ $panelLabel }}">{{ __('Sales, :month', ['month' => $monthLabel]) }}</p>
-                        <p class="mt-1.5 font-data text-3xl font-semibold tabular-nums text-zinc-900 dark:text-white" title="{{ $this->formatRupiah($revenue) }}">{{ $this->formatCompact($revenue) }}</p>
+                        <p class="mt-1.5 font-display text-3xl font-semibold tabular-nums text-zinc-900 dark:text-white" title="{{ $this->formatRupiah($revenue) }}">{{ $this->formatCompact($revenue) }}</p>
                         <p class="mt-1 flex flex-wrap items-center gap-x-1.5 text-[11px]">
                             @if ($salesDelta !== null)
                                 <span class="inline-flex items-center gap-0.5 font-semibold {{ $salesDelta >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400' }}">
@@ -270,7 +270,7 @@ new #[Title('Management Dashboard')] class extends Component {
                     <p class="{{ $panelLabel }}">{{ __('Cash & bank') }}</p>
                     <a href="{{ route('accounting.reports.balance-sheet', ['period' => $period]) }}" wire:navigate class="{{ $panelLink }}">{{ __('Balance sheet') }}</a>
                 </div>
-                <p class="mt-1.5 font-data text-2xl font-semibold tabular-nums text-zinc-900 dark:text-white" title="{{ $this->formatRupiah($cash) }}">{{ $this->formatCompact($cash) }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold tabular-nums text-zinc-900 dark:text-white" title="{{ $this->formatRupiah($cash) }}">{{ $this->formatCompact($cash) }}</p>
                 <p class="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400"><span class="font-semibold {{ $cashChange >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400' }}">{{ $cashChange >= 0 ? '+' : '−' }}{{ $this->formatCompact(abs($cashChange)) }}</span> {{ __('this month · at :date', ['date' => $asOfLabel]) }}</p>
 
                 <p class="mt-5 {{ $panelLabel }}">{{ __('Once everyone has paid') }}</p>
@@ -314,7 +314,7 @@ new #[Title('Management Dashboard')] class extends Component {
                             <span class="absolute inset-0 flex items-center justify-center font-data text-[11px] font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $this->formatPercent($share, 0) }}</span>
                         </div>
                         <div class="min-w-0">
-                            <p class="whitespace-nowrap font-data text-xl font-semibold tabular-nums {{ $ar['overdue'] > 0 ? 'text-red-700 dark:text-red-400' : 'text-zinc-900 dark:text-white' }}" title="{{ $this->formatRupiah($ar['overdue']) }}">{{ $this->formatCompact($ar['overdue']) }}</p>
+                            <p class="whitespace-nowrap font-display text-xl font-semibold tabular-nums {{ $ar['overdue'] > 0 ? 'text-red-700 dark:text-red-400' : 'text-zinc-900 dark:text-white' }}" title="{{ $this->formatRupiah($ar['overdue']) }}">{{ $this->formatCompact($ar['overdue']) }}</p>
                             <p class="mt-0.5 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">{{ trans_choice(':count invoice past due|:count invoices past due', $ar['overdue_count'], ['count' => $ar['overdue_count']]) }}</p>
                         </div>
                     </div>
@@ -723,7 +723,6 @@ new #[Title('Management Dashboard')] class extends Component {
             @php($cost = $this->kpis->costVsPlan())
             @php($stages = [
                 ['key' => 'draft', 'name' => __('Draft'), 'slot' => 'var(--viz-baseline)'],
-                ['key' => 'released', 'name' => __('Released'), 'slot' => 'var(--series-4)'],
                 ['key' => 'in_progress', 'name' => __('In progress'), 'slot' => 'var(--series-1)'],
                 ['key' => 'completed', 'name' => __('Completed in :month', ['month' => $this->kpis->start->translatedFormat('F')]), 'slot' => 'var(--series-3)'],
             ])

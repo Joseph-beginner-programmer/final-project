@@ -93,6 +93,10 @@
                                 :current="request()->routeIs('accounting.overhead.*')" wire:navigate>
                                 {{ __('Actual Overhead') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="scale" :href="route('accounting.ppn.index')"
+                                :current="request()->routeIs('accounting.ppn.*')" wire:navigate>
+                                {{ __('PPN Settlement') }}
+                            </flux:sidebar.item>
                             <flux:sidebar.item icon="receipt-percent" :href="route('accounting.purchase-invoices.list')"
                                 :current="request()->routeIs('accounting.purchase-invoices.*')" wire:navigate>
                                 {{ __('Purchase Invoices') }}
@@ -164,10 +168,6 @@
                                 :current="request()->routeIs('warehouse.inbound.production-receipts.*')" wire:navigate>
                                 {{ __('Production Receipt') }}
                             </flux:sidebar.item>
-                            <flux:sidebar.item icon="arrow-up-tray" :href="route('warehouse.outbound.material-issues.list')"
-                                :current="request()->routeIs('warehouse.outbound.material-issues.*')" wire:navigate>
-                                {{ __('Material Issue') }}
-                            </flux:sidebar.item>
                             <flux:sidebar.item icon="arrow-uturn-left" :href="route('warehouse.inbound.material-returns.list')"
                                 :current="request()->routeIs('warehouse.inbound.material-returns.*')" wire:navigate>
                                 {{ __('Material Return') }}
@@ -175,6 +175,10 @@
                             <flux:sidebar.item icon="truck" :href="route('warehouse.outbound.sales-deliveries.list')"
                                 :current="request()->routeIs('warehouse.outbound.sales-deliveries.*')" wire:navigate>
                                 {{ __('Sales Delivery') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="clipboard-document-check" :href="route('warehouse.stock-counts.list')"
+                                :current="request()->routeIs('warehouse.stock-counts.*')" wire:navigate>
+                                {{ __('Stock Count') }}
                             </flux:sidebar.item>
                         @endif
                     </flux:sidebar.group>

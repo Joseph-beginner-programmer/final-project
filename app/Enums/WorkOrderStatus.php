@@ -5,7 +5,6 @@ namespace App\Enums;
 enum WorkOrderStatus: string
 {
     case Draft = 'draft';
-    case Released = 'released';
     case InProgress = 'in_progress';
     case Completed = 'completed';
     case Cancelled = 'cancelled';
@@ -13,9 +12,8 @@ enum WorkOrderStatus: string
     public function canTransitionTo(self $target): bool
     {
         return match ($this) {
-            self::Draft => in_array($target, [self::Released, self::Cancelled], true),
-            self::Released => in_array($target, [self::InProgress, self::Cancelled], true),
-            self::InProgress => $target === self::Completed,
+            self::Draft => in_array($target, [self::InProgress, self::Cancelled], true),
+            self::InProgress => in_array($target, [self::Completed, self::Cancelled], true),
             self::Completed, self::Cancelled => false,
         };
     }
@@ -29,7 +27,6 @@ enum WorkOrderStatus: string
     {
         return __(match ($this) {
             self::Draft => 'Draft',
-            self::Released => 'Released',
             self::InProgress => 'In Progress',
             self::Completed => 'Completed',
             self::Cancelled => 'Cancelled',

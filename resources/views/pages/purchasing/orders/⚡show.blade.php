@@ -695,7 +695,7 @@ new #[Title('Purchase Order Details')] class extends Component {
             </div>
             <div class="px-4 py-3.5 bg-accent mt-auto">
                 <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Total') }}</p>
-                <p wire:key="po-total-{{ $purchaseOrder->total_amount }}" wire:transition.duration.300ms class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah((string) $purchaseOrder->total_amount) }}</p>
+                <p wire:key="po-total-{{ $purchaseOrder->total_amount }}" wire:transition.duration.300ms class="font-display text-2xl font-semibold tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah((string) $purchaseOrder->total_amount) }}</p>
                 <x-tax-estimate :amount="(string) $purchaseOrder->total_amount" />
             </div>
         </div>

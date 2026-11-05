@@ -26,7 +26,7 @@ new #[Title('Material Return')] class extends Component {
     {
         $this->materialReturn->load([
             'workOrder.product', 'productionResult',
-            'items.product', 'items.materialIssueItem.materialIssue', 'items.stockMovements.inventoryLot',
+            'items.product', 'items.stockMovements.inventoryLot',
             'createdBy', 'receivedBy',
         ]);
     }
@@ -194,7 +194,6 @@ new #[Title('Material Return')] class extends Component {
                     <div class="flex flex-wrap items-start justify-between gap-3">
                         <div class="min-w-0">
                             <p class="text-sm text-zinc-900 dark:text-white">{{ $item->product->product_name }}</p>
-                            <p class="font-data text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('Issued on') }} {{ $item->materialIssueItem->materialIssue->issue_number }}</p>
                         </div>
                         <div class="grid grid-cols-3 gap-4 text-right text-xs">
                             <div>

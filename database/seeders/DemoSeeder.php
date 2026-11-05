@@ -10,10 +10,8 @@ use App\Actions\Employee\CreateEmployeeAction;
 use App\Actions\Employee\SetLaborRateAction;
 use App\Actions\MasterData\SaveAccountAction;
 use App\Actions\Production\CreateWorkOrderAction;
-use App\Actions\Production\PostMaterialIssueAction;
 use App\Actions\Production\PostProductionResultAction;
 use App\Actions\Production\ReleaseWorkOrderAction;
-use App\Actions\Production\SaveMaterialIssueDraftAction;
 use App\Actions\Production\SaveProductionResultDraftAction;
 use App\Actions\Purchasing\ApprovePurchaseOrderAction;
 use App\Actions\Purchasing\CreatePurchaseOrderAction;
@@ -60,7 +58,6 @@ use App\Models\PurchaseOrderReceiptBatch;
 use App\Models\SalesInvoice;
 use App\Models\SalesOrder;
 use App\Models\User;
-use App\Models\WorkCenter;
 use App\Models\WorkOrder;
 use App\Services\Purchasing\ReceivePurchaseOrderBatchService;
 use App\Support\OverheadPeriod;
@@ -141,12 +138,6 @@ class DemoSeeder extends Seeder
         $this->seedAccounts();
         $this->postOpeningBalances();
 
-        for ($day = Carbon::parse(self::START); $day->lte($this->today); $day->addDay()) {
-            $this->travel($day->copy());
-            $this->runDay($day->copy());
-        }
-
-        $this->leaveOpenWork();
         Date::setTestNow();
     }
 
@@ -176,37 +167,6 @@ class DemoSeeder extends Seeder
         foreach ([['Joko Susilo', '24000'], ['Wahyuni', '23000'], ['Bambang Pratama', '25000'], ['Sri Mulyani', '22000'], ['Eko Saputra', '24000']] as [$name, $rate]) {
             $employee = app(CreateEmployeeAction::class)->handle(new EmployeeData($name, '2024-06-01'));
             app(SetLaborRateAction::class)->handle($employee, $rate, '2026-01-01', $this->users[UserRole::Manager->value]);
-        }
-
-        Product::where('product_code', 'WIP-001')->update(['product_name' => 'Badan Termos Merah']);
-        Product::where('product_code', 'FG-001')->update(['selling_price' => $this->lines['FG-001']['price']]);
-        foreach ([
-            'WIP-003' => ['product_name' => 'Badan Termos Biru', 'unit_of_measure' => 'Pcs', 'type' => 'wip'],
-            'WIP-004' => ['product_name' => 'Badan Termos Hijau', 'unit_of_measure' => 'Pcs', 'type' => 'wip'],
-            'FG-002' => ['product_name' => 'Termos 1L Biru', 'unit_of_measure' => 'Pcs', 'type' => 'finished_goods', 'selling_price' => $this->lines['FG-002']['price']],
-            'FG-003' => ['product_name' => 'Termos 1L Hijau', 'unit_of_measure' => 'Pcs', 'type' => 'finished_goods', 'selling_price' => $this->lines['FG-003']['price']],
-        ] as $code => $attributes) {
-            Product::firstOrCreate(['product_code' => $code], $attributes);
-        }
-
-        $molding = WorkCenter::where('code', 'MOLDING')->value('id');
-        $assembly = WorkCenter::where('code', 'ASSEMBLY')->value('id');
-        foreach ([
-            'F-WIP-003' => ['WIP-003', $molding, ['RAW-002' => '13.60', 'RAW-004' => '0.50']],
-            'F-WIP-004' => ['WIP-004', $molding, ['RAW-003' => '13.60', 'RAW-004' => '0.50']],
-            'F-FG-002' => ['FG-002', $assembly, ['WIP-003' => '100', 'WIP-002' => '100']],
-            'F-FG-003' => ['FG-003', $assembly, ['WIP-004' => '100', 'WIP-002' => '100']],
-        ] as $code => [$productCode, $workCenterId, $items]) {
-            $formula = ProductionFormula::firstOrCreate(['formula_code' => $code], [
-                'product_id' => $this->productId($productCode),
-                'work_center_id' => $workCenterId,
-                'output_quantity' => '100',
-                'is_active' => true,
-                'created_by' => $this->users[UserRole::Production->value],
-            ]);
-            foreach ($items as $materialCode => $quantity) {
-                $formula->items()->firstOrCreate(['material_product_id' => $this->productId($materialCode)], ['quantity' => $quantity]);
-            }
         }
 
         $addresses = ['Jl. Pasar Atom 12, Surabaya', 'Jl. Raya Darmo 88, Surabaya', 'Jl. Gatot Subroto 5, Sidoarjo', 'Jl. Panglima Sudirman 40, Gresik', 'Jl. Kenjeran 101, Surabaya'];
@@ -251,6 +211,7 @@ class DemoSeeder extends Seeder
             ['5002', 'Selisih Bahan', AccountType::Expense, AccountSystemRole::MaterialVariance, false],
             ['5003', 'Kerugian Produksi', AccountType::Expense, AccountSystemRole::ProductionLoss, false],
             ['5004', 'Selisih Harga Pembelian', AccountType::Expense, AccountSystemRole::PurchasePriceVariance, false],
+            ['5005', 'Selisih Stok Opname', AccountType::Expense, AccountSystemRole::InventoryAdjustment, false],
             ['5010', 'BOP Listrik', AccountType::Expense, AccountSystemRole::OverheadElectricity, false],
             ['5011', 'BOP Penyusutan Mesin', AccountType::Expense, AccountSystemRole::OverheadMachineDepreciation, false],
             ['5012', 'BOP Penyusutan Molding', AccountType::Expense, AccountSystemRole::OverheadMoldDepreciation, false],
@@ -571,11 +532,7 @@ class DemoSeeder extends Seeder
             labors: array_map(fn (int $employeeId) => ['employeeId' => $employeeId, 'plannedHours' => $this->decimal($laborHours)], $crew),
             plannedMachineHours: $this->decimal($machineHours),
         ));
-        $workOrder = app(ReleaseWorkOrderAction::class)->handle($workOrder);
-
-        $lines = $workOrder->materials()->get()->map(fn ($material) => ['productId' => $material->product_id, 'quantity' => (string) $material->quantity_planned, 'note' => null])->all();
-        $issue = app(SaveMaterialIssueDraftAction::class)->handle($workOrder, $lines, $this->users[UserRole::Warehouse->value]);
-        app(PostMaterialIssueAction::class)->handle($issue, $this->users[UserRole::Warehouse->value]);
+        $workOrder = app(ReleaseWorkOrderAction::class)->handle($workOrder, $this->users[UserRole::Production->value]);
 
         $late = mt_rand(1, 9) === 1;
         $this->openWorkOrders[] = ['work_order' => $workOrder->id, 'post_on' => $postOn ?? $day->copy()->addDays($late ? 2 : 1)->toDateString(), 'stage' => $stage];
@@ -615,7 +572,7 @@ class DemoSeeder extends Seeder
                 quantityGood: $this->decimal($target - $reject),
                 quantityReject: $this->decimal($reject),
                 machineHours: $this->decimal(round((float) $workOrder->planned_machine_hours * $this->random(0.92, 1.06), 1)),
-                materialsUsed: $workOrder->issuedQuantities(),
+                materialsUsed: $workOrder->materials->pluck('quantity_planned', 'product_id')->map(fn ($v) => (string) $v)->all(),
                 laborHours: $workOrder->labors->mapWithKeys(fn ($labor) => [$labor->employee_id => $this->decimal(round((float) $labor->planned_hours * $this->random(0.9, 1.07), 1))])->all(),
                 rejectReason: $reject > 0 ? 'Cacat cetak / bocor' : null,
             ), $this->users[UserRole::Production->value]);

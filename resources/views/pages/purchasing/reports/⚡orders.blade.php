@@ -122,16 +122,16 @@ new #[Title('Purchase Order Report')] class extends Component {
     </div>
 
     <div wire:loading.class="opacity-50" wire:target="period,shiftPeriod" class="transition-opacity">
-        <div class="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="mt-6 grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 divide-x divide-y lg:divide-y-0 divide-zinc-100 dark:divide-white/5">
             @foreach ([
                 [__('Purchase orders'), $t['count'], null],
                 [__('Line items'), $t['items_count'], null],
                 [__('Total amount'), $this->rupiah($t['total_amount']), null],
                 [__('Overdue'), $t['overdue'], __('Past their expected delivery date.')],
             ] as [$label, $value, $note])
-                <div class="rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-4">
+                <div class="px-4 py-3.5">
                     <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ $label }}</p>
-                    <p class="mt-2 text-xl font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $value }}</p>
+                    <p class="mt-1.5 font-display text-xl font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $value }}</p>
                     @if ($note)
                         <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">{{ $note }}</p>
                     @endif

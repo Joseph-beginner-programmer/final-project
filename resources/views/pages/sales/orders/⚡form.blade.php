@@ -516,7 +516,7 @@ new #[Title('Sales Order')] class extends Component {
             </div>
             <div class="px-5 py-4 bg-accent">
                 <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Total') }}</p>
-                <p class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah($this->total) }}</p>
+                <p class="font-display text-2xl font-semibold tabular-nums text-accent-foreground mt-0.5">{{ $this->formatRupiah($this->total) }}</p>
                 <x-tax-estimate :amount="$this->total" />
             </div>
         </div>

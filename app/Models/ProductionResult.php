@@ -82,6 +82,16 @@ class ProductionResult extends Model
             ->all();
     }
 
+    /**
+     * @return array<int, string>
+     */
+    public function returnedQuantities(): array
+    {
+        return $this->materials->groupBy('product_id')
+            ->map(fn ($rows) => $rows->reduce(fn (string $carry, $row) => bcadd($carry, (string) $row->quantity_returned, 2), '0'))
+            ->all();
+    }
+
     public function transitionTo(DocumentStatus $target): void
     {
         if (! $this->status->canTransitionTo($target)) {

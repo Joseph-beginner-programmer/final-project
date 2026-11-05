@@ -4,10 +4,10 @@ namespace App\Actions\Warehouse;
 
 use App\Enums\DocumentStatus;
 use App\Exceptions\InvalidMaterialReturnException;
-use App\Models\MaterialIssueItem;
 use App\Models\MaterialReturn;
 use App\Models\Product;
 use App\Models\ProductionResult;
+use App\Models\WorkOrderMaterial;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -41,8 +41,8 @@ class SaveMaterialReturnDraftAction
             $return->items()->delete();
             foreach (self::allocate($lines, $returnedByProduct) as $row) {
                 $return->items()->create([
-                    'material_issue_item_id' => $row['line']->id,
-                    'product_id' => $row['line']->product_id,
+                    'work_order_material_id' => $row['material']->id,
+                    'product_id' => $row['material']->product_id,
                     'quantity_expected' => $row['expected'],
                     'quantity' => $row['quantity'],
                 ]);
@@ -54,7 +54,7 @@ class SaveMaterialReturnDraftAction
 
     /**
      * @param  array<int, string>  $returnedByProduct
-     * @return Collection<int, MaterialIssueItem>
+     * @return Collection<int, array{material: WorkOrderMaterial, expected: string}>
      */
     public static function checkReturnable(ProductionResult $result, array $returnedByProduct, ?MaterialReturn $current = null, bool $lock = false): Collection
     {
@@ -70,16 +70,27 @@ class SaveMaterialReturnDraftAction
             throw new InvalidMaterialReturnException(InvalidMaterialReturnException::ALREADY_RETURNED, $other->return_number);
         }
 
-        $lines = $result->workOrder->postedIssueItems($lock);
+        $resultMaterials = $result->materials;
+        $materials = WorkOrderMaterial::query()
+            ->whereIn('id', $resultMaterials->pluck('work_order_material_id'))
+            ->with('product')
+            ->when($lock, fn ($query) => $query->lockForUpdate())
+            ->get()
+            ->keyBy('id');
 
-        $expected = $lines->reduce(fn (string $carry, MaterialIssueItem $line) => bcadd($carry, bcsub((string) $line->quantity, (string) $line->quantity_consumed, 2), 2), '0');
-        if (bccomp($expected, '0', 2) <= 0) {
+        $lines = $resultMaterials
+            ->filter(fn ($row) => bccomp((string) $row->quantity_returned, '0', 2) > 0)
+            ->map(fn ($row) => ['material' => $materials[$row->work_order_material_id], 'expected' => (string) $row->quantity_returned])
+            ->values();
+
+        if ($lines->isEmpty()) {
             throw new InvalidMaterialReturnException(InvalidMaterialReturnException::NOTHING_TO_RETURN);
         }
 
         foreach ($returnedByProduct as $productId => $quantity) {
-            $issued = $lines->where('product_id', $productId)->reduce(fn (string $carry, MaterialIssueItem $line) => bcadd($carry, (string) $line->quantity, 2), '0');
-            if (bccomp($quantity ?: '0', $issued, 2) > 0) {
+            $expected = $lines->filter(fn (array $row) => $row['material']->product_id === (int) $productId)
+                ->reduce(fn (string $carry, array $row) => bcadd($carry, $row['expected'], 2), '0');
+            if (bccomp($quantity ?: '0', $expected, 2) > 0) {
                 throw new InvalidMaterialReturnException(InvalidMaterialReturnException::MORE_THAN_ISSUED, Product::find($productId)?->product_name ?? "#{$productId}");
             }
         }
@@ -88,26 +99,16 @@ class SaveMaterialReturnDraftAction
     }
 
     /**
-     * @param  Collection<int, MaterialIssueItem>  $lines  ordered oldest issue first
+     * @param  Collection<int, array{material: WorkOrderMaterial, expected: string}>  $lines
      * @param  array<int, string>  $returnedByProduct
-     * @return list<array{line: MaterialIssueItem, expected: string, quantity: string}>
+     * @return list<array{material: WorkOrderMaterial, expected: string, quantity: string}>
      */
     public static function allocate(Collection $lines, array $returnedByProduct): array
     {
-        $stillToPlace = array_map(fn ($quantity) => $quantity ?: '0', $returnedByProduct);
-        $rows = [];
-
-        foreach ($lines->reverse() as $line) {
-            $expected = bcsub((string) $line->quantity, (string) $line->quantity_consumed, 2);
-            $left = $stillToPlace[$line->product_id] ?? '0';
-            $take = bccomp((string) $line->quantity, $left, 2) <= 0 ? (string) $line->quantity : $left;
-            $stillToPlace[$line->product_id] = bcsub($left, $take, 2);
-
-            if (bccomp($expected, '0', 2) > 0 || bccomp($take, '0', 2) > 0) {
-                $rows[] = ['line' => $line, 'expected' => $expected, 'quantity' => $take];
-            }
-        }
-
-        return $rows;
+        return $lines->map(fn (array $row) => [
+            'material' => $row['material'],
+            'expected' => $row['expected'],
+            'quantity' => $returnedByProduct[$row['material']->product_id] ?? '0',
+        ])->all();
     }
 }

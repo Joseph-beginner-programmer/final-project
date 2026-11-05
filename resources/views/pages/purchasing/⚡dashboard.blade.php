@@ -157,9 +157,7 @@ new #[Title('Purchasing Dashboard')] class extends Component {
 @php($cardTitle = 'text-sm font-semibold text-zinc-900 dark:text-white')
 @php($cardSub = 'mt-0.5 text-xs text-zinc-500 dark:text-zinc-400')
 @php($tileLabel = 'min-h-8 text-xs font-medium leading-4 text-zinc-500 dark:text-zinc-400')
-@php($tileValue = 'mt-2 text-2xl font-semibold tabular-nums text-zinc-900 dark:text-white')
 @php($tileNote = 'mt-1 text-xs leading-4 text-zinc-500 dark:text-zinc-400')
-@php($tileIconWrap = 'inline-flex size-9 items-center justify-center rounded-lg')
 @php($th = 'py-1.5 px-2 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400')
 @php($td = 'py-1.5 px-2 text-zinc-700 dark:text-zinc-300')
 @php($tdNum = 'py-1.5 px-2 text-right tabular-nums text-zinc-800 dark:text-zinc-200 whitespace-nowrap')
@@ -193,42 +191,36 @@ new #[Title('Purchasing Dashboard')] class extends Component {
     <div wire:loading.class="opacity-50" wire:target="period,shiftPeriod" class="transition-opacity">
         @php($a = $this->attention)
         @php($overdueCount = $a['overdue']->count())
-        <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
-            <div class="{{ $card }}">
-                <span class="{{ $tileIconWrap }} bg-accent/10 text-accent"><flux:icon.queue-list variant="micro" class="size-5" /></span>
-                <p class="{{ $tileLabel }} mt-3">{{ __('Total PO') }}</p>
-                <p class="{{ $tileValue }}">{{ $this->formatQuantity($this->totalOrders) }}</p>
+        @php($lowStockCount = $this->materialStockStatus->whereIn('status', ['below', 'near'])->count())
+        <div class="mt-6 grid grid-cols-2 sm:grid-cols-3 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 divide-x divide-y sm:divide-y-0 divide-zinc-100 dark:divide-white/5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
+            <div class="px-4 sm:px-5 py-4">
+                <p class="{{ $tileLabel }}">{{ __('Total PO') }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold text-zinc-900 dark:text-white">{{ $this->formatQuantity($this->totalOrders) }}</p>
                 <p class="{{ $tileNote }}">{{ __('Purchase orders created this period.') }}</p>
             </div>
-            <div class="{{ $card }}">
-                <span class="{{ $tileIconWrap }} bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-400"><flux:icon.clock variant="micro" class="size-5" /></span>
-                <p class="{{ $tileLabel }} mt-3">{{ __('Pending approval') }}</p>
-                <p class="{{ $tileValue }}">{{ $this->formatQuantity($a['pending_approval']) }}</p>
+            <div class="px-4 sm:px-5 py-4">
+                <p class="{{ $tileLabel }}">{{ __('Pending approval') }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold text-zinc-900 dark:text-white">{{ $this->formatQuantity($a['pending_approval']) }}</p>
                 <p class="{{ $tileNote }}">{{ __('Purchase orders waiting on Manager.') }}</p>
             </div>
-            <div class="{{ $card }}">
-                <span class="{{ $tileIconWrap }} {{ $overdueCount > 0 ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400' : 'bg-zinc-100 text-zinc-500 dark:bg-white/5 dark:text-zinc-400' }}"><flux:icon.exclamation-triangle variant="micro" class="size-5" /></span>
-                <p class="{{ $tileLabel }} mt-3">{{ __('Overdue deliveries') }}</p>
-                <p class="{{ $tileValue }}">{{ $this->formatQuantity($overdueCount) }}</p>
+            <div class="px-4 sm:px-5 py-4">
+                <p class="{{ $tileLabel }}">{{ __('Overdue deliveries') }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold {{ $overdueCount > 0 ? 'text-red-700 dark:text-red-400' : 'text-zinc-900 dark:text-white' }}">{{ $this->formatQuantity($overdueCount) }}</p>
                 <p class="{{ $tileNote }}">{{ __('Past their expected delivery date.') }}</p>
             </div>
-            <div class="{{ $card }}">
-                <span class="{{ $tileIconWrap }} bg-accent/10 text-accent"><flux:icon.clipboard-document-list variant="micro" class="size-5" /></span>
-                <p class="{{ $tileLabel }} mt-3">{{ __('Requisitions awaiting purchase') }}</p>
-                <p class="{{ $tileValue }}">{{ $this->formatQuantity($a['requisitions_submitted']) }}</p>
+            <div class="px-4 sm:px-5 py-4">
+                <p class="{{ $tileLabel }}">{{ __('Requisitions awaiting purchase') }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold text-zinc-900 dark:text-white">{{ $this->formatQuantity($a['requisitions_submitted']) }}</p>
                 <p class="{{ $tileNote }}">{{ __('Submitted, not yet turned into a PO.') }}</p>
             </div>
-            <div class="{{ $card }}">
-                <span class="{{ $tileIconWrap }} bg-accent/10 text-accent"><flux:icon.banknotes variant="micro" class="size-5" /></span>
-                <p class="{{ $tileLabel }} mt-3">{{ __('Spend this period') }}</p>
-                <p class="{{ $tileValue }}">{{ $this->formatRupiah($this->spend) }}</p>
+            <div class="px-4 sm:px-5 py-4">
+                <p class="{{ $tileLabel }}">{{ __('Spend this period') }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold text-zinc-900 dark:text-white">{{ $this->formatRupiah($this->spend) }}</p>
                 <p class="{{ $tileNote }}">{{ __(':count invoiced suppliers', ['count' => $this->supplierTotals->count()]) }}</p>
             </div>
-            @php($lowStockCount = $this->materialStockStatus->whereIn('status', ['below', 'near'])->count())
-            <div class="{{ $card }}">
-                <span class="{{ $tileIconWrap }} {{ $lowStockCount > 0 ? 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400' : 'bg-zinc-100 text-zinc-500 dark:bg-white/5 dark:text-zinc-400' }}"><flux:icon.cube variant="micro" class="size-5" /></span>
-                <p class="{{ $tileLabel }} mt-3">{{ __('Materials needing attention') }}</p>
-                <p class="{{ $tileValue }}">{{ $this->formatQuantity($lowStockCount) }}</p>
+            <div class="px-4 sm:px-5 py-4">
+                <p class="{{ $tileLabel }}">{{ __('Materials needing attention') }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold {{ $lowStockCount > 0 ? 'text-red-700 dark:text-red-400' : 'text-zinc-900 dark:text-white' }}">{{ $this->formatQuantity($lowStockCount) }}</p>
                 <p class="{{ $tileNote }}">{{ __('At or nearing their reorder point.') }}</p>
             </div>
         </div>

@@ -171,7 +171,6 @@ new #[Title('Production Dashboard')] class extends Component {
 @php($cardTitle = 'text-sm font-semibold text-zinc-900 dark:text-white')
 @php($cardSub = 'mt-0.5 text-xs text-zinc-500 dark:text-zinc-400')
 @php($tileLabel = 'text-xs font-medium text-zinc-500 dark:text-zinc-400')
-@php($tileValue = 'mt-2 text-2xl font-semibold text-zinc-900 dark:text-white')
 @php($tileNote = 'mt-1 text-xs text-zinc-500 dark:text-zinc-400')
 @php($th = 'py-1.5 px-2 text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400')
 @php($td = 'py-1.5 px-2 text-zinc-700 dark:text-zinc-300')
@@ -208,20 +207,20 @@ new #[Title('Production Dashboard')] class extends Component {
     </div>
 
     <div wire:loading.class="opacity-50" wire:target="period,type,shiftPeriod" class="transition-opacity">
-        <div class="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
-            <div class="{{ $card }}">
+        <div class="mt-6 grid grid-cols-2 sm:grid-cols-4 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 divide-x divide-y sm:divide-y-0 divide-zinc-100 dark:divide-white/5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
+            <div class="px-4 sm:px-5 py-4">
                 <p class="{{ $tileLabel }}">{{ __('Work orders completed') }}</p>
-                <p class="{{ $tileValue }}">{{ $this->completed->count() }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold text-zinc-900 dark:text-white">{{ $this->completed->count() }}</p>
                 <p class="{{ $tileNote }}">{{ __(':qty good units', ['qty' => $this->formatQuantity($this->output['good'])]) }}</p>
             </div>
-            <div class="{{ $card }}">
+            <div class="px-4 sm:px-5 py-4">
                 <p class="{{ $tileLabel }}">{{ __('Reject rate') }}</p>
-                <p class="{{ $tileValue }}">{{ $this->formatPercent($this->output['reject_rate']) }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold text-zinc-900 dark:text-white">{{ $this->formatPercent($this->output['reject_rate']) }}</p>
                 <p class="{{ $tileNote }}">{{ __(':qty rejected units', ['qty' => $this->formatQuantity($this->output['reject'])]) }}</p>
             </div>
-            <div class="{{ $card }}">
+            <div class="px-4 sm:px-5 py-4">
                 <p class="{{ $tileLabel }}">{{ __('On-time completion') }}</p>
-                <p class="{{ $tileValue }}">{{ $this->formatPercent($this->onTime['rate']) }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold text-zinc-900 dark:text-white">{{ $this->formatPercent($this->onTime['rate']) }}</p>
                 @if ($this->onTime['total'] > 0)
                     <div class="mt-2 flex h-1.5 gap-0.5 overflow-hidden rounded-full" role="img" aria-label="{{ __(':on of :total on time', ['on' => $this->onTime['on_time'], 'total' => $this->onTime['total']]) }}">
                         @if ($this->onTime['on_time'] > 0)
@@ -236,9 +235,9 @@ new #[Title('Production Dashboard')] class extends Component {
                     <p class="{{ $tileNote }}">{{ __('No work orders completed in this period.') }}</p>
                 @endif
             </div>
-            <div class="{{ $card }}">
+            <div class="px-4 sm:px-5 py-4">
                 <p class="{{ $tileLabel }}">{{ __('Losses') }}</p>
-                <p class="{{ $tileValue }}">{{ $this->formatRupiah($this->losses['total']) }}</p>
+                <p class="mt-1.5 font-display text-2xl font-semibold text-zinc-900 dark:text-white">{{ $this->formatRupiah($this->losses['total']) }}</p>
                 <p class="{{ $tileNote }}">{{ __('Material :material · Product :product', ['material' => $this->formatRupiah($this->losses['material_variance']), 'product' => $this->formatRupiah($this->losses['production_loss'])]) }}</p>
             </div>
         </div>
@@ -295,11 +294,11 @@ new #[Title('Production Dashboard')] class extends Component {
             <div class="flex flex-wrap items-end justify-between gap-3">
                 <div>
                     <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300">{{ __('Ongoing work orders') }}</h2>
-                    <p class="{{ $cardSub }}">{{ __('Draft, released and in progress, earliest start first. Stock is reserved for the earliest work order first.') }}</p>
+                    <p class="{{ $cardSub }}">{{ __('Draft and in progress, earliest start first. Stock is reserved for the earliest work order first.') }}</p>
                 </div>
                 @if ($ongoing->isNotEmpty())
                     <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-zinc-600 dark:text-zinc-300">
-                        <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3 rounded-sm" style="background: var(--series-1)"></span>{{ __('Issued') }}</span>
+                        <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3 rounded-sm" style="background: var(--series-1)"></span>{{ __('Drawn') }}</span>
                         <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3 rounded-sm" style="background: color-mix(in srgb, var(--series-1) 35%, transparent)"></span>{{ __('In stock') }}</span>
                         <span class="inline-flex items-center gap-1.5"><span class="h-2 w-3 rounded-sm" style="background: var(--div-over)"></span>{{ __('Short') }}</span>
                     </div>
@@ -342,7 +341,7 @@ new #[Title('Production Dashboard')] class extends Component {
                                             <span class="truncate text-zinc-800 dark:text-zinc-200">{{ $m['product']->product_name }}</span>
                                             <span class="shrink-0 font-data tabular-nums text-zinc-500 dark:text-zinc-400"><span class="text-zinc-900 dark:text-white">{{ $this->formatQty($m['issued']) }}</span> / {{ $this->formatQty($m['planned']) }} {{ $unit }}</span>
                                         </div>
-                                        <div class="mt-1.5 flex h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-white/5" role="img" aria-label="{{ __(':name: :issued issued, :covered in stock, :short short of :planned', ['name' => $m['product']->product_name, 'issued' => $this->formatQty($m['issued']), 'covered' => $this->formatQty($m['covered']), 'short' => $this->formatQty($m['short']), 'planned' => $this->formatQty($m['planned'])]) }}">
+                                        <div class="mt-1.5 flex h-2 overflow-hidden rounded-full bg-zinc-100 dark:bg-white/5" role="img" aria-label="{{ __(':name: :issued drawn, :covered in stock, :short short of :planned', ['name' => $m['product']->product_name, 'issued' => $this->formatQty($m['issued']), 'covered' => $this->formatQty($m['covered']), 'short' => $this->formatQty($m['short']), 'planned' => $this->formatQty($m['planned'])]) }}">
                                             <div class="h-full" style="width: {{ (float) $m['issued'] / $planned * 100 }}%; background: var(--series-1)"></div>
                                             <div class="h-full" style="width: {{ (float) $m['covered'] / $planned * 100 }}%; background: color-mix(in srgb, var(--series-1) 35%, transparent)"></div>
                                             <div class="h-full" style="width: {{ (float) $m['short'] / $planned * 100 }}%; background: var(--div-over)"></div>

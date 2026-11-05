@@ -61,20 +61,14 @@ new #[Title('Material Return')] class extends Component {
     #[Computed]
     public function rows(): Collection
     {
-        return $this->result->workOrder->postedIssueItems()
-            ->groupBy('product_id')
-            ->map(function ($lines) {
-                $issued = $lines->reduce(fn (string $carry, $line) => bcadd($carry, (string) $line->quantity, 2), '0');
-                $used = $lines->reduce(fn (string $carry, $line) => bcadd($carry, (string) $line->quantity_consumed, 2), '0');
-
-                return [
-                    'product' => $lines->first()->product,
-                    'issued' => $issued,
-                    'used' => $used,
-                    'expected' => bcsub($issued, $used, 2),
-                ];
-            })
-            ->filter(fn ($row) => bccomp($row['expected'], '0', 2) > 0)
+        return $this->result->materials()->with('workOrderMaterial.product')->get()
+            ->filter(fn ($row) => bccomp((string) $row->quantity_returned, '0', 2) > 0)
+            ->map(fn ($row) => [
+                'product' => $row->workOrderMaterial->product,
+                'planned' => (string) $row->workOrderMaterial->quantity_planned,
+                'used' => (string) $row->quantity,
+                'expected' => (string) $row->quantity_returned,
+            ])
             ->values();
     }
 
@@ -177,7 +171,7 @@ new #[Title('Material Return')] class extends Component {
         <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <div class="{{ $grid }} hidden md:grid px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10 rounded-t-xl">
                 <span>{{ __('Material') }}</span>
-                <span class="text-right">{{ __('Issued') }}</span>
+                <span class="text-right">{{ __('Planned') }}</span>
                 <span class="text-right">{{ __('Used') }}</span>
                 <span class="text-right">{{ __('Expected back') }}</span>
                 <span class="text-right">{{ __('Received') }}</span>
@@ -193,7 +187,7 @@ new #[Title('Material Return')] class extends Component {
                         <p class="font-data text-[11px] text-accent">{{ $p->product_code }}</p>
                     </div>
 
-                    @foreach ([__('Issued') => $row['issued'], __('Used') => $row['used'], __('Expected back') => $row['expected']] as $label => $value)
+                    @foreach ([__('Planned') => $row['planned'], __('Used') => $row['used'], __('Expected back') => $row['expected']] as $label => $value)
                         <div class="md:text-right text-xs">
                             <p class="md:hidden text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ $label }}</p>
                             <p class="md:pt-2 font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $this->formatQuantity($value) }} {{ $p->unit_of_measure }}</p>

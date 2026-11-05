@@ -108,4 +108,20 @@ class Product extends Model
     {
         return bccomp((string) $this->current_stock, (string) $this->reorder_point, 2) <= 0;
     }
+
+    public function averageUnitCost(): string
+    {
+        $lots = $this->inventoryLots()->where('quantity_remaining', '>', 0)->get();
+        $totalQty = $lots->reduce(fn (string $carry, InventoryLot $lot) => bcadd($carry, (string) $lot->quantity_remaining, 2), '0');
+
+        if (bccomp($totalQty, '0', 2) > 0) {
+            $totalValue = $lots->reduce(fn (string $carry, InventoryLot $lot) => bcadd($carry, (string) $lot->value_remaining, 2), '0');
+
+            return bcdiv($totalValue, $totalQty, 2);
+        }
+
+        $lastLot = $this->inventoryLots()->orderByDesc('id')->first();
+
+        return $lastLot ? (string) $lastLot->unit_cost : '0';
+    }
 }

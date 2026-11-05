@@ -26,6 +26,8 @@ enum AccountSystemRole: string
     case SalesRevenue = 'sales_revenue';
     case VatOut = 'vat_out';
     case SalesReturns = 'sales_returns';
+    case VatPayable = 'vat_payable';
+    case InventoryAdjustment = 'inventory_adjustment';
 
     public function label(): string
     {
@@ -52,6 +54,8 @@ enum AccountSystemRole: string
             self::SalesRevenue => 'Penjualan',
             self::VatOut => 'PPN Keluaran',
             self::SalesReturns => 'Retur Penjualan',
+            self::VatPayable => 'Utang PPN',
+            self::InventoryAdjustment => 'Selisih Stok Opname',
         };
     }
 
@@ -80,6 +84,8 @@ enum AccountSystemRole: string
             self::SalesRevenue => 'Dikredit sebesar DPP faktur penjualan (barang setelah diskon ditambah biaya lain).',
             self::VatOut => 'Dikredit sebesar PPN dari faktur penjualan; utang pajak yang dikurangi PPN Masukan setiap bulan.',
             self::SalesReturns => 'Akun kontra pendapatan: didebit sebesar DPP barang yang diretur pelanggan setelah difakturkan.',
+            self::VatPayable => 'Diisi saat tutup PPN bulanan: PPN Keluaran dan PPN Masukan dinolkan ke sini. Saldo kredit = kurang bayar (utang ke kas negara), saldo debit = lebih bayar (dibawa ke bulan berikutnya).',
+            self::InventoryAdjustment => 'Menampung selisih antara stok sistem dan stok fisik hasil stock opname gudang. Didebit saat stok fisik lebih kecil (kekurangan), dikredit saat stok fisik lebih besar (kelebihan).',
         };
     }
 }

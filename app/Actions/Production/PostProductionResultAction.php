@@ -35,11 +35,6 @@ class PostProductionResultAction
                 throw new WorkOrderNotRecordableException($workOrder, WorkOrderNotRecordableException::NOT_IN_PROGRESS);
             }
 
-            $openIssue = $workOrder->materialIssues()->where('status', DocumentStatus::Draft->value)->first();
-            if ($openIssue) {
-                throw new InvalidProductionResultException(InvalidProductionResultException::OPEN_ISSUE_DRAFT, $openIssue->issue_number);
-            }
-
             $result->production_date = today();
 
             $data = new ProductionResultData(
@@ -49,28 +44,35 @@ class PostProductionResultAction
                 machineHours: (string) $result->machine_hours,
                 materialsUsed: $result->usedQuantities(),
                 laborHours: $result->labors->mapWithKeys(fn ($labor) => [$labor->employee_id => (string) $labor->hours])->all(),
+                materialsReturned: $result->returnedQuantities(),
             );
             $this->validate->handle($workOrder, $data);
 
-            $issueLines = $workOrder->postedIssueItems(lock: true);
+            $materials = $workOrder->materials()->with('stockMovements')->lockForUpdate()->get();
             $result->materials()->delete();
             $materialCost = '0';
 
-            foreach (SaveProductionResultDraftAction::allocate($issueLines, $data->materialsUsed) as [$item, $used]) {
-                $leftover = bcsub((string) $item->quantity, $used, 2);
-                $cost = bcsub((string) $item->total_cost, $item->leftoverValue($leftover), 2);
+            foreach ($materials as $material) {
+                $used = $data->materialsUsed[$material->product_id] ?? '0';
+                $returned = $data->materialsReturned[$material->product_id] ?? '0';
+                if (bccomp($used, '0', 2) <= 0 && bccomp($returned, '0', 2) <= 0) {
+                    continue;
+                }
+
+                $cost = bcsub((string) $material->total_cost, $material->leftoverValue($returned), 2);
 
                 $row = $result->materials()->make([
-                    'material_issue_item_id' => $item->id,
-                    'product_id' => $item->product_id,
+                    'work_order_material_id' => $material->id,
+                    'product_id' => $material->product_id,
                     'quantity' => $used,
+                    'quantity_returned' => $returned,
                 ]);
-                $row->unit_cost = bcdiv($cost, $used, 2);
+                $row->unit_cost = bccomp($used, '0', 2) > 0 ? bcdiv($cost, $used, 2) : '0.00';
                 $row->total_cost = $cost;
                 $row->save();
 
-                $item->quantity_consumed = $used;
-                $item->save();
+                $material->quantity_consumed = $used;
+                $material->save();
 
                 $materialCost = bcadd($materialCost, $cost, 2);
             }

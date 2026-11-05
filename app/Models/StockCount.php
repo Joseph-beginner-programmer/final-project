@@ -4,7 +4,7 @@ namespace App\Models;
 
 use App\Enums\DocumentStatus;
 use App\Exceptions\InvalidDocumentStatusTransitionException;
-use App\Exceptions\MaterialIssueNotEditableException;
+use App\Exceptions\StockCountNotEditableException;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -15,8 +15,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int $id
  * @property DocumentStatus $status
  */
-#[Guarded(['id', 'issue_number', 'status', 'issued_by', 'issued_at'])]
-class MaterialIssue extends Model
+#[Guarded(['id', 'count_number', 'status', 'posted_by', 'posted_at'])]
+class StockCount extends Model
 {
     use HasFactory;
 
@@ -24,18 +24,14 @@ class MaterialIssue extends Model
     {
         return [
             'status' => DocumentStatus::class,
-            'issued_at' => 'datetime',
+            'count_date' => 'date',
+            'posted_at' => 'datetime',
         ];
-    }
-
-    public function workOrder(): BelongsTo
-    {
-        return $this->belongsTo(WorkOrder::class);
     }
 
     public function items(): HasMany
     {
-        return $this->hasMany(MaterialIssueItem::class);
+        return $this->hasMany(StockCountItem::class);
     }
 
     public function createdBy(): BelongsTo
@@ -43,15 +39,15 @@ class MaterialIssue extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
-    public function issuedBy(): BelongsTo
+    public function postedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'issued_by');
+        return $this->belongsTo(User::class, 'posted_by');
     }
 
     public function transitionTo(DocumentStatus $target): void
     {
         if (! $this->status->canTransitionTo($target)) {
-            throw new InvalidDocumentStatusTransitionException($this->status, $target, "material issue {$this->issue_number}");
+            throw new InvalidDocumentStatusTransitionException($this->status, $target, "stock count {$this->count_number}");
         }
 
         $this->status = $target;
@@ -61,12 +57,12 @@ class MaterialIssue extends Model
     public function ensureIsDraft(): void
     {
         if ($this->status !== DocumentStatus::Draft) {
-            throw new MaterialIssueNotEditableException($this);
+            throw new StockCountNotEditableException($this);
         }
     }
 
-    public function totalCost(): string
+    public function netAdjustmentValue(): string
     {
-        return $this->items->reduce(fn (string $carry, MaterialIssueItem $item) => bcadd($carry, (string) $item->total_cost, 2), '0');
+        return $this->items->reduce(fn (string $carry, StockCountItem $item) => bcadd($carry, (string) $item->adjustment_value, 2), '0');
     }
 }

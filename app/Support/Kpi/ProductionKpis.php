@@ -278,7 +278,7 @@ class ProductionKpis
      */
     public static function attention(CarbonInterface $today): array
     {
-        $open = [WorkOrderStatus::Released->value, WorkOrderStatus::InProgress->value];
+        $open = [WorkOrderStatus::InProgress->value];
 
         return [
             'overdue' => WorkOrder::query()
@@ -299,10 +299,7 @@ class ProductionKpis
             'awaiting_return' => ProductionResult::query()
                 ->where('status', DocumentStatus::Posted->value)
                 ->whereDoesntHave('materialReturns', fn (Builder $q) => $q->where('status', DocumentStatus::Posted->value))
-                ->with('workOrder')
-                ->get()
-                ->filter(fn (ProductionResult $result) => $result->workOrder->postedIssueItems()
-                    ->contains(fn ($line) => bccomp((string) $line->quantity, (string) $line->quantity_consumed, 2) > 0))
+                ->whereHas('materials', fn (Builder $q) => $q->where('quantity_returned', '>', 0))
                 ->count(),
         ];
     }

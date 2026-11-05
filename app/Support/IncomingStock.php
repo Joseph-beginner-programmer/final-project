@@ -44,7 +44,7 @@ class IncomingStock
         $workOrders = WorkOrder::query()
             ->whereIn('product_id', $productIds)
             ->when($exceptWorkOrderId, fn ($q) => $q->whereKeyNot($exceptWorkOrderId))
-            ->whereIn('status', [WorkOrderStatus::Released->value, WorkOrderStatus::InProgress->value])
+            ->where('status', WorkOrderStatus::InProgress->value)
             ->with('workCenter')
             ->get();
         foreach ($workOrders as $wo) {

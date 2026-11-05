@@ -379,19 +379,18 @@ class ExecutiveKpis
     }
 
     /**
-     * @return array{draft: int, released: int, in_progress: int, completed: int}
+     * @return array{draft: int, in_progress: int, completed: int}
      */
     public function workOrderPipeline(): array
     {
         $open = WorkOrder::query()
-            ->whereIn('status', [WorkOrderStatus::Draft->value, WorkOrderStatus::Released->value, WorkOrderStatus::InProgress->value])
+            ->whereIn('status', [WorkOrderStatus::Draft->value, WorkOrderStatus::InProgress->value])
             ->groupBy('status')
             ->selectRaw('status, COUNT(*) as total')
             ->pluck('total', 'status');
 
         return [
             'draft' => (int) ($open[WorkOrderStatus::Draft->value] ?? 0),
-            'released' => (int) ($open[WorkOrderStatus::Released->value] ?? 0),
             'in_progress' => (int) ($open[WorkOrderStatus::InProgress->value] ?? 0),
             'completed' => ProductionResult::query()
                 ->where('status', DocumentStatus::Posted->value)

@@ -112,16 +112,16 @@ new #[Title('Wage Payment')] class extends Component {
         @endif
     </div>
 
-    <div class="mt-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="mt-6 grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 divide-x divide-y lg:divide-y-0 divide-zinc-100 dark:divide-white/5">
         @foreach ([
             [__('Amount paid'), $this->rupiah($payment->total_amount)],
             [__('Employees'), $payment->lines->count()],
             [__('Hours'), $this->hours($payment->lines->sum(fn ($line) => (float) $line->hours))],
             [__('Paid from'), $payment->cashAccount->account_name.' · '.$payment->payment_date->translatedFormat('d M Y')],
         ] as [$tileLabel, $value])
-            <div class="rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 p-4">
+            <div class="px-4 py-3.5">
                 <p class="text-xs font-medium text-zinc-500 dark:text-zinc-400">{{ $tileLabel }}</p>
-                <p class="mt-2 text-lg font-semibold text-zinc-900 dark:text-white">{{ $value }}</p>
+                <p class="mt-1.5 font-display text-lg font-semibold text-zinc-900 dark:text-white">{{ $value }}</p>
             </div>
         @endforeach
     </div>

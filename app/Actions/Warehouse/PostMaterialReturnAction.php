@@ -34,29 +34,29 @@ class PostMaterialReturnAction
 
             $lines = SaveMaterialReturnDraftAction::checkReturnable($result, $returnedByProduct, $return, lock: true);
 
-            $lotIds = $lines->flatMap(fn ($line) => $line->stockMovements->pluck('inventory_lot_id'))->unique()->sort()->values();
+            $lotIds = $lines->flatMap(fn (array $row) => $row['material']->stockMovements->pluck('inventory_lot_id'))->unique()->sort()->values();
             $lots = InventoryLot::whereIn('id', $lotIds)->orderBy('id')->lockForUpdate()->get()->keyBy('id');
 
             $return->items()->delete();
 
             foreach (SaveMaterialReturnDraftAction::allocate($lines, $returnedByProduct) as $row) {
-                $line = $row['line'];
+                $material = $row['material'];
                 $item = $return->items()->create([
-                    'material_issue_item_id' => $line->id,
-                    'product_id' => $line->product_id,
+                    'work_order_material_id' => $material->id,
+                    'product_id' => $material->product_id,
                     'quantity_expected' => $row['expected'],
                     'quantity' => $row['quantity'],
                 ]);
 
                 $returnedValue = '0';
-                foreach ($line->reverseDraws($row['quantity']) as $part) {
+                foreach ($material->reverseDraws($row['quantity']) as $part) {
                     $lot = $lots[$part['movement']->inventory_lot_id];
                     $lot->quantity_remaining = bcadd((string) $lot->quantity_remaining, $part['quantity'], 2);
                     $lot->value_remaining = bcadd((string) $lot->value_remaining, $part['value'], 2);
                     $lot->save();
 
                     app(CreateStockMovementAction::class)->handle(new CreateStockMovementData(
-                        productId: $line->product_id,
+                        productId: $material->product_id,
                         inventoryLotId: $lot->id,
                         direction: Direction::In,
                         type: StockMovementType::MaterialReturn,
@@ -72,7 +72,7 @@ class PostMaterialReturnAction
                 }
 
                 $item->total_cost = $returnedValue;
-                $item->variance_value = bcsub($line->leftoverValue($row['expected']), $returnedValue, 2);
+                $item->variance_value = bcsub($material->leftoverValue($row['expected']), $returnedValue, 2);
                 $item->save();
             }
 
@@ -118,10 +118,10 @@ class PostMaterialReturnAction
         $rows = [];
         $netVariance = '0';
         foreach (SaveMaterialReturnDraftAction::allocate($lines, $returnedByProduct) as $row) {
-            $line = $row['line'];
-            $returned = array_reduce($line->reverseDraws($row['quantity']), fn (string $carry, array $part) => bcadd($carry, $part['value'], 2), '0');
-            $rows[] = ['type' => $line->product->type, 'amount' => $returned];
-            $netVariance = bcadd($netVariance, bcsub($line->leftoverValue($row['expected']), $returned, 2), 2);
+            $material = $row['material'];
+            $returned = array_reduce($material->reverseDraws($row['quantity']), fn (string $carry, array $part) => bcadd($carry, $part['value'], 2), '0');
+            $rows[] = ['type' => $material->product->type, 'amount' => $returned];
+            $netVariance = bcadd($netVariance, bcsub($material->leftoverValue($row['expected']), $returned, 2), 2);
         }
 
         return self::journalPlan($rows, $netVariance);

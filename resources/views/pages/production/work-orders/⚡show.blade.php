@@ -4,6 +4,7 @@ use App\Actions\Production\CancelWorkOrderAction;
 use App\Actions\Production\ReleaseWorkOrderAction;
 use App\Enums\WorkOrderStatus;
 use App\Exceptions\InactiveEmployeeException;
+use App\Exceptions\InsufficientStockException;
 use App\Exceptions\InvalidWorkOrderStatusTransitionException;
 use App\Exceptions\MissingLaborRateException;
 use App\Exceptions\MissingOverheadRateException;
@@ -61,8 +62,8 @@ new #[Title('Work Order Detail')] class extends Component {
         Gate::authorize('release', $this->workOrder);
 
         try {
-            app(ReleaseWorkOrderAction::class)->handle($this->workOrder);
-        } catch (WorkOrderRequiresLaborException|InvalidWorkOrderStatusTransitionException|InactiveEmployeeException|MissingLaborRateException|MissingOverheadRateException $e) {
+            app(ReleaseWorkOrderAction::class)->handle($this->workOrder, Auth::id());
+        } catch (WorkOrderRequiresLaborException|InvalidWorkOrderStatusTransitionException|InactiveEmployeeException|MissingLaborRateException|MissingOverheadRateException|InsufficientStockException $e) {
             Flux::toast(variant: 'danger', text: $e->userMessage());
 
             return;
@@ -95,11 +96,11 @@ new #[Title('Work Order Detail')] class extends Component {
     #[Computed]
     public function plannedMaterials(): Collection
     {
-        $issued = $this->workOrder->issuedQuantities();
-        $checkShortage = ! $this->workOrder->status->isTerminal();
+        $drawn = $this->workOrder->status !== WorkOrderStatus::Draft;
+        $checkShortage = ! $this->workOrder->status->isTerminal() && ! $drawn;
 
-        return $this->workOrder->materials->map(function ($material) use ($issued, $checkShortage) {
-            $alreadyIssued = $issued[$material->product_id] ?? '0';
+        return $this->workOrder->materials->map(function ($material) use ($drawn, $checkShortage) {
+            $alreadyIssued = $drawn ? (string) $material->quantity_planned : '0';
             $stillNeeded = bcsub((string) $material->quantity_planned, $alreadyIssued, 2);
             $stillNeeded = bccomp($stillNeeded, '0', 2) > 0 ? $stillNeeded : '0';
             $stock = (string) $material->product->current_stock;
@@ -160,27 +161,15 @@ new #[Title('Work Order Detail')] class extends Component {
             return ['percentage' => 0, 'barPercentage' => 0, 'stage' => $this->workOrder->status->label()];
         }
 
-        $issued = $this->workOrder->issuedQuantities();
-        $shares = $materials->map(function ($material) use ($issued) {
-            $planned = (string) $material->quantity_planned;
-            if (bccomp($planned, '0', 2) <= 0) {
-                return '1';
-            }
-            $share = bcdiv($issued[$material->product_id] ?? '0', $planned, 4);
-
-            return bccomp($share, '1', 4) > 0 ? '1' : $share;
-        });
-
-        $average = bcdiv($shares->reduce(fn (string $carry, string $share) => bcadd($carry, $share, 4), '0'), (string) $shares->count(), 4);
-        $percentage = (int) floor((float) bcmul($average, '50', 4));
-        $fullyIssued = $shares->filter(fn ($share) => bccomp($share, '1', 4) === 0)->count();
+        $drawn = $this->workOrder->status !== WorkOrderStatus::Draft;
+        $percentage = $drawn ? 50 : 0;
 
         return [
             'percentage' => $percentage,
             'barPercentage' => $percentage,
-            'stage' => $percentage === 0
-                ? __('Waiting for materials')
-                : __('Materials issued :done/:total', ['done' => $fullyIssued, 'total' => $shares->count()]),
+            'stage' => $drawn
+                ? __('Materials drawn, awaiting result')
+                : __('Waiting for materials'),
         ];
     }
 
@@ -197,7 +186,6 @@ new #[Title('Work Order Detail')] class extends Component {
     {
         return match ($status) {
             WorkOrderStatus::Draft => 'bg-zinc-100 text-zinc-600 border-zinc-200 dark:bg-white/5 dark:text-zinc-400 dark:border-white/10',
-            WorkOrderStatus::Released => 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-500/10 dark:text-blue-400 dark:border-blue-500/20',
             WorkOrderStatus::InProgress => 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-500/10 dark:text-amber-400 dark:border-amber-500/20',
             WorkOrderStatus::Completed => 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20',
             WorkOrderStatus::Cancelled => 'bg-zinc-100 text-zinc-500 border-zinc-200 line-through dark:bg-white/5 dark:text-zinc-500 dark:border-white/10',
@@ -313,8 +301,8 @@ new #[Title('Work Order Detail')] class extends Component {
                     <flux:subheading>
                         {{ __('It will not be produced. A cancelled work order cannot be reopened — create a new one if it is needed later.') }}
                     </flux:subheading>
-                    @if ($workOrder->status === WorkOrderStatus::Released)
-                        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Material issue drafts for it are cancelled too. Nothing has left the warehouse yet.') }}</p>
+                    @if ($workOrder->status === WorkOrderStatus::InProgress)
+                        <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Materials already drawn for it are returned to stock.') }}</p>
                     @endif
                 </div>
 
@@ -342,7 +330,7 @@ new #[Title('Work Order Detail')] class extends Component {
                 <div>
                     <flux:heading size="lg">{{ __('Release this work order?') }}</flux:heading>
                     <flux:subheading>
-                        {{ __('Releasing hands the work order to the production floor. It can no longer go back to Draft, and the warehouse can start issuing materials for it.') }}
+                        {{ __('Releasing hands the work order to the production floor. It can no longer go back to Draft, and its planned materials are drawn from stock immediately.') }}
                     </flux:subheading>
                     <p class="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
                         {{ __('Labor and overhead rates are updated to the rates in effect today.') }}
@@ -363,7 +351,7 @@ new #[Title('Work Order Detail')] class extends Component {
                                 </li>
                             @endforeach
                         </ul>
-                        <p class="mt-2 text-[11px] text-amber-700 dark:text-amber-400">{{ __('You can still release it. The warehouse cannot issue more than what is in stock.') }}</p>
+                        <p class="mt-2 text-[11px] text-amber-700 dark:text-amber-400">{{ __('The release will be blocked until stock covers every planned material.') }}</p>
                     </div>
                 @endif
 
@@ -380,95 +368,76 @@ new #[Title('Work Order Detail')] class extends Component {
         </flux:modal>
     @endcan
 
-    <div class="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
-            <h2 class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Product') }}</h2>
-            <p class="mt-3 font-data text-xs text-accent">{{ $workOrder->product->product_code }}</p>
-            <p class="font-display text-base font-bold text-zinc-900 dark:text-white">{{ $workOrder->product->product_name }}</p>
-            <p class="text-xs text-zinc-500 dark:text-zinc-400">{{ $workOrder->product->type->label() }}</p>
-
-            <dl class="mt-4 pt-3 border-t border-zinc-100 dark:border-white/10 space-y-2 text-xs">
-                <div class="flex items-center justify-between gap-2">
-                    <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Formula') }}</dt>
-                    <dd class="font-data text-zinc-800 dark:text-zinc-200">{{ $workOrder->productionFormula->formula_code }}</dd>
+    @php($done = $this->outputProgress['percentage'] === 100)
+    <div class="mt-6 rounded-xl border border-zinc-200 dark:border-white/10 bg-gradient-to-br from-accent/[0.07] to-transparent dark:from-accent/10 p-5 sm:p-6 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
+        <div class="flex flex-wrap items-start justify-between gap-6">
+            <div>
+                <h2 class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Target Output') }}</h2>
+                <p class="mt-1.5 font-display text-4xl font-semibold tracking-tight text-zinc-900 dark:text-white">
+                    {{ $this->formatQuantity((string) $workOrder->quantity_target) }}
+                    <span class="text-lg font-medium text-zinc-500 dark:text-zinc-400">{{ $workOrder->product->unit_of_measure }}</span>
+                </p>
+                <p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    {{ $workOrder->product->product_name }} <span class="font-data text-accent">{{ $workOrder->product->product_code }}</span> · {{ __($workOrder->workCenter->name) }} · <span class="font-data">{{ $workOrder->productionFormula->formula_code }}</span>
+                </p>
+            </div>
+            <div class="flex gap-6 text-right">
+                <div>
+                    <p class="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Good') }}</p>
+                    <p class="mt-1 font-display text-lg font-semibold text-zinc-900 dark:text-white">{{ $this->formatQuantity((string) $workOrder->quantity_good) }}</p>
                 </div>
-                <div class="flex items-center justify-between gap-2">
-                    <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Work Center') }}</dt>
-                    <dd class="text-zinc-800 dark:text-zinc-200">{{ __($workOrder->workCenter->name) }}</dd>
-                </div>
-                <div class="flex items-center justify-between gap-2">
-                    <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Recipe basis') }}</dt>
-                    <dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->formatQuantity((string) $workOrder->productionFormula->output_quantity) }} {{ $workOrder->product->unit_of_measure }}</dd>
-                </div>
-            </dl>
-        </div>
-
-        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-5 motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
-            <h2 class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Schedule') }}</h2>
-            <dl class="mt-3 space-y-2.5 text-sm">
-                <div class="flex items-center justify-between gap-2">
-                    <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Planned Start') }}</dt>
-                    <dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $workOrder->planned_start_date->format('d M Y') }}</dd>
-                </div>
-                <div class="flex items-center justify-between gap-2">
-                    <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Planned End') }}</dt>
-                    <dd>
-                        @if ($isLate)
-                            <span class="inline-flex items-center gap-1 rounded-full border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 font-data tabular-nums text-xs text-red-700 dark:text-red-400">
-                                <flux:icon.clock variant="micro" class="size-3" />
-                                {{ $workOrder->planned_end_date->format('d M Y') }}
-                            </span>
-                        @else
-                            <span class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $workOrder->planned_end_date->format('d M Y') }}</span>
-                        @endif
-                    </dd>
-                </div>
-                <div class="flex items-center justify-between gap-2">
-                    <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Duration') }}</dt>
-                    <dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $workOrder->planned_start_date->diffInDays($workOrder->planned_end_date) + 1 }} {{ __('days') }}</dd>
-                </div>
-                <div class="flex items-center justify-between gap-2">
-                    <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Last printed') }}</dt>
-                    <dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $workOrder->printed_at?->format('d M Y H:i') ?? '—' }}</dd>
-                </div>
-            </dl>
-        </div>
-
-        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 flex flex-col h-full overflow-hidden motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
-            <div class="p-5">
-                <h2 class="text-[11px] font-bold uppercase tracking-widest text-zinc-500 dark:text-zinc-400">{{ __('Output') }}</h2>
-                <dl class="mt-3 space-y-2.5 text-sm">
-                    <div class="flex items-center justify-between gap-2">
-                        <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Good') }}</dt>
-                        <dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->formatQuantity((string) $workOrder->quantity_good) }} {{ $workOrder->product->unit_of_measure }}</dd>
-                    </div>
-                    <div class="flex items-center justify-between gap-2">
-                        <dt class="text-zinc-500 dark:text-zinc-400">{{ __('Reject') }}</dt>
-                        <dd class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->formatQuantity((string) $workOrder->quantity_reject) }} {{ $workOrder->product->unit_of_measure }}</dd>
-                    </div>
-                </dl>
-
-                <div class="mt-4">
-                    <div class="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
-                        <span>{{ __('Progress') }}</span>
-                        <span class="font-data tabular-nums">{{ $this->outputProgress['percentage'] }}%</span>
-                    </div>
-                    @php($done = $this->outputProgress['percentage'] === 100)
-                    <div class="relative mt-1.5">
-                        <div class="h-1.5 rounded-full bg-zinc-100 dark:bg-white/10 overflow-hidden"
-                             role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $this->outputProgress['barPercentage'] }}" aria-valuetext="{{ $this->outputProgress['percentage'] }}% — {{ $this->outputProgress['stage'] }}">
-                            <div class="h-full w-full origin-left rounded-full {{ $done ? 'bg-green-500' : 'bg-accent' }} transition-transform duration-500 motion-reduce:transition-none" style="transform: scaleX({{ $this->outputProgress['barPercentage'] / 100 }});"></div>
-                        </div>
-                        <span class="absolute left-1/2 -top-0.5 h-2.5 w-px bg-zinc-300 dark:bg-white/25" aria-hidden="true"></span>
-                    </div>
-                    <p class="mt-1.5 text-[11px] {{ $done ? 'text-green-600 dark:text-green-400' : 'text-zinc-500 dark:text-zinc-400' }}">{{ $this->outputProgress['stage'] }}</p>
+                <div>
+                    <p class="text-[11px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">{{ __('Reject') }}</p>
+                    <p class="mt-1 font-display text-lg font-semibold text-zinc-900 dark:text-white">{{ $this->formatQuantity((string) $workOrder->quantity_reject) }}</p>
                 </div>
             </div>
+        </div>
 
-            <div class="mt-auto px-5 py-4 bg-accent">
-                <p class="text-[10px] font-semibold uppercase tracking-widest text-accent-foreground/70">{{ __('Target Output') }}</p>
-                <p class="font-data text-xl font-medium tabular-nums text-accent-foreground mt-0.5">{{ $this->formatQuantity((string) $workOrder->quantity_target) }} {{ $workOrder->product->unit_of_measure }}</p>
+        <div class="mt-5">
+            <div class="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+                <span>{{ __('Progress') }}</span>
+                <span class="font-data tabular-nums">{{ $this->outputProgress['percentage'] }}%</span>
             </div>
+            <div class="relative mt-1.5">
+                <div class="h-1.5 rounded-full bg-zinc-200/70 dark:bg-white/10 overflow-hidden"
+                     role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $this->outputProgress['barPercentage'] }}" aria-valuetext="{{ $this->outputProgress['percentage'] }}% — {{ $this->outputProgress['stage'] }}">
+                    <div class="h-full w-full origin-left rounded-full {{ $done ? 'bg-green-500' : 'bg-accent' }} transition-transform duration-500 motion-reduce:transition-none" style="transform: scaleX({{ $this->outputProgress['barPercentage'] / 100 }});"></div>
+                </div>
+                <span class="absolute left-1/2 -top-0.5 h-2.5 w-px bg-zinc-300 dark:bg-white/25" aria-hidden="true"></span>
+            </div>
+            <p class="mt-1.5 text-[11px] {{ $done ? 'text-green-600 dark:text-green-400' : 'text-zinc-500 dark:text-zinc-400' }}">{{ $this->outputProgress['stage'] }}</p>
+        </div>
+    </div>
+
+    <div class="mt-4 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 divide-x divide-y lg:divide-y-0 divide-zinc-100 dark:divide-white/5 motion-safe:animate-fade-slide-up" style="animation-delay: 60ms;">
+        <div class="px-4 py-3">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Recipe basis') }}</p>
+            <p class="mt-1 font-data tabular-nums text-sm text-zinc-800 dark:text-zinc-200">{{ $this->formatQuantity((string) $workOrder->productionFormula->output_quantity) }} {{ $workOrder->product->unit_of_measure }}</p>
+        </div>
+        <div class="px-4 py-3">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Planned Start') }}</p>
+            <p class="mt-1 font-data tabular-nums text-sm text-zinc-800 dark:text-zinc-200">{{ $workOrder->planned_start_date->format('d M Y') }}</p>
+        </div>
+        <div class="px-4 py-3">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Planned End') }}</p>
+            <p class="mt-1">
+                @if ($isLate)
+                    <span class="inline-flex items-center gap-1 rounded-full border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 font-data tabular-nums text-xs text-red-700 dark:text-red-400">
+                        <flux:icon.clock variant="micro" class="size-3" />
+                        {{ $workOrder->planned_end_date->format('d M Y') }}
+                    </span>
+                @else
+                    <span class="font-data tabular-nums text-sm text-zinc-800 dark:text-zinc-200">{{ $workOrder->planned_end_date->format('d M Y') }}</span>
+                @endif
+            </p>
+        </div>
+        <div class="px-4 py-3">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Duration') }}</p>
+            <p class="mt-1 font-data tabular-nums text-sm text-zinc-800 dark:text-zinc-200">{{ $workOrder->planned_start_date->diffInDays($workOrder->planned_end_date) + 1 }} {{ __('days') }}</p>
+        </div>
+        <div class="px-4 py-3">
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400">{{ __('Last printed') }}</p>
+            <p class="mt-1 font-data tabular-nums text-sm text-zinc-800 dark:text-zinc-200">{{ $workOrder->printed_at?->format('d M Y H:i') ?? '—' }}</p>
         </div>
     </div>
 
@@ -563,7 +532,7 @@ new #[Title('Work Order Detail')] class extends Component {
 
     <div class="mt-8 motion-safe:animate-fade-slide-up" style="animation-delay: 130ms;">
         <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300 mb-1">{{ __('Planned Materials') }}</h2>
-        <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-3">{{ __('Copied from the formula when this work order was created. Actual consumption is recorded when materials are issued.') }}</p>
+        <p class="text-xs text-zinc-500 dark:text-zinc-400 mb-3">{{ __('Copied from the formula when this work order was created. They are drawn from stock the moment the work order is released.') }}</p>
 
         <div class="hidden sm:block overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
             <table class="w-full text-xs border-collapse">
@@ -572,7 +541,7 @@ new #[Title('Work Order Detail')] class extends Component {
                         <th class="py-2 px-3">{{ __('Material') }}</th>
                         <th class="py-2 px-3">{{ __('Type') }}</th>
                         <th class="py-2 px-3 text-right">{{ __('Planned') }}</th>
-                        <th class="py-2 px-3 text-right">{{ __('Already issued') }}</th>
+                        <th class="py-2 px-3 text-right">{{ __('Drawn') }}</th>
                         <th class="py-2 px-3 text-right">{{ __('In Stock') }}</th>
                         <th class="py-2 px-3 text-right">{{ __('Incoming') }}</th>
                         <th class="py-2 px-3">{{ __('Status') }}</th>
@@ -631,7 +600,7 @@ new #[Title('Work Order Detail')] class extends Component {
                         </div>
                         <div class="text-right">
                             <p class="font-data font-medium tabular-nums text-zinc-900 dark:text-white whitespace-nowrap">{{ $this->formatQuantity($row['required']) }} {{ $unitOfMeasure }}</p>
-                            <p class="font-data text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{{ __('Already issued') }} {{ $this->formatQuantity($row['issued']) }}</p>
+                            <p class="font-data text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{{ __('Drawn') }} {{ $this->formatQuantity($row['issued']) }}</p>
                         </div>
                     </div>
                     <div class="mt-2 flex flex-wrap items-center justify-between gap-2">

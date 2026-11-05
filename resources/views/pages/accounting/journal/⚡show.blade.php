@@ -49,10 +49,10 @@ new #[Title('Journal Entry')] class extends Component {
 
         return match ($this->journalEntry->source_type) {
             'purchase_order_receipt' => __('Purchase Order Receipt'),
-            'material_issue' => __('Material Issue'),
             'production_result' => __('Production Result'),
             'production_receipt' => __('Production Receipt'),
             'material_return' => __('Material Return'),
+            'stock_count' => __('Stock Count'),
             'sales_delivery' => __('Sales Delivery'),
             'purchase_invoice' => __('Purchase Invoice'),
             'purchase_payment' => __('Purchase Payment'),
@@ -102,16 +102,16 @@ new #[Title('Journal Entry')] class extends Component {
         @endcan
     </div>
 
-    <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
+    <div class="mt-6 grid grid-cols-1 sm:grid-cols-3 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 divide-y sm:divide-y-0 sm:divide-x divide-zinc-100 dark:divide-white/5 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
+        <div class="p-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{{ __('Date') }}</p>
             <p class="font-data tabular-nums text-sm text-zinc-800 dark:text-zinc-200">{{ $journalEntry->entry_date->format('d M Y') }}</p>
         </div>
-        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 motion-safe:animate-fade-slide-up" style="animation-delay: 70ms;">
+        <div class="p-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{{ __('Type') }}</p>
             <p class="text-sm text-zinc-800 dark:text-zinc-200">{{ $journalEntry->entry_type->label() }}</p>
         </div>
-        <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
+        <div class="p-4">
             <p class="text-[11px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 mb-2">{{ __('Created By') }}</p>
             <p class="text-sm text-zinc-800 dark:text-zinc-200">{{ $journalEntry->createdBy->name }}</p>
         </div>

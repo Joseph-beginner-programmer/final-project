@@ -10,13 +10,12 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Collection;
 
 /**
  * @property int $id
  * @property WorkOrderStatus $status
  */
-#[Guarded(['id', 'wo_number', 'status', 'quantity_good', 'quantity_reject', 'overhead_rate', 'planned_overhead_cost', 'printed_at', 'cancelled_by', 'cancelled_at', 'cancel_reason'])]
+#[Guarded(['id', 'wo_number', 'status', 'quantity_good', 'quantity_reject', 'overhead_rate', 'planned_overhead_cost', 'printed_at', 'cancelled_by', 'cancelled_at', 'cancel_reason', 'released_at'])]
 class WorkOrder extends Model
 {
     use HasFactory;
@@ -35,6 +34,7 @@ class WorkOrder extends Model
             'planned_overhead_cost' => 'decimal:2',
             'printed_at' => 'datetime',
             'cancelled_at' => 'datetime',
+            'released_at' => 'datetime',
         ];
     }
 
@@ -72,28 +72,6 @@ class WorkOrder extends Model
         return $this->hasMany(WorkOrderLabor::class);
     }
 
-    public function materialIssues(): HasMany
-    {
-        return $this->hasMany(MaterialIssue::class);
-    }
-
-    /**
-     * @return Collection<int, MaterialIssueItem>
-     */
-    public function postedIssueItems(bool $lock = false): Collection
-    {
-        return MaterialIssueItem::query()
-            ->select('material_issue_items.*')
-            ->join('material_issues', 'material_issues.id', '=', 'material_issue_items.material_issue_id')
-            ->where('material_issues.work_order_id', $this->id)
-            ->where('material_issues.status', 'posted')
-            ->orderBy('material_issues.issued_at')
-            ->orderBy('material_issues.id')
-            ->with(['product', 'stockMovements'])
-            ->when($lock, fn ($query) => $query->lockForUpdate())
-            ->get();
-    }
-
     public function productionResult(): HasOne
     {
         return $this->hasOne(ProductionResult::class);
@@ -102,25 +80,6 @@ class WorkOrder extends Model
     public function canRecordResult(): bool
     {
         return $this->status === WorkOrderStatus::InProgress;
-    }
-
-    public function canReceiveMaterials(): bool
-    {
-        return in_array($this->status, [WorkOrderStatus::Released, WorkOrderStatus::InProgress], true);
-    }
-
-    /**
-     * @return array<int, string>
-     */
-    public function issuedQuantities(): array
-    {
-        return MaterialIssueItem::query()
-            ->whereHas('materialIssue', fn ($query) => $query->where('work_order_id', $this->id)->where('status', 'posted'))
-            ->selectRaw('product_id, sum(quantity) as issued')
-            ->groupBy('product_id')
-            ->pluck('issued', 'product_id')
-            ->map(fn ($value) => (string) $value)
-            ->all();
     }
 
     public function transitionTo(WorkOrderStatus $target): void
