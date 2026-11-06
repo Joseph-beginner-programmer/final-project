@@ -435,6 +435,7 @@ new #[Title('Management Dashboard')] class extends Component {
             ['count' => $a['shortages'], 'label' => __('materials short for planned work orders'), 'href' => route('purchasing.requisitions.list'), 'tone' => 'amber', 'amount' => null],
             ['count' => $a['late_work_orders'], 'label' => __('work orders past their planned end date'), 'href' => route('production.work-orders.list'), 'tone' => 'red', 'amount' => null],
             ['count' => $a['unclosed_overhead'] ? 1 : 0, 'label' => __('month of overhead not yet closed (:month)', ['month' => $a['unclosed_overhead'] ? Carbon::createFromFormat('Y-m', $a['unclosed_overhead'])->translatedFormat('F Y') : '']), 'href' => route('accounting.overhead.index'), 'tone' => 'zinc', 'amount' => null],
+            ['count' => $a['unclosed_ppn'] ? 1 : 0, 'label' => __('month of PPN not yet settled (:month)', ['month' => $a['unclosed_ppn'] ? Carbon::createFromFormat('Y-m', $a['unclosed_ppn']['period'])->translatedFormat('F Y') : '']), 'href' => route('accounting.ppn.index'), 'tone' => 'zinc', 'amount' => $a['unclosed_ppn']['amount'] ?? null],
             ['count' => $a['unmapped_roles'], 'label' => __('system accounts not mapped yet'), 'href' => route('accounting.accounts.list'), 'tone' => 'zinc', 'amount' => null],
         ], fn ($item) => $item['count'] > 0))
 

@@ -33,7 +33,7 @@ enum UserRole: string
             self::Accounting => 'accounting.dashboard',
             self::Production => 'production.dashboard',
             self::Warehouse => 'warehouse.inbound.item-receipts.list',
-            self::SystemAdmin => 'admin.dashboard',
+            self::SystemAdmin => 'management.users.list',
             self::Manager => 'executive.dashboard',
         };
     }

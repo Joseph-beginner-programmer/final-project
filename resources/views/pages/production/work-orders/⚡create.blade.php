@@ -442,11 +442,11 @@ new #[Title('Create Work Order')] class extends Component {
                     </div>
 
                     <div class="grid grid-cols-1 md:grid-cols-5 items-start gap-5">
-                        <div class="md:col-span-3">
+                        <div class="md:col-span-3 min-w-0">
                             @php($selected = $this->selectedFormula)
                             <flux:field>
                             <flux:label id="formula-label">{{ __('Formula') }}</flux:label>
-                            <div x-data="{ open: false }" x-on:keydown.escape="open = false; $refs.trigger.focus()" class="relative">
+                            <div x-data="{ open: false }" x-on:keydown.escape="open = false; $refs.trigger.focus()" class="relative min-w-0">
                                 <button
                                     type="button"
                                     x-ref="trigger"
@@ -459,14 +459,14 @@ new #[Title('Create Work Order')] class extends Component {
                                     wire:target="productionFormulaId"
                                     @class([
                                         // h-10 = the exact height of a default flux:input, so both controls in the row line up
-                                        'w-full h-10 flex items-center justify-between gap-3 rounded-lg border bg-white dark:bg-white/5 px-3 text-left shadow-xs transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 hover:border-zinc-300 dark:hover:border-white/20',
+                                        'w-full h-10 flex items-center justify-between gap-3 overflow-hidden rounded-lg border bg-white dark:bg-white/5 px-3 text-left shadow-xs transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 hover:border-zinc-300 dark:hover:border-white/20',
                                         'border-red-500' => $errors->has('productionFormulaId'),
                                         'border-zinc-200 dark:border-white/10' => !$errors->has('productionFormulaId'),
                                     ])
                                 >
                                     @if ($selected)
                                         <span class="flex items-center gap-2 min-w-0">
-                                            <span class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $selected->product->product_name }}</span>
+                                            <span class="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $selected->product->product_name }}</span>
                                             <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium {{ $selected->product->type->badgeClasses() }}">{{ __($selected->product->type->label()) }}</span>
                                         </span>
                                     @else
@@ -509,13 +509,13 @@ new #[Title('Create Work Order')] class extends Component {
                                                 wire:click="$set('productionFormulaId', '{{ $formula->id }}')"
                                                 x-on:click="open = false; $refs.trigger.focus()"
                                                 @class([
-                                                    'w-full flex items-center gap-3 rounded-md px-2.5 py-2 text-left cursor-pointer transition-colors focus:outline-none focus-visible:bg-accent/10 hover:bg-zinc-50 dark:hover:bg-white/5',
+                                                    'w-full flex items-center gap-3 overflow-hidden rounded-md px-2.5 py-2 text-left cursor-pointer transition-colors focus:outline-none focus-visible:bg-accent/10 hover:bg-zinc-50 dark:hover:bg-white/5',
                                                     'bg-accent/5 dark:bg-accent/10' => $isSelected,
                                                 ])
                                             >
                                                 <span class="flex min-w-0 flex-1 flex-col">
                                                     <span class="flex items-center gap-2 min-w-0">
-                                                        <span class="truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $formula->product->product_name }}</span>
+                                                        <span class="min-w-0 flex-1 truncate text-sm font-medium text-zinc-900 dark:text-white">{{ $formula->product->product_name }}</span>
                                                         <span class="shrink-0 inline-flex items-center rounded-full border px-1.5 py-px text-[10px] font-medium {{ $formula->product->type->badgeClasses() }}">{{ __($formula->product->type->label()) }}</span>
                                                     </span>
                                                     <span class="font-data text-[11px] text-zinc-500 dark:text-zinc-400">

@@ -10,10 +10,12 @@ use Illuminate\Support\Facades\DB;
 class SaveProductAction
 {
     /**
-     * @param  array{product_name: string, type: ProductType, unit_of_measure: string, safety_stock: string, reorder_point: string, selling_price: ?string, is_active: bool}  $fields
+     * @param  array{product_name: string, type: ProductType, unit_of_measure: string, selling_price: ?string, is_active: bool}  $fields
      */
     public function handle(array $fields, ?Product $product = null): Product
     {
+        unset($fields['safety_stock'], $fields['reorder_point']);
+
         $type = $fields['type'];
 
         if ($type !== ProductType::FinishedGoods && filled($fields['selling_price'])) {

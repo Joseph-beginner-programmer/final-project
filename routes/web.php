@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Route;
 Route::redirect('/', '/login');
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::view('dashboard', 'dashboard')->name('dashboard');
+    Route::get('dashboard', fn () => redirect()->route(auth()->user()->role->dashboardRoute()))->name('dashboard');
 });
 
 Route::middleware(['auth'])->group(function () {
@@ -13,21 +13,17 @@ Route::middleware(['auth'])->group(function () {
         ->name('purchasing.dashboard')
         ->middleware('dashboard.access:purchasing');
 
-    Route::view('/sales/dashboard', 'dashboards.placeholder')
+    Route::livewire('/sales/dashboard', 'pages::sales.dashboard')
         ->name('sales.dashboard')
         ->middleware('dashboard.access:sales');
 
-    Route::view('/accounting/dashboard', 'dashboards.placeholder')
+    Route::livewire('/accounting/dashboard', 'pages::accounting.dashboard')
         ->name('accounting.dashboard')
         ->middleware('dashboard.access:accounting');
 
     Route::livewire('/production/dashboard', 'pages::production.dashboard')
         ->name('production.dashboard')
         ->middleware('dashboard.access:production');
-
-    Route::view('/admin/dashboard', 'dashboards.placeholder')
-        ->name('admin.dashboard')
-        ->middleware('dashboard.access:system_admin');
 
     Route::livewire('/executive/dashboard', 'pages::executive.dashboard')
         ->name('executive.dashboard')
@@ -210,6 +206,24 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/accounting/reports/cash-flow/export/{format}', \App\Http\Controllers\Accounting\ExportCashFlowController::class)
         ->name('accounting.reports.cash-flow.export');
 
+    Route::livewire('/accounting/reports/margin', 'pages::accounting.reports.margin')
+        ->name('accounting.reports.margin');
+
+    Route::get('/accounting/reports/margin/export/{format}', \App\Http\Controllers\Accounting\ExportMarginController::class)
+        ->name('accounting.reports.margin.export');
+
+    Route::livewire('/accounting/reports/receivables', 'pages::accounting.reports.receivables')
+        ->name('accounting.reports.receivables');
+
+    Route::get('/accounting/reports/receivables/export/{format}', \App\Http\Controllers\Accounting\ExportReceivablesController::class)
+        ->name('accounting.reports.receivables.export');
+
+    Route::livewire('/accounting/reports/payables', 'pages::accounting.reports.payables')
+        ->name('accounting.reports.payables');
+
+    Route::get('/accounting/reports/payables/export/{format}', \App\Http\Controllers\Accounting\ExportPayablesController::class)
+        ->name('accounting.reports.payables.export');
+
     Route::livewire('/production/reports', 'pages::production.reports.index')
         ->name('production.reports.index');
 
@@ -306,6 +320,9 @@ Route::middleware(['auth'])->group(function () {
 
     Route::livewire('/management/employees', 'pages::management.employees.list')
         ->name('management.employees.list');
+
+    Route::livewire('/management/users', 'pages::management.users.list')
+        ->name('management.users.list');
 
     Route::livewire('/accounting/labor-rates', 'pages::accounting.labor-rates.list')
         ->name('accounting.labor-rates.list');

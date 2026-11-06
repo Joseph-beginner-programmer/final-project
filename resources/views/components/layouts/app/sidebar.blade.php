@@ -20,10 +20,9 @@
 
         <flux:sidebar.nav>
             @foreach (UserRole::cases() as $role)
-                @continue($role === UserRole::SystemAdmin)
                 @can('view-dashboard', $role)
                     <flux:sidebar.group :heading="$role->label()" expandable class="grid">
-                        @unless ($role === UserRole::Warehouse)
+                        @unless (in_array($role, [UserRole::Warehouse, UserRole::SystemAdmin], true))
                             <flux:sidebar.item icon="home" :href="route($role->dashboardRoute())"
                                 :current="request()->routeIs($role->dashboardRoute())" wire:navigate>
                                 {{ __('Dashboard') }}
@@ -70,6 +69,12 @@
                                 :current="request()->routeIs('sales.returns.*')" wire:navigate>
                                 {{ __('Sales Returns') }}
                             </flux:sidebar.item>
+                            @if (! $isManager && Gate::allows('reports.margin'))
+                                <flux:sidebar.item icon="document-chart-bar" :href="route('production.reports.index')"
+                                    :current="request()->routeIs('production.reports.*', 'accounting.reports.margin', 'accounting.reports.receivables')" wire:navigate>
+                                    {{ __('Reports') }}
+                                </flux:sidebar.item>
+                            @endif
                         @endif
 
                         @if ($role === UserRole::Accounting)
@@ -111,7 +116,7 @@
                             </flux:sidebar.item>
                             @if (! $isManager && Gate::allows('reports.production'))
                                 <flux:sidebar.item icon="document-chart-bar" :href="route('production.reports.index')"
-                                    :current="request()->routeIs('production.reports.*', 'purchasing.reports.*')" wire:navigate>
+                                    :current="request()->routeIs('production.reports.*', 'purchasing.reports.*', 'accounting.reports.margin', 'accounting.reports.receivables', 'accounting.reports.payables')" wire:navigate>
                                     {{ __('Reports') }}
                                 </flux:sidebar.item>
                             @endif
@@ -125,6 +130,10 @@
                             <flux:sidebar.item icon="cube" :href="route('management.products.list')"
                                 :current="request()->routeIs('management.products.*')" wire:navigate>
                                 {{ __('Products') }}
+                            </flux:sidebar.item>
+                            <flux:sidebar.item icon="user-group" :href="route('management.users.list')"
+                                :current="request()->routeIs('management.users.*')" wire:navigate>
+                                {{ __('Users') }}
                             </flux:sidebar.item>
                             <flux:sidebar.item icon="document-chart-bar" :href="route('executive.reports.index')"
                                 :current="request()->routeIs('executive.reports.*', 'production.reports.*', 'accounting.reports.*', 'purchasing.reports.*')" wire:navigate>
@@ -179,6 +188,13 @@
                             <flux:sidebar.item icon="clipboard-document-check" :href="route('warehouse.stock-counts.list')"
                                 :current="request()->routeIs('warehouse.stock-counts.*')" wire:navigate>
                                 {{ __('Stock Count') }}
+                            </flux:sidebar.item>
+                        @endif
+
+                        @if ($role === UserRole::SystemAdmin)
+                            <flux:sidebar.item icon="user-group" :href="route('management.users.list')"
+                                :current="request()->routeIs('management.users.*')" wire:navigate>
+                                {{ __('Users') }}
                             </flux:sidebar.item>
                         @endif
                     </flux:sidebar.group>

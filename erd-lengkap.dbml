@@ -287,15 +287,6 @@ Table purchase_order_items [headercolor: #1565C0] {
   updated_at timestamp
 }
 
-// Biaya lainnya pada PO (mis. ongkos kirim, pengemasan), beberapa baris
-Table purchase_order_charges [headercolor: #1565C0] {
-  id bigint [pk, increment]
-  purchase_order_id bigint [ref: > purchase_orders.id]
-  description varchar
-  amount decimal(18,2)
-  include_in_cost boolean [default: true, note: 'Ya = dialokasikan ke biaya persediaan (ongkos kirim, bongkar muat, asuransi); dibagi per item menurut porsi subtotal, lalu dibagi qty dipesan = tambahan biaya per unit pada lot saat penerimaan. Tidak = beban, dicatat saat faktur']
-}
-
 Table purchase_order_receipt_batches [headercolor: #1565C0] {
   id bigint [pk, increment]
   receipt_number varchar [unique]
@@ -779,14 +770,6 @@ Table sales_order_items [headercolor: #6A1B9A] {
   }
 }
 
-// Biaya lainnya pada SO (mis. ongkos kirim, pengemasan), beberapa baris
-Table sales_order_charges [headercolor: #6A1B9A] {
-  id bigint [pk, increment]
-  sales_order_id bigint [ref: > sales_orders.id]
-  description varchar
-  amount decimal(18,2)
-}
-
 // Gudang: Mencatat Pengiriman Penjualan — beberapa pengiriman per SO, satu draf terbuka sekaligus.
 // Draf -> Posting: barang keluar FIFO (DrawStockFifoAction, sama dengan pengeluaran barang),
 // nilai yang ditarik = HPP. Tidak boleh melebihi sisa pesanan; stok kurang memblokir posting.
@@ -969,7 +952,7 @@ Table purchase_invoices [headercolor: #EF6C00] {
   due_date date [note: 'Diketik (pemasok belum punya syarat pembayaran)']
   goods_amount decimal(18,2) [default: 0, note: 'Σ purchase_invoice_items.amount']
   capitalized_charges decimal(18,2) [default: 0, note: 'Biaya PO "masuk biaya persediaan" yang ditagih; terisi otomatis dari porsi penerimaan']
-  other_charges decimal(18,2) [default: 0, note: 'Σ purchase_invoice_charges.amount (beban)']
+  other_charges decimal(18,2) [default: 0, note: 'Σ document_charges.amount milik faktur ini (beban)']
   subtotal decimal(18,2) [default: 0, note: 'DPP = barang + biaya persediaan + biaya lain']
   receipt_value decimal(18,2) [default: 0, note: 'Nilai saat diterima (jurnal penerimaan); dihapus dari Barang Diterima Belum Difakturkan']
   price_variance decimal(18,2) [default: 0, note: '(barang + biaya persediaan) - receipt_value; ke Selisih Harga Pembelian']
@@ -1003,13 +986,21 @@ Table purchase_invoice_items [headercolor: #EF6C00] {
   }
 }
 
-// Biaya yang bukan biaya persediaan (admin, materai) — dicatat ke akun beban pilihan.
-Table purchase_invoice_charges [headercolor: #EF6C00] {
+// Biaya tambahan pada dokumen (PO, Faktur Pembelian, SO) — polimorfik, satu tabel untuk ketiganya
+// (chargeable_type/chargeable_id). account_id hanya dipakai oleh Faktur Pembelian (akun beban pilihan);
+// include_in_cost hanya dipakai oleh PO (alokasi ke biaya persediaan, lihat purchase_order_items.unit_cost).
+Table document_charges [headercolor: #EF6C00] {
   id bigint [pk, increment]
-  purchase_invoice_id bigint [ref: > purchase_invoices.id]
+  chargeable_type varchar [note: 'purchase_order | purchase_invoice | sales_order']
+  chargeable_id bigint
   description varchar
-  account_id bigint [ref: > accounts.id, note: 'Akun beban (type = expense)']
   amount decimal(18,2)
+  account_id bigint [null, ref: > accounts.id, note: 'Akun beban (type = expense) — hanya untuk purchase_invoice']
+  include_in_cost boolean [default: true, note: 'Ya = dialokasikan ke biaya persediaan (ongkos kirim, bongkar muat, asuransi); dibagi per item menurut porsi subtotal, lalu dibagi qty dipesan = tambahan biaya per unit pada lot saat penerimaan. Tidak = beban, dicatat saat faktur. Hanya untuk purchase_order']
+
+  indexes {
+    (chargeable_type, chargeable_id)
+  }
 }
 
 // Jurnal: Dr Utang Usaha / Cr Kas atau Bank (tanggal = payment_date). Dibatalkan = jurnal pembalik.
@@ -1034,7 +1025,7 @@ Table purchase_payments [headercolor: #EF6C00] {
 // Aturan: 1 faktur = 1 pengiriman yang sudah diposting — dijaga di aplikasi: hanya satu faktur yang belum
 // dibatalkan per pengiriman (faktur yang dibatalkan boleh diganti faktur baru). Draf -> Posting.
 // Baris faktur TIDAK disimpan: qty dari sales_delivery_items x harga dari sales_order_items (keduanya terkunci).
-// Diskon pesanan (discount_percent) berlaku per faktur atas nilai barang; biaya lain pesanan (sales_order_charges)
+// Diskon pesanan (discount_percent) berlaku per faktur atas nilai barang; biaya lain pesanan (document_charges)
 // ditagihkan sekali, pada faktur pertama pesanan yang diposting (dihitung ulang saat posting).
 // Jurnal saat diposting (tanggal = invoice_date): Dr Piutang Usaha (total_amount) / Cr Penjualan (subtotal = DPP)
 //   / Cr PPN Keluaran (tax_amount). Dibatalkan setelah diposting (hanya jika belum ada pembayaran) = jurnal pembalik.
@@ -1131,7 +1122,6 @@ TableGroup Pembelian {
   purchase_requisition_items
   purchase_orders
   purchase_order_items
-  purchase_order_charges
   purchase_order_receipt_batches
   purchase_order_receipts
   purchase_returns
@@ -1179,10 +1169,10 @@ TableGroup Akuntansi {
   journal_entry_lines
   purchase_invoices
   purchase_invoice_items
-  purchase_invoice_charges
   purchase_payments
   sales_invoices
   sales_payments
   wage_payments
   wage_payment_lines
+  document_charges
 }

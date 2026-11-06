@@ -15,6 +15,7 @@ use App\Models\PurchaseOrder;
 use App\Models\WorkOrder;
 use App\Support\MaterialShortage;
 use App\Support\OverheadPeriod;
+use App\Support\PpnPeriod;
 use App\Support\Reports\AccountBalances;
 use App\Support\Reports\IncomeStatementReport;
 use Carbon\Carbon;
@@ -261,7 +262,7 @@ class ExecutiveKpis
      */
     public function receivablesAging(): array
     {
-        return $this->aging('sales_invoices', 'sales_payments', 'sales_invoice_id', 'customers', 'customer_id', 'customer_name', $this->postedSalesStatuses());
+        return \App\Support\Reports\AgingReport::receivables($this->asOf())->summary();
     }
 
     /**
@@ -269,77 +270,7 @@ class ExecutiveKpis
      */
     public function payablesAging(): array
     {
-        return $this->aging('purchase_invoices', 'purchase_payments', 'purchase_invoice_id', 'suppliers', 'supplier_id', 'supplier_name', [
-            PurchaseInvoiceStatus::Unpaid->value, PurchaseInvoiceStatus::PartiallyPaid->value, PurchaseInvoiceStatus::Paid->value,
-        ]);
-    }
-
-    /**
-     * @return list<string>
-     */
-    public static function agingKeys(): array
-    {
-        return ['current', '1_30', '31_60', '61_90', 'over_90'];
-    }
-
-    /**
-     * @param  list<string>  $statuses
-     * @return array{buckets: list<array{key: string, amount: float, count: int}>, total: float, overdue: float, overdue_count: int, top: Collection<int, array{name: string, amount: float, days: int}>}
-     */
-    protected function aging(string $invoices, string $payments, string $paymentKey, string $parties, string $partyKey, string $partyName, array $statuses): array
-    {
-        $asOf = $this->asOf();
-
-        $paid = DB::table($payments)
-            ->where('status', DocumentStatus::Posted->value)
-            ->whereDate('payment_date', '<=', $asOf->toDateString())
-            ->groupBy($paymentKey)
-            ->selectRaw("$paymentKey as invoice_id, SUM(amount) as paid")
-            ->pluck('paid', 'invoice_id');
-
-        $open = DB::table($invoices)
-            ->join($parties, "$parties.id", '=', "$invoices.$partyKey")
-            ->whereIn("$invoices.status", $statuses)
-            ->whereDate("$invoices.invoice_date", '<=', $asOf->toDateString())
-            ->get(["$invoices.id", "$invoices.total_amount", "$invoices.due_date", "$parties.$partyName as party"])
-            ->map(function ($row) use ($paid, $asOf) {
-                $balance = round((float) $row->total_amount - (float) ($paid[$row->id] ?? 0), 2);
-                $days = (int) Carbon::parse($row->due_date)->startOfDay()->diffInDays($asOf->copy()->startOfDay(), false);
-
-                return ['party' => $row->party, 'balance' => $balance, 'days' => $days, 'bucket' => self::bucketFor($days)];
-            })
-            ->filter(fn (array $row) => $row['balance'] > 0.004);
-
-        $buckets = array_map(fn (string $key) => [
-            'key' => $key,
-            'amount' => round($open->where('bucket', $key)->sum('balance'), 2),
-            'count' => $open->where('bucket', $key)->count(),
-        ], self::agingKeys());
-
-        $overdue = $open->where('days', '>', 0);
-
-        return [
-            'buckets' => $buckets,
-            'total' => round($open->sum('balance'), 2),
-            'overdue' => round($overdue->sum('balance'), 2),
-            'overdue_count' => $overdue->count(),
-            'top' => $overdue->groupBy('party')
-                ->map(fn (Collection $rows, string $party) => ['name' => $party, 'amount' => round($rows->sum('balance'), 2), 'days' => $rows->max('days')])
-                ->sortByDesc('amount')
-                ->take(3)
-                ->values(),
-        ];
-    }
-
-    public static function bucketFor(int $daysOverdue): string
-    {
-        return match (true) {
-            $daysOverdue <= 0 => 'current',
-            $daysOverdue <= 30 => '1_30',
-            $daysOverdue <= 60 => '31_60',
-            $daysOverdue <= 90 => '61_90',
-            default => 'over_90',
-        };
+        return \App\Support\Reports\AgingReport::payables($this->asOf())->summary();
     }
 
     /**
@@ -440,6 +371,9 @@ class ExecutiveKpis
             ->whereBetween('journal_entries.entry_date', [$lastMonth->start->toDateString(), $lastMonth->end->toDateString()])
             ->exists();
 
+        $lastPpnPeriod = PpnPeriod::of($today->copy()->subMonthNoOverflow());
+        $hadPpnActivity = bccomp($lastPpnPeriod->masukan(), '0', 2) !== 0 || bccomp($lastPpnPeriod->keluaran(), '0', 2) !== 0;
+
         $mapped = Account::whereNotNull('system_role')->pluck('system_role')->map(fn ($role) => $role instanceof AccountSystemRole ? $role->value : $role)->all();
 
         return [
@@ -449,6 +383,7 @@ class ExecutiveKpis
             'shortages' => MaterialShortage::suggestions()->count(),
             'late_work_orders' => ProductionKpis::attention($today)['overdue']->count(),
             'unclosed_overhead' => $appliedLastMonth && ! $lastMonth->isClosed() ? $lastMonth->period : null,
+            'unclosed_ppn' => $hadPpnActivity && ! $lastPpnPeriod->isClosed() ? ['period' => $lastPpnPeriod->period, 'amount' => (float) $lastPpnPeriod->net()] : null,
             'unmapped_roles' => count(array_diff(array_map(fn (AccountSystemRole $role) => $role->value, AccountSystemRole::cases()), $mapped)),
         ];
     }

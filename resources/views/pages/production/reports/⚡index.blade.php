@@ -7,26 +7,36 @@ use Livewire\Component;
 new #[Title('Reports')] class extends Component {
     public function mount(): void
     {
-        Gate::authorize('reports.production');
+        abort_unless(
+            Gate::allows('reports.production')
+                || Gate::allows('reports.purchasing')
+                || Gate::allows('reports.finance')
+                || Gate::allows('reports.margin')
+                || Gate::allows('reports.receivables')
+                || Gate::allows('reports.payables'),
+            403
+        );
     }
 
     public function reports(): array
     {
         return [
-            [
-                'route' => 'production.reports.cost',
-                'icon' => 'calculator',
-                'title' => __('Production Cost Report'),
-                'description' => __('Material, labor and overhead per completed work order, with the cost per unit and a summary per product.'),
-                'scope' => __('Per month'),
-            ],
-            [
-                'route' => 'production.reports.inventory',
-                'icon' => 'archive-box',
-                'title' => __('Warehouse Inventory Report'),
-                'description' => __('Opening, in, out and closing stock of raw materials, WIP and finished goods for the month.'),
-                'scope' => __('Per month'),
-            ],
+            ...(Gate::allows('reports.production') ? [
+                [
+                    'route' => 'production.reports.cost',
+                    'icon' => 'calculator',
+                    'title' => __('Production Cost Report'),
+                    'description' => __('Material, labor and overhead per completed work order, with the cost per unit and a summary per product.'),
+                    'scope' => __('Per month'),
+                ],
+                [
+                    'route' => 'production.reports.inventory',
+                    'icon' => 'archive-box',
+                    'title' => __('Warehouse Inventory Report'),
+                    'description' => __('Opening, in, out and closing stock of raw materials, WIP and finished goods for the month.'),
+                    'scope' => __('Per month'),
+                ],
+            ] : []),
             ...(Gate::allows('reports.purchasing') ? [
                 [
                     'route' => 'purchasing.reports.orders',
@@ -85,6 +95,33 @@ new #[Title('Reports')] class extends Component {
                     'title' => __('Cash Flow Statement'),
                     'description' => __('Why cash went up or down this month, split into operating and financing activity.'),
                     'scope' => __('Per month'),
+                ],
+            ] : []),
+            ...(Gate::allows('reports.margin') ? [
+                [
+                    'route' => 'accounting.reports.margin',
+                    'icon' => 'chart-bar',
+                    'title' => __('Gross Margin Report'),
+                    'description' => __('Revenue vs. cost of goods sold on posted deliveries, by product or by customer.'),
+                    'scope' => __('Per month'),
+                ],
+            ] : []),
+            ...(Gate::allows('reports.receivables') ? [
+                [
+                    'route' => 'accounting.reports.receivables',
+                    'icon' => 'arrow-down-on-square',
+                    'title' => __('Receivables Aging Report'),
+                    'description' => __('Piutang Usaha outstanding per customer, split by how overdue each invoice is.'),
+                    'scope' => __('As of a date'),
+                ],
+            ] : []),
+            ...(Gate::allows('reports.payables') ? [
+                [
+                    'route' => 'accounting.reports.payables',
+                    'icon' => 'arrow-up-on-square',
+                    'title' => __('Payables Aging Report'),
+                    'description' => __('Utang Usaha outstanding per supplier, split by how overdue each invoice is.'),
+                    'scope' => __('As of a date'),
                 ],
             ] : []),
         ];

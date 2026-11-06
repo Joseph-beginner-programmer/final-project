@@ -60,9 +60,9 @@ class PurchaseInvoice extends Model
         return $this->hasMany(PurchaseInvoiceItem::class);
     }
 
-    public function charges(): HasMany
+    public function charges(): MorphMany
     {
-        return $this->hasMany(PurchaseInvoiceCharge::class);
+        return $this->morphMany(DocumentCharge::class, 'chargeable');
     }
 
     public function payments(): HasMany

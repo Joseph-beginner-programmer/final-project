@@ -5,9 +5,10 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Attributes\Guarded;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\MorphTo;
 
 #[Guarded(['id'])]
-class PurchaseInvoiceCharge extends Model
+class DocumentCharge extends Model
 {
     public $timestamps = false;
 
@@ -15,12 +16,13 @@ class PurchaseInvoiceCharge extends Model
     {
         return [
             'amount' => 'decimal:2',
+            'include_in_cost' => 'boolean',
         ];
     }
 
-    public function purchaseInvoice(): BelongsTo
+    public function chargeable(): MorphTo
     {
-        return $this->belongsTo(PurchaseInvoice::class);
+        return $this->morphTo();
     }
 
     public function account(): BelongsTo

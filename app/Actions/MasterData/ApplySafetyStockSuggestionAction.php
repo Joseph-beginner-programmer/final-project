@@ -6,8 +6,8 @@ use App\Models\Product;
 
 /**
  * Writes a calculated safety stock / reorder point suggestion onto the product.
- * Deliberately a plain editable field afterwards, not locked - the calculation is a
- * starting point the Manager can still override by hand on the Products page.
+ * The only action allowed to set these two columns - SaveProductAction strips them
+ * from its own $fields, so the Products page can only display them, never edit them.
  */
 class ApplySafetyStockSuggestionAction
 {

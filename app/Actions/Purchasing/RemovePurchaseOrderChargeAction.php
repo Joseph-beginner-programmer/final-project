@@ -2,13 +2,15 @@
 
 namespace App\Actions\Purchasing;
 
-use App\Models\PurchaseOrderCharge;
+use App\Models\DocumentCharge;
+use App\Models\PurchaseOrder;
 
 class RemovePurchaseOrderChargeAction
 {
-    public function handle(PurchaseOrderCharge $charge): void
+    public function handle(DocumentCharge $charge): void
     {
-        $po = $charge->purchaseOrder;
+        /** @var PurchaseOrder $po */
+        $po = $charge->chargeable;
 
         $po->ensureIsEditable();
 

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -82,9 +83,9 @@ class PurchaseOrder extends Model
         return $this->hasMany(PurchaseRequisition::class);
     }
 
-    public function charges(): HasMany
+    public function charges(): MorphMany
     {
-        return $this->hasMany(PurchaseOrderCharge::class);
+        return $this->morphMany(DocumentCharge::class, 'chargeable');
     }
 
     public function purchaseOrderReceiptBatches(): HasMany
@@ -114,7 +115,7 @@ class PurchaseOrder extends Model
 
     public function chargesTotal(): string
     {
-        return $this->charges->reduce(fn (string $carry, PurchaseOrderCharge $charge) => bcadd($carry, (string) $charge->amount, 2), '0');
+        return $this->charges->reduce(fn (string $carry, DocumentCharge $charge) => bcadd($carry, (string) $charge->amount, 2), '0');
     }
 
     public function ensureIsEditable(): void

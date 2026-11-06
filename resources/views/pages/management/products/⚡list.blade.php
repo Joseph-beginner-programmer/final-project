@@ -165,8 +165,6 @@ new #[Title('Products')] class extends Component {
             'productName' => ['required', 'string', 'max:255'],
             'productType' => ['required', Rule::enum(ProductType::class)],
             'unit' => [Rule::requiredIf(fn () => ProductType::tryFrom($this->productType)?->fixedUnit() === null), 'nullable', 'string', 'max:20'],
-            'safetyStock' => ['nullable', 'numeric', 'min:0'],
-            'reorderPoint' => ['nullable', 'numeric', 'min:0'],
             'sellingPrice' => ['nullable', 'numeric', 'gt:0'],
         ];
     }
@@ -177,8 +175,6 @@ new #[Title('Products')] class extends Component {
             'productName' => __('Product name'),
             'productType' => __('Type'),
             'unit' => __('Unit'),
-            'safetyStock' => __('Safety stock'),
-            'reorderPoint' => __('Reorder point'),
             'sellingPrice' => __('Selling Price'),
         ];
     }
@@ -195,8 +191,6 @@ new #[Title('Products')] class extends Component {
             'product_name' => $this->productName,
             'type' => $type,
             'unit_of_measure' => $this->unit,
-            'safety_stock' => $this->safetyStock ?: '0',
-            'reorder_point' => $this->reorderPoint ?: '0',
             'selling_price' => $type === ProductType::FinishedGoods ? $this->sellingPrice : null,
             'is_active' => $this->isActive,
         ];
@@ -388,9 +382,13 @@ new #[Title('Products')] class extends Component {
             </div>
 
             <div class="grid grid-cols-1 sm:grid-cols-2 items-start gap-4">
-                <flux:input wire:model="safetyStock" :label="__('Safety stock')" inputmode="decimal" placeholder="0" />
-                <flux:input wire:model="reorderPoint" :label="__('Reorder point')" inputmode="decimal" placeholder="0" />
+                <flux:input :value="$safetyStock" :label="__('Safety stock')" placeholder="0" disabled />
+                <flux:input :value="$reorderPoint" :label="__('Reorder point')" placeholder="0" disabled />
             </div>
+            <flux:description>
+                {{ __('Only editable from the :page page.', ['page' => __('Safety Stock & Reorder Point')]) }}
+                <a href="{{ route('management.products.safety-stock') }}" class="text-accent hover:underline">{{ __('Open') }}</a>
+            </flux:description>
 
             @if ($productType === ProductType::FinishedGoods->value)
                 <flux:field>

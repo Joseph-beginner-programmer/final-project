@@ -7,7 +7,6 @@ use App\Exceptions\InvalidDeliveryDateException;
 use App\Exceptions\NonPurchasableProductException;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
-use App\Models\PurchaseOrderCharge;
 use App\Models\PurchaseOrderItem;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -39,13 +38,11 @@ class CreatePurchaseOrderAction
             }
 
             foreach ($data->charges as $charge) {
-                $poCharge = new PurchaseOrderCharge([
-                    'purchase_order_id' => $po->id,
+                $po->charges()->create([
                     'description' => $charge['description'],
                     'amount' => $charge['amount'],
                     'include_in_cost' => $charge['include_in_cost'] ?? true,
                 ]);
-                $poCharge->save();
             }
 
             $po->recalculateTotal();

@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 /**
  * @property int $id
@@ -46,9 +47,9 @@ class SalesOrder extends Model
         return $this->hasMany(SalesOrderItem::class);
     }
 
-    public function charges(): HasMany
+    public function charges(): MorphMany
     {
-        return $this->hasMany(SalesOrderCharge::class);
+        return $this->morphMany(DocumentCharge::class, 'chargeable');
     }
 
     public function salesperson(): BelongsTo
@@ -63,7 +64,7 @@ class SalesOrder extends Model
 
     public function chargesTotal(): string
     {
-        return $this->charges->reduce(fn (string $carry, SalesOrderCharge $charge) => bcadd($carry, (string) $charge->amount, 2), '0');
+        return $this->charges->reduce(fn (string $carry, DocumentCharge $charge) => bcadd($carry, (string) $charge->amount, 2), '0');
     }
 
     public function deliveries(): HasMany

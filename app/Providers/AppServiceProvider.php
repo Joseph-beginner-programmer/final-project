@@ -157,6 +157,18 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('sales.invoice.view', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::Sales], true);
         });
+        Gate::define('users.manage', function ($user) {
+            return in_array($user->role, [UserRole::SystemAdmin, UserRole::Manager], true);
+        });
+        Gate::define('reports.margin', function ($user) {
+            return in_array($user->role, [UserRole::Manager, UserRole::Accounting, UserRole::Sales], true);
+        });
+        Gate::define('reports.receivables', function ($user) {
+            return in_array($user->role, [UserRole::Manager, UserRole::Accounting, UserRole::Sales], true);
+        });
+        Gate::define('reports.payables', function ($user) {
+            return in_array($user->role, [UserRole::Manager, UserRole::Accounting], true);
+        });
 
         Relation::morphMap([
             'purchase_order_receipt' => PurchaseOrderReceipt::class,
@@ -177,6 +189,8 @@ class AppServiceProvider extends ServiceProvider
             'purchase_return_item' => \App\Models\PurchaseReturnItem::class,
             'sales_return' => \App\Models\SalesReturn::class,
             'sales_return_item' => \App\Models\SalesReturnItem::class,
+            'purchase_order' => \App\Models\PurchaseOrder::class,
+            'sales_order' => \App\Models\SalesOrder::class,
         ]);
     }
 

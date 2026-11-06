@@ -18,8 +18,8 @@ use App\Exceptions\NonPurchasableProductException;
 use App\Exceptions\PurchaseOrderHaveNoItemException;
 use App\Exceptions\PurchaseOrderItemQuantityNotValidException;
 use App\Exceptions\PurchaseOrderNotEditableException;
+use App\Models\DocumentCharge;
 use App\Models\PurchaseOrder;
-use App\Models\PurchaseOrderCharge;
 use App\Models\PurchaseOrderItem;
 use Flux\Flux;
 use Illuminate\Support\Collection;
@@ -297,7 +297,7 @@ new #[Title('Purchase Order Details')] class extends Component {
     {
         Gate::authorize('update', $this->purchaseOrder);
 
-        $charge = PurchaseOrderCharge::findOrFail($chargeId);
+        $charge = DocumentCharge::findOrFail($chargeId);
 
         try {
             app(RemovePurchaseOrderChargeAction::class)->handle($charge);

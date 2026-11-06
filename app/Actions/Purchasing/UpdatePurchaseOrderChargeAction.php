@@ -2,24 +2,28 @@
 
 namespace App\Actions\Purchasing;
 
-use App\Models\PurchaseOrderCharge;
+use App\Models\DocumentCharge;
+use App\Models\PurchaseOrder;
 
 class UpdatePurchaseOrderChargeAction
 {
     public function handle(
-        PurchaseOrderCharge $charge,
+        DocumentCharge $charge,
         string $description,
         string $amount,
         bool $includeInCost = true,
-    ): PurchaseOrderCharge {
-        $charge->purchaseOrder->ensureIsEditable();
+    ): DocumentCharge {
+        /** @var PurchaseOrder $po */
+        $po = $charge->chargeable;
+
+        $po->ensureIsEditable();
 
         $charge->description = $description;
         $charge->amount = $amount;
         $charge->include_in_cost = $includeInCost;
         $charge->save();
 
-        $charge->purchaseOrder->recalculateTotal();
+        $po->recalculateTotal();
 
         return $charge;
     }
