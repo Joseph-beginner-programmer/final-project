@@ -2238,6 +2238,62 @@ User screenshot: on `production/work-orders/create`, a long formula/product name
 
 **Lesson for next time** (not yet saved to memory, worth remembering if it recurs): a "still broken" report after a screenshot-verified fix is a strong signal to *measure* (`boundingBox()` deltas across several viewport widths) rather than re-screenshot the same one viewport again — the first fix was completely correct for the bug it targeted, but a screenshot at a single comfortable width can't catch a second bug that only appears when the container is narrower.
 
+## Session 55 (2026-11-07) — First production deploy to Hostinger (Premium shared hosting) — 🟡 IN PROGRESS
+
+**Live at `https://pt-sai.com`.** Hostinger **Premium** plan (shared hosting: PHP + MySQL + SSH + Composer, **no Node**). SSH user `u706817998`, server `my-kul-web2093`, port `65002`. App lives at `~/domains/pt-sai.com/laravel` (git clone of `github.com/Joseph-beginner-programmer/final-project`); production database `u706817998_pt_sai` on `localhost`.
+
+**Status at end of session:** code cloned, `composer install` done, `.env` written (with the *local* `APP_KEY` copied over), local data imported, `public_html` symlink fixed, storage link made. Last blocker hit: `could not find driver` (PHP had no MySQL PDO driver) → user told to enable **`nd_pdo_mysql`** in hPanel. **Not yet confirmed the site loads and login works** — verify that first next session.
+
+**Wrong turn avoided:** Hostinger's "Build configuration" screen (Framework preset: Vite, Node 22.x) is the Node.js / static front-end deployer — it would only run `npm run build` and serve static files, never PHP. Not usable for a Laravel app; the site must be a normal PHP website.
+
+### Runbook — first-time setup (what was actually done)
+1. **hPanel:** PHP Configuration → PHP 8.3+; extensions `bcmath`, `intl`, `mbstring`, `fileinfo`, **`nd_pdo_mysql`** (Hostinger/CloudLinux name for `pdo_mysql` — plain `pdo_mysql` isn't in the list; `nd_` and non-`nd_` variants of the same extension can't both be on). Databases → create DB + user. SSH Access → enable. Security → SSL (passkeys need HTTPS).
+2. **Clone outside the web root:** `cd ~/domains/pt-sai.com && git clone <repo> laravel`.
+3. **Composer:** `composer install --no-dev --optimize-autoloader --no-scripts`, then `rm -f bootstrap/cache/packages.php bootstrap/cache/services.php && php artisan package:discover`.
+4. **`.env`:** `cp .env.example .env`, then `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://pt-sai.com`, `LOG_LEVEL=error`, `DB_CONNECTION=mysql`, `DB_HOST=localhost`, DB name/user/password, `APP_LOCALE`/`APP_NAME` copied from local. **`APP_KEY` = the local key** (not a fresh `key:generate`) — `users.two_factor_secret` is encrypted with it, so a different key locks out any 2FA user.
+5. **Data (brought the real local data instead of migrate+seed):** local DB is **XAMPP's MariaDB 10.4.32** (not the MySQL Server 8.0 service, despite that being installed too). Exported with `mysqldump.exe -u root -p --no-tablespaces --single-transaction --routines --default-character-set=utf8mb4 --result-file=tugas_akhir.sql tugas_akhir` (59 tables, 145 KB; the "column statistics not supported" warning is just MySQL-8 mysqldump vs. MariaDB server, harmless). No `utf8mb4_0900_ai_ci` collation in the dump, so no rewrite needed. Imported via hPanel → phpMyAdmin → Import. Did **not** run `migrate` afterwards (the dump carries the `migrations` table).
+6. **Web root → `public/`:** `cd ~/domains/pt-sai.com && mv public_html public_html_old && ln -s /home/u706817998/domains/pt-sai.com/laravel/public public_html`.
+7. **Frontend build:** `public/build` is gitignored and the server has no Node → `npm run build` locally, zip `public\build`, upload + extract to `laravel/public/` via File Manager.
+8. **Storage link:** `ln -s /home/u706817998/domains/pt-sai.com/laravel/storage/app/public public/storage` (manual — see gotchas).
+9. **Caches:** `php artisan optimize:clear && php artisan optimize`.
+
+### Runbook — deploying an update
+Laptop: commit + `git push`. Server (`cd ~/domains/pt-sai.com/laravel`):
+```
+php artisan down
+git pull
+composer install --no-dev --optimize-autoloader --no-scripts
+rm -f bootstrap/cache/packages.php bootstrap/cache/services.php
+php artisan package:discover
+php artisan migrate --force
+php artisan optimize:clear
+php artisan optimize
+php artisan up
+```
+Plus re-upload `public/build` whenever CSS/JS changed **or** a Blade file gained a Tailwind class not used anywhere before. **Never** on production: re-import a local dump, `migrate:fresh`, `db:seed`.
+
+### Hostinger gotchas hit this session (each cost a round-trip)
+- **SSH password "always wrong":** username is `u706817998` (not email), port `65002`; SSH password is set separately on the SSH Access page; typed password is invisible; paste with right-click; repeated failures get the IP temporarily blocked. hPanel's Browser terminal sidesteps all of it.
+- **`proc_open` disabled** → `composer install` fails at the `post-autoload-dump` step (`@php artisan package:discover` is spawned as a subprocess). Fix: `--no-scripts` + run the steps by hand.
+- **`symlink()` and `exec()` disabled** → `php artisan storage:link` fails (`Call to undefined function Illuminate\Filesystem\exec()`). Fix: plain `ln -s`.
+- **Hostinger's own skateboarder 404 page** = request never reached Laravel. Cause here: the `public_html` symlink was created pointing at the literal placeholder `yourdomain.com` copied from the instructions.
+- **`MissingAppKeyException` with a correct `.env`** = stale `bootstrap/cache/config.php` from an earlier `optimize`. Any `.env` edit on the server needs `optimize:clear` + `optimize`.
+- **`could not find driver`** on `optimize:clear` (the `cache` step — `CACHE_STORE=database`) = no MySQL PDO driver → enable `nd_pdo_mysql`.
+
+No queues or scheduled tasks exist in the app, so no cron job is needed.
+
+## Session 56 (2026-11-07) — System Admin now has the same access as Manager — ✅ DONE
+
+User: "system admin should be to access everything like manager." Every permission already funnels through the named gates in `AppServiceProvider::boot()` (policies call `$user->can('<gate>')`, routes/views use `@can`/`Gate::allows`), so `UserRole::SystemAdmin` was added next to `UserRole::Manager` in all 43 gates that listed Manager without it (`view-dashboard` and `users.manage` already had it). Two direct role checks also updated: `$isManager` in `components/layouts/app/sidebar.blade.php` (hides the per-module Reports links in favour of the executive Reports hub) and `UserRole::reportsRoute()` (System Admin → `executive.reports.index`, used by every report page's breadcrumb). Deliberately **not** a `Gate::before(fn => true)` for System Admin: a `before` returning true also short-circuits the policies' own conditions (e.g. can't approve a PO you created, only from `PendingApproval`), which Manager is still subject to. Verified with a script comparing every gate (51 checks incl. `view-dashboard` per role) for a Manager vs. a System Admin user: zero differences. Side effect: System Admin's sidebar now shows "Users" twice (Manager group + System Admin group).
+
+## Session 57 (2026-11-07) — Forgot / Reset password pages redesigned to match login; Indonesian reset messages + email — ✅ DONE
+
+User: "fix forgot password page, it still not build yet?" The flow already *worked* (Fortify `resetPasswords()` on, routes + views registered in `FortifyServiceProvider`), but `forgot-password` and `reset-password` were still the starter-kit Flux pages while login had the custom PT SAI design. **New `resources/views/components/auth-shell.blade.php`** (props `heading`, `description`, `title`) holds everything the login page used to inline: animation `<style>`, dark brand panel, mobile header, card with the eyebrow/heading/description, the green `session('status')` banner, and the help/footer lines. `login.blade.php` now wraps its unchanged form in `<x-auth-shell>`; `forgot-password` and `reset-password` were rewritten in the same input/button style (loading spinner, shake-on-error, show/hide password shared by both password fields, "Kembali ke halaman masuk" link). **New `lang/id/passwords.php`** (reset/sent/throttled/token/user — Fortify flashes these as the status/error). `lang/id.json` gained the email strings (`Reset your password` — the Laravel 13 subject, not the older "Reset Password Notification" — plus body lines, `Hello!`, `Regards,`, the action-URL fallback line, `All rights reserved.`) and `Back to login`/`Sending…`/`Saving…`. Re-encoding `id.json` also collapsed a pre-existing **duplicate `"Cash"` key** (`Tunai` then `Kas`) to the one PHP was already using (`Kas`).
+
+**Verified** in a real browser (Playwright): login → "Lupa kata sandi?" → unknown email shows the Indonesian error → `warehouse@test.com` shows the sent banner → reset link pulled from the mail log → reset page → set password → back on login with the success banner → login works; 400px width has no horizontal overflow. Pest auth tests still can't run here (no `pdo_sqlite`, Next Steps #14). Found along the way: the local Vite dev server on `[::1]:5173` was hung (port open, no response), so `public/hot` was briefly moved aside to test against `npm run build` output, then restored.
+
+**Production still can't send the email:** `MAIL_MAILER=log` writes it to `laravel.log`. Needs a Hostinger mailbox on `pt-sai.com` and SMTP settings in the server `.env` (`smtp.hostinger.com`, port 465, `MAIL_SCHEME=smtps`), then `optimize:clear` + `optimize`. `ResetPassword` isn't queued, so no queue worker is needed.
+
 ## Concepts Already Taught (don't re-explain unless asked)
 - **(Session 25) Opening balances belong together, not one at a time:** posting a single account's starting balance in isolation (e.g. `Dr Kas 1.000.000`) forces a guessed equity plug for the credit side every time, because there's nothing real to net it against. The correct cutover is one entry with every known asset/liability balance as its own line; only the genuine leftover (assets − liabilities) goes to equity (Modal/Laba Ditahan) — a real figure then, not a per-account guess.
 - **(Session 25) Journal entry line mechanics:** per line, debit and credit are mutually exclusive (both filled = "debit and credit the same account," cancels to nothing); across the whole entry both sides are required, but that falls out of the balance check for free (an all-one-side entry can never total to zero on both sides, so there's no separate "needs both" rule to write). The Jurnal Umum create page's Post button is disabled live the entire time the running totals don't match — the actual guarantee; `PostJournalEntryAction`'s own balance check is a defense-in-depth backstop, not the primary gate.
@@ -2420,6 +2476,8 @@ Already planned elsewhere, purchasing-side rather than financial: safety stock /
 **Recommended order:** (1) Layer-3 quick wins on existing data — WO plan vs actual + inventory valuation (useful now, strong thesis material showing managerial insight) → (2) Layer 1: Purchase Invoice → Sales Invoice → Overhead Aktual + closing → (3) Layer 2: Buku Besar + Neraca Saldo, then Laba Rugi + Neraca → (4) remaining Layer 3 + dashboard.
 
 ## Immediate Next Steps (pick up here in new session)
+
+**⭐ Production (2026-11-07):** app deployed to Hostinger at `https://pt-sai.com` — see **Session 55** for both runbooks (first setup + deploying updates) and the Hostinger-specific gotchas. First thing next session: confirm `nd_pdo_mysql` got enabled, `php artisan optimize:clear && php artisan optimize` ran clean, and the site loads + a local account can log in.
 
 **Current as of 2026-10-31 — read this first:** Sessions 27–37 built out the rest of Accounting (ledger, trial balance, statements), Manager dashboard, wage payments, and Purchase/Sales Returns + PO cancel — all still uncommitted. **Session 38 added the Purchasing Dashboard + Purchasing Reports** (Purchase Register, Purchase Price Variance). **Session 39 (same sitting): dashboard polish, a real variance-report bug fix, "Purchase Register" renamed to Laporan Faktur Pembelian, and every report export (all 8 reports project-wide) switched from CSV to real Excel `.xls` files** — `app/Support/Reports/Csv.php` is gone, replaced by `Excel.php`. **Session 40 (same sitting): added a Purchase Order Report** (one row per PO — supplier, status, item count, total, received %, overdue — plus a status-count summary). **Session 41 (same sitting): built Safety Stock & Reorder Point calculation (#36 closed)** — `management/products/⚡safety-stock.blade.php`, max-min/Greene formula, 6-month window, actual receipt-date lead times; code there is deliberately commented (user request, examiner-facing — see the standing memory exception for this one area). **Session 42 (same sitting, plus two follow-ups): raw material stock status table + 6th KPI tile on the Purchasing dashboard** — warns when a material is below or nearing its reorder point (near = within its own safety-stock buffer of the trigger); suggested SS/ROP now round **up** to a whole unit (`SafetyStockCalculator::ceilToUnit()`, never down, rounds once at the very end); below-reorder-point rows get a **"Buat PO"** link that deep-links straight into a pre-filled Create PO form (supplier + item + price) when the material has exactly one supplier.
 

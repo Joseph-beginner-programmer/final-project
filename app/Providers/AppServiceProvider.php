@@ -38,136 +38,136 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Gate::define('purchasing.create', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('purchasing.view', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('purchasing.approve', function ($user) {
-            return in_array($user->role, [UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('purchasing.cancel', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('purchasing.open', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('purchasing.close', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('warehouse.receive', function ($user) {
-            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('warehouse.issue', function ($user) {
-            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('warehouse.return', function ($user) {
-            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('warehouse.count', function ($user) {
-            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('returns.post', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Sales, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Sales, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('production.view', function ($user) {
-            return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Production, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('production.create', function ($user) {
-            return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Production, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('employees.manage', function ($user) {
-            return in_array($user->role, [UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('labor-rates.manage', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('overhead.manage', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('ppn.manage', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('products.manage', function ($user) {
-            return in_array($user->role, [UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('suppliers.manage', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('formulas.manage', function ($user) {
-            return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Production, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('sales.manage', function ($user) {
-            return in_array($user->role, [UserRole::Sales, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Sales, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('warehouse.deliver', function ($user) {
-            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Warehouse, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('costs.view', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::Sales], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin, UserRole::Sales], true);
         });
         Gate::define('accounts.manage', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('journal.manage', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('reports.production', function ($user) {
-            return in_array($user->role, [UserRole::Production, UserRole::Manager, UserRole::Accounting], true);
+            return in_array($user->role, [UserRole::Production, UserRole::Manager, UserRole::SystemAdmin, UserRole::Accounting], true);
         });
         Gate::define('reports.purchasing', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::Accounting], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin, UserRole::Accounting], true);
         });
         Gate::define('reports.finance', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('reports.inventory-value', function ($user) {
-            return in_array($user->role, [UserRole::Manager, UserRole::Accounting], true);
+            return in_array($user->role, [UserRole::Manager, UserRole::SystemAdmin, UserRole::Accounting], true);
         });
         Gate::define('requisitions.create', function ($user) {
-            return in_array($user->role, [UserRole::Production, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Production, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('requisitions.process', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('requisitions.view', function ($user) {
-            return in_array($user->role, [UserRole::Production, UserRole::Purchasing, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Production, UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('purchasing.invoice', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('sales.invoice', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('purchasing.return', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('purchasing.return.view', function ($user) {
-            return in_array($user->role, [UserRole::Purchasing, UserRole::Warehouse, UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Warehouse, UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('sales.return', function ($user) {
-            return in_array($user->role, [UserRole::Sales, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Sales, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('sales.return.view', function ($user) {
-            return in_array($user->role, [UserRole::Sales, UserRole::Warehouse, UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Sales, UserRole::Warehouse, UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('wages.pay', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin], true);
         });
         Gate::define('sales.invoice.view', function ($user) {
-            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::Sales], true);
+            return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin, UserRole::Sales], true);
         });
         Gate::define('users.manage', function ($user) {
             return in_array($user->role, [UserRole::SystemAdmin, UserRole::Manager], true);
         });
         Gate::define('reports.margin', function ($user) {
-            return in_array($user->role, [UserRole::Manager, UserRole::Accounting, UserRole::Sales], true);
+            return in_array($user->role, [UserRole::Manager, UserRole::SystemAdmin, UserRole::Accounting, UserRole::Sales], true);
         });
         Gate::define('reports.receivables', function ($user) {
-            return in_array($user->role, [UserRole::Manager, UserRole::Accounting, UserRole::Sales], true);
+            return in_array($user->role, [UserRole::Manager, UserRole::SystemAdmin, UserRole::Accounting, UserRole::Sales], true);
         });
         Gate::define('reports.payables', function ($user) {
-            return in_array($user->role, [UserRole::Manager, UserRole::Accounting], true);
+            return in_array($user->role, [UserRole::Manager, UserRole::SystemAdmin, UserRole::Accounting], true);
         });
 
         Relation::morphMap([

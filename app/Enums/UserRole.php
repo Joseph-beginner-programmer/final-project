@@ -41,7 +41,7 @@ enum UserRole: string
     public function reportsRoute(): string
     {
         return match($this) {
-            self::Manager => 'executive.reports.index',
+            self::Manager, self::SystemAdmin => 'executive.reports.index',
             self::Purchasing => 'purchasing.reports.index',
             default => 'production.reports.index',
         };

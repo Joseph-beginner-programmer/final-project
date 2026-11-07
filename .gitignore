@@ -26,3 +26,7 @@ yarn-error.log
 /design-system/
 *.png
 handover.md
+.claude
+.agents
+erd-lengkap.dbml
+use_case.png

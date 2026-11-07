@@ -1,7 +1,7 @@
 @php
     use App\Enums\UserRole;
 
-    $isManager = auth()->user()->role === UserRole::Manager;
+    $isManager = in_array(auth()->user()->role, [UserRole::Manager, UserRole::SystemAdmin], true);
 @endphp
 <!DOCTYPE html>
 <html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
