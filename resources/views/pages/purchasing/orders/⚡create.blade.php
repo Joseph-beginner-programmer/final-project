@@ -11,6 +11,7 @@ use App\Models\Supplier;
 use Flux\Flux;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Locked;
@@ -36,6 +37,10 @@ new #[Title('Create Purchase Order')] class extends Component {
 
     #[Locked]
     public array $requestedLines = [];
+
+    public ?int $pendingProductIndex = null;
+
+    public array $pendingSupplierChoices = [];
 
     public function mount(): void
     {
@@ -90,7 +95,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                 }
             }
 
-            if ($this->items === [] && $this->supplierId !== '') {
+            if ($this->items === []) {
                 $this->addItemRow();
             }
         }
@@ -165,6 +170,12 @@ new #[Title('Create Purchase Order')] class extends Component {
         unset($this->items[$index]);
 
         $this->items = array_values($this->items);
+        $this->pendingProductIndex = null;
+        $this->pendingSupplierChoices = [];
+
+        if ($this->items === [] && $this->requisitionIds === []) {
+            $this->addItemRow();
+        }
     }
 
     public function addChargeRow(): void
@@ -189,6 +200,24 @@ new #[Title('Create Purchase Order')] class extends Component {
             return;
         }
 
+        if ($this->pendingProductIndex !== null) {
+            $index = $this->pendingProductIndex;
+            $this->pendingProductIndex = null;
+            $this->pendingSupplierChoices = [];
+
+            if ($this->supplierId === '') {
+                $this->items = [];
+
+                return;
+            }
+
+            $productId = (int) ($this->items[$index]['product_id'] ?? 0);
+            $pivot = DB::table('product_supplier')->where('supplier_id', (int) $this->supplierId)->where('product_id', $productId)->first();
+            $this->items[$index]['unit_price'] = $pivot ? bcadd((string) $pivot->price, '0', 0) : '';
+
+            return;
+        }
+
         if ($this->supplierId === '') {
             $this->items = [];
 
@@ -202,6 +231,78 @@ new #[Title('Create Purchase Order')] class extends Component {
         if ($this->items === []) {
             $this->addItemRow();
         }
+    }
+
+    /**
+     * Item-first entry: a product was picked before any supplier was chosen.
+     * One seller -> lock it in automatically. Several -> narrow the supplier
+     * picker to just those and let the user choose. None -> show an error.
+     */
+    protected function resolveSupplierForFirstItem(int $index, int $productId): void
+    {
+        $this->resetErrorBag("items.$index.product_id");
+
+        $sellers = Supplier::where('is_active', true)
+            ->whereHas('products', fn ($query) => $query->where('products.id', $productId))
+            ->get();
+
+        if ($sellers->isEmpty()) {
+            $this->items[$index]['unit_price'] = '';
+            $this->addError("items.$index.product_id", __('No active supplier sells this product yet.'));
+
+            return;
+        }
+
+        if ($sellers->count() === 1) {
+            $this->lockSupplierForItem($sellers->first()->id, $productId, $index);
+
+            return;
+        }
+
+        $this->pendingProductIndex = $index;
+        $this->pendingSupplierChoices = $sellers->pluck('id')->all();
+    }
+
+    protected function lockSupplierForItem(int $supplierId, int $productId, int $index): void
+    {
+        $this->supplierId = (string) $supplierId;
+        $this->pendingProductIndex = null;
+        $this->pendingSupplierChoices = [];
+
+        $pivot = DB::table('product_supplier')->where('supplier_id', $supplierId)->where('product_id', $productId)->first();
+        $this->items[$index]['unit_price'] = $pivot ? bcadd((string) $pivot->price, '0', 0) : '';
+    }
+
+    #[Computed]
+    public function pendingSupplierOptions(): array
+    {
+        return Supplier::whereIn('id', $this->pendingSupplierChoices)
+            ->orderBy('supplier_name')
+            ->get()
+            ->map(fn (Supplier $supplier) => [
+                'id' => $supplier->id,
+                'title' => $supplier->supplier_name,
+                'subtitle' => $supplier->supplier_code,
+            ])->all();
+    }
+
+    #[Computed]
+    public function allPurchasableProducts(): Collection
+    {
+        return \App\Models\Product::purchasable()->where('is_active', true)->orderBy('product_name')->get();
+    }
+
+    public function rowProduct(array $item): ?\App\Models\Product
+    {
+        $id = (int) ($item['product_id'] ?? 0);
+
+        if ($id <= 0) {
+            return null;
+        }
+
+        return $this->supplierId !== ''
+            ? $this->availableProducts->firstWhere('id', $id)
+            : \App\Models\Product::find($id);
     }
 
     #[Computed]
@@ -236,8 +337,17 @@ new #[Title('Create Purchase Order')] class extends Component {
     {
         if (preg_match('/^items\.(\d+)\.product_id$/', $name, $matches)) {
             $index = (int) $matches[1];
-            $product = $this->availableProducts->firstWhere('id', (int) $value);
-            $this->items[$index]['unit_price'] = $product ? bcadd($product->pivot->price, '0', 0) : '';
+
+            if ($this->supplierId !== '') {
+                $product = $this->availableProducts->firstWhere('id', (int) $value);
+                $this->items[$index]['unit_price'] = $product ? bcadd($product->pivot->price, '0', 0) : '';
+
+                return;
+            }
+
+            if ($this->requisitionIds === [] && (int) $value > 0) {
+                $this->resolveSupplierForFirstItem($index, (int) $value);
+            }
         }
     }
 
@@ -250,9 +360,10 @@ new #[Title('Create Purchase Order')] class extends Component {
     public function productOptions(int $index): array
     {
         $taken = collect($this->items)->except($index)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all();
+        $pool = $this->supplierId !== '' ? $this->availableProducts : $this->allPurchasableProducts;
 
-        return $this->availableProducts->map(fn ($product) => $product->toPickerOption(
-            $product->pivot->price !== null
+        return $pool->map(fn ($product) => $product->toPickerOption(
+            $this->supplierId !== '' && $product->pivot->price !== null
                 ? $this->formatRupiah((string) $product->pivot->price).'/'.$product->unit_of_measure
                 : null,
             in_array($product->id, $taken, true) ? __('Already chosen') : null,
@@ -530,6 +641,20 @@ new #[Title('Create Purchase Order')] class extends Component {
                                         </div>
                                     </dl>
                                 </div>
+                            @elseif ($this->pendingSupplierChoices !== [])
+                                <div wire:key="supplier-pending" wire:transition class="rounded-md border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5 px-4 py-3.5">
+                                    <flux:field>
+                                        <flux:label>{{ __('This product is sold by more than one supplier — choose one') }}</flux:label>
+                                        <x-picker
+                                            model="supplierId"
+                                            size="md"
+                                            :options="$this->pendingSupplierOptions"
+                                            :selected="(string) $supplierId"
+                                            :placeholder="__('Select a supplier...')"
+                                            :label="__('Supplier')"
+                                        />
+                                    </flux:field>
+                                </div>
                             @else
                                 <div wire:key="supplier-select" wire:transition>
                                     <flux:field>
@@ -545,6 +670,10 @@ new #[Title('Create Purchase Order')] class extends Component {
                                         />
                                         @error('supplierId') <flux:error class="mt-1" :message="$message" /> @enderror
                                     </flux:field>
+
+                                    @if ($requisitionIds === [])
+                                        <p class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Already know who to order from? Pick them here — or add an item below and we\'ll find who sells it.') }}</p>
+                                    @endif
 
                                     <div wire:loading wire:target="supplierId" class="flex items-center gap-1.5 mt-1.5 text-xs text-accent">
                                         <flux:icon.loading variant="micro" class="size-3.5" />
@@ -604,7 +733,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                     </div>
 
                     <div wire:loading.remove wire:target="supplierId">
-                    @if (!$supplierId)
+                    @if (!$supplierId && $requisitionIds !== [])
                         <div class="flex flex-col items-center justify-center text-center py-10 rounded-md border border-dashed border-zinc-200 dark:border-white/10">
                             <p class="text-sm text-zinc-500 dark:text-zinc-400">{{ __('Select a supplier first to add items.') }}</p>
                         </div>
@@ -619,7 +748,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                             </div>
 
                             @foreach ($items as $index => $item)
-                                <?php $product = $this->availableProducts->firstWhere('id', (int) ($item['product_id'] ?? 0)); ?>
+                                <?php $product = $this->rowProduct($item); ?>
                                 <div
                                     role="row"
                                     wire:key="item-row-{{ $index }}"
@@ -681,7 +810,7 @@ new #[Title('Create Purchase Order')] class extends Component {
 
                         <div class="lg:hidden space-y-3">
                             @foreach ($items as $index => $item)
-                                <?php $product = $this->availableProducts->firstWhere('id', (int) ($item['product_id'] ?? 0)); ?>
+                                <?php $product = $this->rowProduct($item); ?>
                                 <div wire:key="item-card-{{ $index }}" wire:transition class="rounded-md border border-zinc-200 dark:border-white/10 p-3.5">
                                     <div class="flex items-start justify-between gap-2">
                                         <div class="flex-1">
