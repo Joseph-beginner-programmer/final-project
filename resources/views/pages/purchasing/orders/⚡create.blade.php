@@ -87,9 +87,16 @@ new #[Title('Create Purchase Order')] class extends Component {
 
                 if ($product) {
                     $this->supplierId = (string) $prefillSupplierId;
+
+                    // Suggest enough to clear past the reorder point with a safety-stock
+                    // margin, not just reach it exactly - a simple replenishment nudge,
+                    // not an order-quantity optimization (out of this project's scope).
+                    $targetLevel = bcadd((string) $product->reorder_point, (string) $product->safety_stock, 2);
+                    $suggestedQuantity = bcsub($targetLevel, (string) $product->current_stock, 2);
+
                     $this->items[] = [
                         'product_id' => (string) $product->id,
-                        'quantity_ordered' => '',
+                        'quantity_ordered' => bccomp($suggestedQuantity, '0', 2) > 0 ? \App\Support\Decimal::plain($suggestedQuantity) : '',
                         'unit_price' => $product->pivot->price !== null ? bcadd((string) $product->pivot->price, '0', 0) : '',
                     ];
                 }
