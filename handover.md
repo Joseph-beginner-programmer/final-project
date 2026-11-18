@@ -2294,7 +2294,125 @@ User: "fix forgot password page, it still not build yet?" The flow already *work
 
 **Production still can't send the email:** `MAIL_MAILER=log` writes it to `laravel.log`. Needs a Hostinger mailbox on `pt-sai.com` and SMTP settings in the server `.env` (`smtp.hostinger.com`, port 465, `MAIL_SCHEME=smtps`), then `optimize:clear` + `optimize`. `ResetPassword` isn't queued, so no queue worker is needed.
 
+## Session 58 (2026-11-07 → 2026-11-14) — Production data as raw SQL, sidebar logo, daily-worker employees, thesis testing prep — ✅ DONE
+
+Long multi-day sitting. Very little app code changed; most of it was production data scripts and thesis material.
+
+### Production data edits — plain SQL files, not seeders
+User rule: **"i dont ask for seeder i want an sql query so i can edit data in production"** — production data changes are delivered as standalone `.sql` files the user runs in Hostinger phpMyAdmin. They live **outside the repo** in `C:\Users\ASUS\Tugas_Akhir\`:
+- `replace_materials.sql` — the real raw-material catalog.
+- WIP/component BOMs: `insert_body_htc.sql`, `insert_handel_htc.sql`, `insert_kaki_tutup_cangkir_htc.sql`, `insert_tutup_dalam.sql`.
+- Finished thermoses + formulas: `insert_thermos_htc_777.sql`, `insert_thermos_hpc_888.sql`, `insert_thermos_hpc_777.sql`, `insert_thermos_dpc_888.sql` (+ `revert_thermos_dpc_888.sql`), `insert_thermos_apc_888.sql`, `insert_thermos_dsc_777.sql`.
+- `update_prices_and_customers.sql`, `update_prices_plus_100000.sql` — selling prices (later all +Rp 100.000) and customers.
+- `insert_employees_harian.sql` (2026-11-09) — the 15 main daily workers from the photographed wage sheet: `employees` (self-numbered `EMP-xxxxxx`, hire_date `2026-08-06`, active) **and** their `labor_rates` (hourly = daily wage ÷ `@jam_per_hari`, default 8; `effective_from` `2026-08-06`; `created_by` = first manager/system_admin). The first version had no wages — user caught it ("your insert emplyee sql does not include their wages").
+
+**Pattern every file follows:** `START TRANSACTION … COMMIT`; codes self-numbered with `MAX(CAST(SUBSTRING(code, n) AS UNSIGNED)) + ROW_NUMBER()`; every insert guarded by `NOT EXISTS`, so running the file twice does nothing. **Tested locally** inside `DB::beginTransaction()` / `rollBack()` from a plain PHP bootstrap script (`require vendor/autoload.php; $app = require bootstrap/app.php; $app->make(Kernel::class)->bootstrap();`, strip the `START TRANSACTION`/`COMMIT`, `DB::unprepared()` twice, roll back) — **not** `php artisan tinker <file>`, which opens an interactive shell and hangs.
+
+Wage-sheet oddities flagged to the user, not resolved: Wahib's total doesn't add up; the "Mur Freelance" row is unclear (not imported).
+
+### Sidebar logo (committed by the user as `bb7eb72` "logo")
+`components/app-logo-icon.blade.php` now draws the same outline thermos as the login page (instead of the Laravel mark), and `components/app-logo.blade.php` shows **"PT SAI"** instead of "Laravel Starter Kit" in a dark rounded tile with an accent border, for both the `sidebar.brand` and `brand` variants. Checked with Playwright screenshots in light and dark mode. No npm build needed.
+
+### "Dibayar dari" picker empty — data, not a bug (nothing changed)
+The cash-account picker on purchase-invoice payments (and the refund pickers on returns, and sales payments) lists only `accounts.is_cash = 1`. In the local DB **no** account had it — 1000 Kas and 1010 Bank BCA were both `0`. Fix for the user: tick **"Akun kas"** on those accounts in Daftar Akun, or `UPDATE accounts SET is_cash = 1, updated_at = NOW() WHERE account_code IN ('1000','1010');`. **Check production for the same thing.** Column names, for ad-hoc SQL: `account_code`, `account_name` (not `code`).
+
+### ERD for the thesis
+HTML ERD artifact plus DBML (a full version and a keys-only version), generated from the live schema by scratchpad scripts. **49 operational tables in 6 modules**, each table's purpose explained to the user per module.
+
+### Thesis testing (Bab pengujian) — material produced
+- **Use case diagram:** every actor (7 `UserRole`s) and their use cases, taken from the gates. Explained what "risk" means in a use-case description.
+- **Black box:** 5-scenario tables for Purchasing and for Sales (valid + invalid input, expected vs. actual).
+- **UAT:** task-scenario checklist + **SUS** + open questions; SUS alone is *not* a UAT (needs task scenarios + signed acceptance). SUS scoring taught (odd: score − 1; even: 5 − score; sum × 2.5). **The user's 7 respondents: 55, 75, 75, 70, 67.5, 77.5, 92.5 → average 73.21 = "Good", Acceptable** (Bangor 2009; cite Brooke 1996). Weakest item Q10 (needs time to learn).
+- **Manual vs. system speed:** 7 tasks to time, a measurement sheet + summary table; efficiency = (Manual − System) ÷ Manual × 100% (speed-up = Manual ÷ System). The user's manual numbers (PO 3 items 19 min / 1 item 7 min, SO 2 items 14 min, WO 30 / 25 min) judged realistic; advised fixing trial numbering, volume and a method column.
+
+### Flows and statuses explained (straight from the code — reuse, don't re-derive)
+Purchase request → PO; purchase return (and its 3 journal cases); sales order; sales return; material return; and the status sets for PO (8), SO (5), DO (3), WO (4), production result, purchase request (4) and purchase invoice (5). Plus what happens when a WO for 100 yields 90 (two different cases). See Concepts Already Taught below.
+
+**WO status wording for the thesis:** the status after release is **"Sedang Dikerjakan"** (`in_progress`). "Rilis"/"dirilis" is the action/button, not a status. `"Released": "Dirilis"` in `lang/id.json` is an unused leftover key.
+
+### Small gaps noticed (not fixed — the user didn't ask)
+- `PurchaseOrderStatus` allows PendingApproval → Draft, but no action uses it.
+- A SO stuck at Terkirim Sebagian can't be closed or cancelled (no "Closed" status like the PO has).
+- The production result's `DocumentStatus` has Cancelled, but there's no cancel action.
+- The `warehouse.issue` gate is unused since Session 46.
+- The Cash Flow report labels lines with raw account names (an offer to change this was not taken up).
+
+## Session 59 (2026-11-17/18) — Production demo-data generator built (uncommitted, not yet run); real production master data confirmed; thesis review track opened then put on hold
+
+### Part 1 — Production master data confirmed via SSH + tinker (read-only, nothing changed except one flag)
+User got SSH working on the Hostinger box (`ssh -p 65002 u706817998@145.79.26.31` — once past an IP-block/invisible-password confusion, connects fine; `set +H` needed once per session to stop bash history-expansion eating `!`-adjacent characters in pasted `tinker --execute` one-liners). Confirmed real state of production (not dev) via a series of single-line `php artisan tinker --execute="..."` commands (multi-line heredocs into `tinker` reliably got mangled by the terminal's paste handling — stick to single-line `--execute` for this user's setup):
+- **176 products, 59 customers, 30 suppliers, 25 employees** (all with an open labor rate), **113 production formulas**, **24/24 `AccountSystemRole`s mapped** on Daftar Akun.
+- **20 real finished-goods lines** across the real 6 series (HTC 777, HPC 888, HPC 777, DPC 888, APC 888, DSC 777), 3–4 colors each, Rp 141.000–235.000 — matches the thesis's "6 jenis termos" claim exactly.
+- **BOM confirmed exactly 2 levels** (raw → WIP molded component → FG assembly) via a recursive explosion printed for 3 real FG products — simpler than worried; every FG needs ~4 direct raw materials (packaging: box/tape/sticker/bag, same 4 for every line) plus 6–7 WIP components, each WIP needing 1–3 raw materials of its own. No deeper nesting found.
+- **Overhead rates**: Molding Rp 15.000/h, Assembly Rp 40.000/h, both open since 2026-01-01 — fine to post against.
+- **Cash accounts**: only `1000 Kas` had `is_cash=1` on production (Bank BCA did not — same gap Session 58 found and fixed in dev but never carried over to prod). **User ticked Bank BCA's `is_cash` on production during this session** — now both exist, so payments can realistically mix cash/bank-transfer.
+- **Real users per role** (not the `@test.com` dev accounts): `1 Tanu Triniwaty` (manager, doubles as accounting per the thesis's own UAT respondent list), `5 Luh Natalia` (production), `22 Nuli Setyo Rini` (purchasing), `23/24 Amelius Tumbaleka`/`Afenik Purwaningrum` (sales), `19/20/21 Welly Wiguna`/`Dimas Kristianto`/`Agung Prastowo` (warehouse). The old `@test.com` accounts (`accounting@test.com` etc.) still exist on production too, left over from dev.
+- **Existing real transactions on prod are all Nov 8–13, 2026** (12 POs, 2 SOs, 10 WOs) — this is the real UAT period, right at/after the Hostinger deploy. Nothing before Aug 2026 exists on prod yet.
+
+### Part 2 — `app/Console/Commands/PopulateDemoTransactions.php` built, lint-clean, **NOT committed, NOT yet deployed/run**
+User's goal: make production's reports/dashboards "feel real" for the thesis demo by generating a backfilled history of realistic transactions. Flagged the risk first (real company master data already loaded; mixing synthetic transactions into what may become the company's real books) — user's explicit choice (via `AskUserQuestion`) was to write directly to the live production DB anyway, with **3 months of history** (not 6/full-year), **no month-end Overhead/PPN closing** (that's final/locked; leave periods open/correctable), and **a realistic subset** of FG lines/customers rather than all 20/59.
+
+**What it does:** mirrors `database/seeders/DemoSeeder.php`'s proven Mon/Wed/Thu/Fri weekly-cycle pattern (Monday: sales orders + raw-material purchasing demand-pulled from open sales; Wednesday: receive POs + start Molding WOs; Thursday: deliver confirmed SOs + invoice; Friday: start Assembly WOs bottlenecked by available WIP+raw stock; daily: finish WOs after a 1–2 day lead time, ~1-in-9 late) but **generalized to discover real production master data at runtime** instead of DemoSeeder's own hardcoded `RAW-001`/`FG-001`/fake customer names — resolves FG product ids + their formulas, explodes the real 2-level BOM per FG, looks up real supplier pricing via `product_supplier`, uses the 6 real role users above (falling back to id 1 where no real staff account exists for a role), and picks randomly among whichever accounts have `is_cash=1`. Every document goes through the real Action classes (`CreatePurchaseOrderAction`, `CreateWorkOrderAction`, `SaveSalesOrderDraftAction`, etc.) — same FIFO/journal/derived-field guarantees as a real user clicking through the UI.
+
+**Key design choice, different from `DemoSeeder`:** does **not** wrap the whole run in one `DB::transaction()` — on shared hosting a multi-minute single transaction risks lock/memory limits, and an all-or-nothing rollback would discard everything generated before one late edge-case failure. Instead **every individual document (PO, SO, WO, receipt, invoice, payment) is wrapped in its own try/catch**, logged to `storage/logs/laravel.log` and skipped on failure, run continues. The `mysqldump` backup (recommended, not yet confirmed taken) is the real safety net, not an in-script rollback.
+
+Scope resolved: **FG-001..006** (HTC 777 + HPC 888, all colors — Rp 141k/188k price points), **customers CUS-000001..015** (first 15, synthetic weight/terms/pay-after assigned per customer since real customers have no stored payment-term data), **default range `--start=2026-08-01 --end=2026-11-07`** (ends just before the real Nov 8 UAT data so the backfilled history reads as "before UAT" rather than overlapping it). Supports `--force` (without it, prints a dry plan only — resolved FG lines/customers/users/cash accounts — and writes nothing) and prints before/after document counts at the end.
+
+**Not yet done:** the file was never pushed to git (deliberately — it's a one-off operational tool, not a permanent feature; user hasn't decided git-commit vs. direct-SSH-heredoc-paste for getting it onto the server) and **never actually run against production**. Next session, if resumed: get the file onto the server (`git push`+`pull`+`composer dump-autoload -o`, since prod's optimized autoloader classmap won't see a brand-new class file otherwise, no migration needed — or paste it directly via SSH heredoc to skip git entirely), confirm the `mysqldump` backup exists, dry-run (`php artisan demo:populate`, no `--force`), a short 2-week test (`--end=2026-08-14 --force`), then the full range.
+
+### Part 3 — Real gap found, not fixed: **Gudang has no page to view current stock at all**
+While answering the user's UAT-scenario questions (see Part 4), checked the actual warehouse pages/policies: **no warehouse dashboard exists** (removed Session 43 as a dead placeholder) and the only page listing all products with `current_stock` (Produk, under Manajemen) is gated to `Gate::define('products.manage', ...)` = **Manager + SystemAdmin only** (`app/Providers/AppServiceProvider.php`). Warehouse can only see stock *inside* a specific transaction (e.g. "Diterima: 40/100" on one receipt) — never a general "how much of X right now" view, despite Gudang being the division most responsible for persediaan and Bab 1.4.4 of the thesis claiming a "dasbor informasi real-time." Flagged to the user as worth either (a) a cheap fix (extend `products.manage`-gated read access to Warehouse too) or (b) just not claiming real-time stock *dashboard* access for Gudang specifically in the thesis. **Not fixed this session — just flagged.**
+
+### Part 4 — Thesis review track: substantial findings produced, **user explicitly put this track on hold** ("put 'fixing thesis' on hold")
+Read `C:\Users\ASUS\Downloads\TA.pdf` (full skripsi) and `C:\Users\ASUS\Downloads\UAT.pdf` (the 26-scenario UAT sign-off table — same content as thesis Gambar 4.1–4.3) and produced a prioritized list of weaknesses. **Nothing in the actual PDF/document files was edited** — this was all advisory (chat responses + one paraphrase of Bab 3.2.1's block-diagram paragraph, which the user hasn't necessarily pasted back into their real document yet). Parking the full list here so a future session can pick up without re-deriving it:
+
+**Highest priority:**
+- **Lembar Disclaimer AI (p. iv) likely understates AI's real role.** States AI (Claude Opus 5) was used only for "ERD dan antarmuka pengguna" in Bab 3 — but per this handover's own 58-session history, AI involvement (this assistant) went far beyond that: backend Actions/Services, the FIFO costing engine, safety-stock/reorder-point formulas, the whole double-entry journal/accounting engine, financial statements, bug fixes — and per the 2026-10-05 standing rule, the assistant has been writing most production code directly to files since then. User's own signed academic-integrity declaration; worth reconciling before defense, not after an examiner probes implementation details.
+- **UAT (both the thesis's Bab 4 and the standalone UAT.pdf) only tests the "pencatatan" (recording) half of Rumusan Masalah #1** ("mengintegrasikan pencatatan DAN **penyediaan informasi** persediaan sesuai kebutuhan pengguna") — every one of the 26 scenarios tests that an action writes data correctly; **none** test a user viewing information to make a decision, even though the thesis's own Tabel 3.1 (Kebutuhan Informasi) names exactly this as the core need for every role. Concrete scenarios drafted in chat for Pembelian (the dashboard's "Raw material stock status" table + reorder-point "Buat PO" link) and Gudang (per-page worklist/queue tabs, Stok Opname variance, Retur Bahan shortfall, document cancellation, a negative/access-restriction test, exact real status enum values for partial vs. full receipt/delivery — `PurchaseOrderStatus` 8 states incl. Diterima Sebagian/Lengkap, `SalesOrderStatus` 5 states incl. Terkirim Sebagian/Semua, both pulled from the real enums + `lang/id.json`, not guessed). Produksi/Penjualan/Akuntansi/Manajer not yet gone through the same way.
+- **PEA's two headline efficiency numbers (95% biaya produksi, 94% laporan laba rugi) each rest on effectively one manual trial** — and the one Laporan Laba Rugi trial's 90-minute manual baseline explicitly notes a bathroom-break interruption in its own "Kondisi" column, which inflates the very baseline the 94% figure is calculated from. A specific, examiner-exploitable weak point; fix by re-measuring cleanly or averaging 2–3 trials like the other tasks already do.
+- **No report anywhere in Bab 4 for "Pengujian Sistem Mandiri"**, despite Bab 2.5.1 explicitly promising it as its own phase before UAT.
+- **Section 2.3 promises an Activity Diagram** that never appears anywhere in Bab 3 or the Lampiran (only Use Case Diagram, BPMN, ERD are shown).
+
+**Document errors (quick, zero-risk fixes):** Pembimbing II's NIP still "xx-xxx"; title-page doc number still "NO. XXXXXXXX/XXX/2026"; two "Surabaya, XX November 2026" placeholder dates unfilled; Kata Pengantar item 3 calls Silvia Rostianingsih "pembimbing I" (should be II); Daftar Isi + body both label *both* "Accurate Online" and "Mekari Jurnal" as section "2.1.2.1" (Mekari should be 2.1.2.2); Lembar Pengesahan dated "10 Januari 2026," inconsistent with the rest of the real timeline (deploy/UAT all Nov 2026).
+
+**Scope-undersells-reality gap:** Bab 1.4.4 and Bab 3.2.1 only name "laporan keuangan" generically — don't mention the system actually has Buku Besar, Neraca Saldo, Laba Rugi, Neraca, Arus Kas, PPN Settlement. Lampiran 5's 32 screenshots don't appear (from what's readable) to include the financial statements themselves, only their inputs (Jurnal Umum, Faktur, Biaya Overhead Aktual) — worth double-checking the real PDF since report-index card grids may have more below the visible crop.
+
+**Bab 3.2.2.1 (Proses Bisnis Diusulkan) specific fixes drafted but not yet reinserted:** no Gudang BPMN exists anywhere (AS-IS or TO-BE), despite Gudang being a full module/actor; Gambar 2.1's manager-rejection/revision loop isn't narrated; "notifikasi" claim needs verifying against whether a real push notification exists (it doesn't appear to — suggest softening to "muncul pada daftar persetujuan" instead); grammar typo "pengirim barang" → "pengiriman barang"; the shortage branch's end-state ("Menyusun Ulang Prioritas Produksi") isn't explained; opening summary sentence omits persediaan/gudang as a computerized process; actor-naming inconsistency ("divisi produksi" vs. the use-case-form's actual "Kepala Produksi") recurs project-wide.
+
+**Also done:** paraphrased Bab 3.2.1's block-diagram paragraph per the user's own fix (added Manajemen as a 6th module, restored the Data Master/Transaksi framing to match Bab 1.4.2) — two corrections applied during the paraphrase: "modul manajer" → "modul manajemen" (naming-pattern consistency with the other 5 modules) and reordered the transaction-data list to match Bab 1.4.2's exact ordering.
+
+**Status: ON HOLD per explicit user request this session.** Resume by re-reading this section — nothing above has been acted on in the actual document yet.
+
 ## Concepts Already Taught (don't re-explain unless asked)
+- **(Session 58) Purchase return journals — 3 cases, decided by the invoice state:**
+  - **(A)** no invoice → Dr GRNI / Cr Persediaan.
+  - **(B)** invoice posted, unpaid → Dr Utang Usaha / Cr Persediaan + Cr PPN Masukan.
+  - **(C)** invoice already paid → only the part still owed reduces Utang Usaha; the rest is Dr Kas/Bank (supplier refund, needs an `is_cash` account).
+  - The credit side never changes; the debit side reverses whatever the purchase had become by then.
+  - Invoice price ≠ lot cost → Selisih Harga Pembelian line.
+  - A draft invoice blocks posting the return.
+  - The return moves the PO back from Diterima Lengkap to Diterima Sebagian so a replacement can be received.
+- **(Session 58) Sales return:**
+  - Each line is **Layak jual** (restocked into the same lots at the same cost, Dr Persediaan / Cr HPP) or **Rusak** (not restocked; its cost stays in HPP).
+  - Once invoiced, Dr **Retur Penjualan** (contra-revenue, so returns stay visible) + Dr PPN Keluaran / Cr Piutang and/or Kas (refund).
+  - Before the invoice there's no revenue to reverse; the later invoice just bills the net quantity.
+  - The SO status does not reopen.
+- **(Session 58) Material return:**
+  - Leftover goes from the production floor back to the warehouse after the production result.
+  - The leftover's value waits in WIP. Warehouse counts what actually comes back: Dr Persediaan Bahan Baku, any shortfall Dr **Selisih Bahan**, Cr WIP.
+  - Production receipt + material return together bring WIP back to 0.
+- **(Session 58) WO 100 → 90:**
+  - Fewer good units at the production result → unit cost goes **up** (the rejects' cost is carried by the good units).
+  - Fewer received by Warehouse at the production receipt → unit cost **stays**; the gap goes to **Kerugian Produksi**.
+  - Only one receipt per result, so goods found later come in through stock opname.
+- **(Session 58) Status sets:**
+  - PO 8 (Manager approval, creator can't approve; Cancel = nothing received yet, Close = finished short).
+  - SO 5 (no approval; statuses after Dikonfirmasi are driven by DOs).
+  - DO / production result / returns / receipts use `DocumentStatus` Draf → Diposting / Dibatalkan; posted is final and is corrected by a new document, never deleted.
+  - WO 4.
+  - Purchase request 4: no draft; per-line PO links; goes back from Dijadikan PO to Diajukan when a linked PO is rejected or cancelled.
+  - Purchase/sales invoice 5: status recalculated from payments + returns; "Lewat jatuh tempo" is computed, not stored.
+- **(Session 58) SUS scoring + why the efficiency formula** (see Session 58 thesis testing).
 - **(Session 25) Opening balances belong together, not one at a time:** posting a single account's starting balance in isolation (e.g. `Dr Kas 1.000.000`) forces a guessed equity plug for the credit side every time, because there's nothing real to net it against. The correct cutover is one entry with every known asset/liability balance as its own line; only the genuine leftover (assets − liabilities) goes to equity (Modal/Laba Ditahan) — a real figure then, not a per-account guess.
 - **(Session 25) Journal entry line mechanics:** per line, debit and credit are mutually exclusive (both filled = "debit and credit the same account," cancels to nothing); across the whole entry both sides are required, but that falls out of the balance check for free (an all-one-side entry can never total to zero on both sides, so there's no separate "needs both" rule to write). The Jurnal Umum create page's Post button is disabled live the entire time the running totals don't match — the actual guarantee; `PostJournalEntryAction`'s own balance check is a defense-in-depth backstop, not the primary gate.
 - **(Session 22) Overhead in one picture:** three cost elements — bahan baku and tenaga kerja are traceable per WO, overhead is not (one PLN bill, machine wear) — so overhead is charged like **renting the machine per hour**: rate = estimated monthly overhead ÷ budgeted machine hours, set in advance because the bills arrive after the month; each WO pays actual machine hours × rate (applied); after the month, applied vs actual = under/over-applied, corrected in one closing journal (all to HPP), never by re-costing documents or lots. A month's profit is final only after that closing.
@@ -2476,6 +2594,14 @@ Already planned elsewhere, purchasing-side rather than financial: safety stock /
 **Recommended order:** (1) Layer-3 quick wins on existing data — WO plan vs actual + inventory valuation (useful now, strong thesis material showing managerial insight) → (2) Layer 1: Purchase Invoice → Sales Invoice → Overhead Aktual + closing → (3) Layer 2: Buku Besar + Neraca Saldo, then Laba Rugi + Neraca → (4) remaining Layer 3 + dashboard.
 
 ## Immediate Next Steps (pick up here in new session)
+
+**⭐ Current (2026-11-18), see Session 59 — thesis-fixing is ON HOLD, don't resume it unless the user asks.** Production master data confirmed real and solid (176 products, 59 customers, 30 suppliers, 25 employees w/ rates, 24/24 accounts mapped, real BOM 2 levels deep). A demo-data generator (`app/Console/Commands/PopulateDemoTransactions.php`) is written, lint-clean, and ready, but **uncommitted and never actually run against production** — that's the live loose end if this track resumes: get it onto the server, `mysqldump` backup first, dry-run, short test range, then the full `--start=2026-08-01 --end=2026-11-07 --force`. Separately, a thesis-review pass (TA.pdf + UAT.pdf) produced a prioritized list of real weaknesses (AI disclaimer scope, UAT only testing "pencatatan" not "penyediaan informasi," single-trial PEA numbers, missing Activity Diagram/Gudang BPMN, placeholder dates/NIPs, etc.) — see Session 59 Part 4 for the full list; user said to park it, nothing has been edited in the actual document.
+
+**⭐ Previous (2026-11-14), see Session 58:** the app is feature-complete; the work now is **thesis testing and production data**.
+- Production data is changed with standalone `.sql` files in `C:\Users\ASUS\Tugas_Akhir\` (never seeders).
+- On production, check that Kas/Bank accounts have `is_cash = 1`, or every payment picker is empty.
+- `insert_employees_harian.sql` is ready to run on production; confirm with the user whether it has been.
+- Production email (password reset) still needs SMTP (Session 57).
 
 **⭐ Production (2026-11-07):** app deployed to Hostinger at `https://pt-sai.com` — see **Session 55** for both runbooks (first setup + deploying updates) and the Hostinger-specific gotchas. First thing next session: confirm `nd_pdo_mysql` got enabled, `php artisan optimize:clear && php artisan optimize` ran clean, and the site loads + a local account can log in.
 
