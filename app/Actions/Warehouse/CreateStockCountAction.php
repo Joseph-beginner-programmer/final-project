@@ -6,6 +6,7 @@ use App\Enums\DocumentStatus;
 use App\Exceptions\InvalidStockCountException;
 use App\Models\Product;
 use App\Models\StockCount;
+use App\Models\StockCountItem;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -31,12 +32,13 @@ class CreateStockCountAction
             $count->save();
 
             $products = Product::active()->orderBy('type')->orderBy('product_code')->get();
-            foreach ($products as $product) {
-                $count->items()->create([
-                    'product_id' => $product->id,
-                    'system_quantity' => $product->current_stock,
-                ]);
-            }
+            $items = $products->map(function (Product $product) {
+                $item = new StockCountItem(['product_id' => $product->id]);
+                $item->system_quantity = $product->current_stock;
+
+                return $item;
+            });
+            $count->items()->saveMany($items);
 
             return $count->load('items.product');
         });
