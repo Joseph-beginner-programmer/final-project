@@ -622,7 +622,7 @@ class PopulateDemoTransactions extends Command
     protected function crew(string $stage, Carbon $day): array
     {
         $ids = Employee::where('status', 'active')->orderBy('id')->get()
-            ->filter(fn (Employee $e) => $e->laborRateOn($day) !== null)
+            ->filter(fn (Employee $e) => $e->laborRateOn(\Illuminate\Support\Carbon::instance($day)) !== null)
             ->pluck('id')->all();
         if ($ids === []) {
             return [];
