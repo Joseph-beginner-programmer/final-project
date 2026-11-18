@@ -103,6 +103,10 @@ class PopulateDemoTransactions extends Command
 
     protected Carbon $today;
 
+    protected Carbon $rangeStart;
+
+    protected string $attachmentPath = 'purchase-order-receipts/demo-surat-jalan.pdf';
+
     protected int $skipped = 0;
 
     public function handle(): int
@@ -110,6 +114,7 @@ class PopulateDemoTransactions extends Command
         $start = Carbon::parse($this->option('start'))->startOfDay();
         $end = Carbon::parse($this->option('end'))->startOfDay();
         $this->today = $end->copy();
+        $this->rangeStart = $start->copy();
 
         $this->resolveMasterData();
 
@@ -123,6 +128,8 @@ class PopulateDemoTransactions extends Command
 
             return self::SUCCESS;
         }
+
+        \Illuminate\Support\Facades\Storage::disk('local')->put($this->attachmentPath, "%PDF-1.4\n% demo surat jalan\n");
 
         $before = $this->counts();
         mt_srand(2026);
@@ -229,7 +236,7 @@ class PopulateDemoTransactions extends Command
 
         $this->finishWorkOrders($day);
 
-        if ($day->day === 1) {
+        if ($day->day === 1 && $day->copy()->subMonthNoOverflow()->format('Y-m') >= $this->rangeStart->format('Y-m')) {
             try {
                 $this->monthlyOverheadAndWages($day->copy()->subMonthNoOverflow());
             } catch (Throwable $e) {
@@ -431,7 +438,7 @@ class PopulateDemoTransactions extends Command
                         'purchaseOrderItemId' => $item->id,
                         'quantityReceived' => $this->decimal(max(0, (float) $item->quantity_ordered - (float) $item->quantity_received)),
                     ])->all(),
-                    attachmentPath: null,
+                    attachmentPath: $this->attachmentPath,
                 ));
                 $supplierId = $po->supplier_id;
                 $this->at($day->copy()->addDays(2), fn () => $this->invoicePurchase($batch->id, $supplierId));
@@ -694,11 +701,12 @@ class PopulateDemoTransactions extends Command
         $opEx = Account::where('type', 'expense')->whereNull('system_role')->where('is_active', true)->pluck('id', 'account_name');
         if ($opEx->isNotEmpty()) {
             $accountId = $opEx->values()->first();
+            $opExAmount = $this->decimal(round(8000000 * $this->random(0.9, 1.1), -3));
             try {
                 app(PostJournalEntryAction::class)->handle(
                     lines: [
-                        ['account_id' => $accountId, 'debit' => $this->decimal(round(8000000 * $this->random(0.9, 1.1), -3)), 'credit' => '0'],
-                        ['account_id' => $this->cashAccountIds[array_rand($this->cashAccountIds)], 'debit' => '0', 'credit' => $this->decimal(round(8000000 * $this->random(0.9, 1.1), -3))],
+                        ['account_id' => $accountId, 'debit' => $opExAmount, 'credit' => '0'],
+                        ['account_id' => $this->cashAccountIds[array_rand($this->cashAccountIds)], 'debit' => '0', 'credit' => $opExAmount],
                     ],
                     type: \App\Enums\JournalEntryType::Manual,
                     description: 'Beban operasional '.$label,
