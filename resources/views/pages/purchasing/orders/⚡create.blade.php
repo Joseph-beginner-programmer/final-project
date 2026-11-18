@@ -90,7 +90,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                 }
             }
 
-            if ($this->items === []) {
+            if ($this->items === [] && $this->supplierId !== '') {
                 $this->addItemRow();
             }
         }
@@ -189,8 +189,18 @@ new #[Title('Create Purchase Order')] class extends Component {
             return;
         }
 
+        if ($this->supplierId === '') {
+            $this->items = [];
+
+            return;
+        }
+
         foreach ($this->items as $index => $item) {
             $this->items[$index]['product_id'] = '';
+        }
+
+        if ($this->items === []) {
+            $this->addItemRow();
         }
     }
 
