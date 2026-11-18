@@ -25,7 +25,9 @@ new #[Title('Stock Count')] class extends Component {
         $this->loadRelations();
 
         foreach ($this->stockCount->items as $item) {
-            $this->counted[$item->id] = $item->counted_quantity === null ? '' : $this->formatQuantity((string) $item->counted_quantity);
+            $this->counted[$item->id] = $item->counted_quantity === null
+                ? $this->formatQuantity((string) $item->system_quantity)
+                : $this->formatQuantity((string) $item->counted_quantity);
         }
     }
 
