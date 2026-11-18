@@ -290,7 +290,12 @@ class PopulateDemoTransactions extends Command
         $raw = [];
         foreach ($formula->items as $item) {
             $material = Product::find($item->material_product_id);
-            $qty = (float) $formula->scaleMaterialQuantity((string) $item->quantity, '1');
+            // Plain float division here, not scaleMaterialQuantity($qty, '1') - that helper's
+            // bcdiv(scale: 2) truncates trace-quantity items (e.g. colorants) straight to 0.00,
+            // which silently zeroes their demand forever. Fine for this planning heuristic;
+            // the real Actions still compute final persisted quantities at full precision
+            // against the actual batch size, never against a target of '1'.
+            $qty = (float) $item->quantity / max((float) $formula->output_quantity, 0.0001);
             if ($material->type->value === 'wip') {
                 $wip[] = ['product_id' => $material->id, 'qty' => $qty];
             } else {
@@ -590,7 +595,7 @@ class PopulateDemoTransactions extends Command
     {
         $machineHours = round($stage === 'molding' ? $quantity / 3 : $quantity / 20, 1);
         $laborHours = round($stage === 'molding' ? $machineHours / 4 : $machineHours, 1);
-        $crew = $this->crew($stage);
+        $crew = $this->crew($stage, $day);
 
         try {
             $workOrder = app(CreateWorkOrderAction::class)->handle(new CreateWorkOrderData(
@@ -614,9 +619,11 @@ class PopulateDemoTransactions extends Command
     /**
      * @return list<int>
      */
-    protected function crew(string $stage): array
+    protected function crew(string $stage, Carbon $day): array
     {
-        $ids = Employee::where('status', 'active')->orderBy('id')->pluck('id')->all();
+        $ids = Employee::where('status', 'active')->orderBy('id')->get()
+            ->filter(fn (Employee $e) => $e->laborRateOn($day) !== null)
+            ->pluck('id')->all();
         if ($ids === []) {
             return [];
         }
