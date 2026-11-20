@@ -47,6 +47,15 @@ Route::middleware(['auth'])->group(function () {
     Route::get('/purchasing/orders/{purchaseOrder}/pdf', \App\Http\Controllers\Purchasing\DownloadPurchaseOrderPdfController::class)
         ->name('purchasing.orders.pdf');
     
+    Route::livewire('/warehouse/stock', 'pages::warehouse.stock')
+        ->name('warehouse.stock.list');
+
+    Route::livewire('/production/stock', 'pages::production.stock')
+        ->name('production.stock.list');
+
+    Route::livewire('/sales/stock', 'pages::sales.stock')
+        ->name('sales.stock.list');
+
     Route::livewire('/warehouse/inbound/item-receipts', 'pages::warehouse.inbound.item-receipts.list')
         ->name('warehouse.inbound.item-receipts.list');
 

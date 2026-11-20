@@ -61,6 +61,10 @@
                                 :current="request()->routeIs('sales.orders.*')" wire:navigate>
                                 {{ __('Sales Orders') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="cube" :href="route('sales.stock.list')"
+                                :current="request()->routeIs('sales.stock.*')" wire:navigate>
+                                {{ __('Stock') }}
+                            </flux:sidebar.item>
                             <flux:sidebar.item icon="building-storefront" :href="route('sales.customers.list')"
                                 :current="request()->routeIs('sales.customers.*')" wire:navigate>
                                 {{ __('Customers') }}
@@ -154,6 +158,10 @@
                                 :current="request()->routeIs('production.formulas.*')" wire:navigate>
                                 {{ __('Production Formulas') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="cube" :href="route('production.stock.list')"
+                                :current="request()->routeIs('production.stock.*')" wire:navigate>
+                                {{ __('Stock') }}
+                            </flux:sidebar.item>
                             @can('requisitions.view')
                                 <flux:sidebar.item icon="clipboard-document-list" :href="route('purchasing.requisitions.list')"
                                     :current="request()->routeIs('purchasing.requisitions.*')" wire:navigate>
@@ -169,6 +177,10 @@
                         @endif
 
                         @if ($role === UserRole::Warehouse)
+                            <flux:sidebar.item icon="cube" :href="route('warehouse.stock.list')"
+                                :current="request()->routeIs('warehouse.stock.*')" wire:navigate>
+                                {{ __('Stock') }}
+                            </flux:sidebar.item>
                             <flux:sidebar.item icon="inbox-arrow-down" :href="route('warehouse.inbound.item-receipts.list')"
                                 :current="request()->routeIs('warehouse.inbound.item-receipts.*')" wire:navigate>
                                 {{ __('Item Receipt') }}
