@@ -277,48 +277,46 @@ new #[Title('Purchasing Dashboard')] class extends Component {
                     <h2 class="text-xs font-bold uppercase tracking-widest text-zinc-700 dark:text-zinc-300">{{ __('Raw material stock status') }}</h2>
                     <p class="{{ $cardSub }}">{{ __('Current stock vs. reorder point, right now. "Nearing" = within one safety-stock buffer of the trigger.') }}</p>
                 </div>
-                @can('viewAny', \App\Models\Product::class)
-                    <a href="{{ route('management.products.safety-stock') }}" wire:navigate class="text-xs font-medium text-accent hover:underline underline-offset-2">{{ __('Calculate safety stock & reorder point') }}</a>
-                @endcan
+                <div class="flex items-center gap-3">
+                    @can('viewAny', \App\Models\Product::class)
+                        <a href="{{ route('management.products.safety-stock') }}" wire:navigate class="text-xs font-medium text-accent hover:underline underline-offset-2">{{ __('Calculate safety stock & reorder point') }}</a>
+                    @endcan
+                    @can('purchasing.stock.view')
+                        <flux:button size="sm" variant="filled" icon="arrow-top-right-on-square" :href="route('purchasing.stock.list')" wire:navigate class="active:scale-[0.95]">{{ __('View full catalog') }}</flux:button>
+                    @endcan
+                </div>
             </div>
-            <div class="mt-3 overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
-                <table class="w-full min-w-[45rem] text-xs border-collapse">
-                    <thead>
-                        <tr class="text-left bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10">
-                            <th class="{{ $th }}">{{ __('Material') }}</th>
-                            <th class="{{ $th }} text-right">{{ __('Current stock') }}</th>
-                            <th class="{{ $th }} text-right">{{ __('Safety stock') }}</th>
-                            <th class="{{ $th }} text-right">{{ __('Reorder point') }}</th>
-                            <th class="{{ $th }}">{{ __('Status') }}</th>
-                            <th class="{{ $th }}"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @forelse ($this->materialStockStatus as $row)
-                            @php($meta = $statusMeta[$row['status']])
-                            @php($p = $row['product'])
-                            <tr wire:key="stock-{{ $p->id }}" class="border-b border-zinc-100 dark:border-white/5 last:border-0 {{ $meta['row'] }}">
-                                <td class="py-2.5 px-3">
-                                    <span class="text-zinc-900 dark:text-white">{{ $p->product_name }}</span>
-                                    <p class="text-[11px] text-zinc-500 dark:text-zinc-400 font-data">{{ $p->product_code }}</p>
-                                </td>
-                                <td class="{{ $tdNum }} font-semibold">{{ $this->formatQty($row['current_stock']) }} {{ $p->unit_of_measure }}</td>
-                                <td class="py-1.5 px-2 text-right font-data tabular-nums whitespace-nowrap text-zinc-500 dark:text-zinc-400">{{ $this->formatQty($row['safety_stock']) }}</td>
-                                <td class="py-1.5 px-2 text-right font-data tabular-nums whitespace-nowrap text-zinc-500 dark:text-zinc-400">{{ $this->formatQty($row['reorder_point']) }}</td>
-                                <td class="py-2.5 px-3"><span class="rounded-full border px-2 py-0.5 text-[11px] {{ $meta['badge'] }}">{{ $meta['label'] }}</span></td>
-                                <td class="py-2.5 px-3 text-right">
-                                    @if ($row['status'] === 'below')
-                                        @can('create', \App\Models\PurchaseOrder::class)
-                                            <a href="{{ route('purchasing.orders.create', $row['single_supplier_id'] ? ['supplier' => $row['single_supplier_id'], 'product' => $p->id] : []) }}" wire:navigate class="shrink-0 text-xs font-medium text-accent hover:underline underline-offset-2">{{ __('Create PO') }}</a>
-                                        @endcan
-                                    @endif
-                                </td>
-                            </tr>
-                        @empty
-                            <tr><td colspan="6" class="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No active raw materials.') }}</td></tr>
-                        @endforelse
-                    </tbody>
-                </table>
+            <div class="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                @forelse ($this->materialStockStatus->take(6) as $row)
+                    @php($meta = $statusMeta[$row['status']])
+                    @php($p = $row['product'])
+                    <div wire:key="stock-{{ $p->id }}" class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 flex flex-col gap-3">
+                        <div class="min-w-0">
+                            <p class="font-data text-[11px] text-accent">{{ $p->product_code }}</p>
+                            <p class="text-sm font-medium text-zinc-800 dark:text-zinc-200 leading-snug truncate" title="{{ $p->product_name }}">{{ $p->product_name }}</p>
+                        </div>
+                        <div class="flex items-end justify-between gap-2">
+                            <div>
+                                <p class="text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{{ __('Current stock') }}</p>
+                                <p class="font-data text-lg font-semibold tabular-nums whitespace-nowrap {{ $row['status'] === 'below' ? 'text-red-600 dark:text-red-400' : 'text-zinc-900 dark:text-white' }}">{{ $this->formatQty($row['current_stock']) }} <span class="text-xs font-normal text-zinc-400 dark:text-zinc-500">{{ $p->unit_of_measure }}</span></p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{{ __('Reorder point') }}</p>
+                                <p class="font-data text-xs tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{{ $this->formatQty($row['reorder_point']) }} {{ $p->unit_of_measure }}</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center justify-between gap-2">
+                            <span class="rounded-full border px-2 py-0.5 text-[11px] {{ $meta['badge'] }}">{{ $meta['label'] }}</span>
+                            @if ($row['status'] === 'below')
+                                @can('create', \App\Models\PurchaseOrder::class)
+                                    <a href="{{ route('purchasing.orders.create', $row['single_supplier_id'] ? ['supplier' => $row['single_supplier_id'], 'product' => $p->id] : []) }}" wire:navigate class="shrink-0 text-xs font-medium text-accent hover:underline underline-offset-2">{{ __('Create PO') }}</a>
+                                @endcan
+                            @endif
+                        </div>
+                    </div>
+                @empty
+                    <div class="col-span-full py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No active raw materials.') }}</div>
+                @endforelse
             </div>
         </div>
 

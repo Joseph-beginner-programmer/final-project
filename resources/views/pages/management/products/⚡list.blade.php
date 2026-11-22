@@ -279,68 +279,64 @@ new #[Title('Products')] class extends Component {
     </div>
 
     <div wire:loading.class="opacity-50" wire:target="search,type,showInactive,gotoPage,previousPage,nextPage" class="mt-4 transition-opacity motion-safe:animate-fade-slide-up" style="animation-delay: 100ms;">
-        <div class="overflow-x-auto rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40">
-            <table class="w-full text-xs border-collapse">
-                <thead>
-                    <tr class="text-left text-[10px] font-semibold uppercase tracking-wider text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-white/5 border-b border-zinc-200 dark:border-white/10">
-                        <th class="py-2 px-3">{{ __('Code') }}</th>
-                        <th class="py-2 px-3">{{ __('Product') }}</th>
-                        <th class="py-2 px-3">{{ __('Type') }}</th>
-                        <th class="py-2 px-3 text-right">{{ __('In Stock') }}</th>
-                        <th class="py-2 px-3 text-right">{{ __('Reorder point') }}</th>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            @forelse ($this->products as $product)
+                @php($low = $product->isBelowReorderPoint() && bccomp((string) $product->reorder_point, '0', 2) > 0)
+                @php($cost = $this->costs[$product->id] ?? null)
+                @php($costValue = $cost['average'] ?? $cost['last'] ?? null)
+                <div wire:key="product-{{ $product->id }}" class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 flex flex-col gap-3 {{ $product->is_active ? '' : 'opacity-60' }}">
+                    <div class="flex items-start justify-between gap-2">
+                        <div class="min-w-0">
+                            <p class="font-data text-[11px] text-accent">{{ $product->product_code }}</p>
+                            <p class="text-sm font-medium text-zinc-800 dark:text-zinc-200 leading-snug truncate" title="{{ $product->product_name }}">{{ $product->product_name }}</p>
+                        </div>
+                        <span class="shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap {{ $product->type->badgeClasses() }}">{{ $product->type->label() }}</span>
+                    </div>
+                    <div class="flex items-end justify-between gap-2">
+                        <div>
+                            <p class="text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{{ __('In Stock') }}</p>
+                            <p class="font-data text-lg font-semibold tabular-nums whitespace-nowrap {{ $low ? 'text-red-600 dark:text-red-400' : 'text-zinc-900 dark:text-white' }}">{{ $this->formatQuantity((string) $product->current_stock) }} <span class="text-xs font-normal text-zinc-400 dark:text-zinc-500">{{ $product->unit_of_measure }}</span></p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{{ __('Reorder point') }}</p>
+                            <p class="font-data text-xs tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{{ $this->formatQuantity((string) $product->reorder_point) }} {{ $product->unit_of_measure }}</p>
+                        </div>
+                    </div>
+                    <div class="flex items-end justify-between gap-2 pt-2.5 border-t border-zinc-100 dark:border-white/5">
                         @can('costs.view')
-                            <th class="py-2 px-3 text-right">{{ __('Average cost') }}</th>
+                            <div>
+                                <p class="text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{{ __('Average cost') }}</p>
+                                @if ($costValue !== null)
+                                    <p class="font-data text-xs tabular-nums text-zinc-700 dark:text-zinc-300">{{ $this->formatRupiah($costValue) }}</p>
+                                    @if ($cost['average'] === null)
+                                        <p class="text-[9px] text-zinc-400 dark:text-zinc-500">{{ __('last lot, no stock') }}</p>
+                                    @endif
+                                @else
+                                    <p class="font-data text-xs text-zinc-400 dark:text-zinc-500">—</p>
+                                @endif
+                            </div>
                         @endcan
-                        <th class="py-2 px-3 text-right">{{ __('Selling Price') }}</th>
-                        <th class="py-2 px-3">{{ __('Status') }}</th>
-                        <th class="py-2 px-3 w-12"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse ($this->products as $product)
-                        <tr wire:key="product-{{ $product->id }}" class="border-b border-zinc-100 dark:border-white/5 last:border-0 hover:bg-zinc-50/70 dark:hover:bg-white/[0.03] transition-colors {{ $product->is_active ? '' : 'opacity-60' }}">
-                            <td class="py-2 px-3 font-data text-accent whitespace-nowrap">{{ $product->product_code }}</td>
-                            <td class="py-2 px-3 text-zinc-800 dark:text-zinc-200">{{ $product->product_name }}</td>
-                            <td class="py-2 px-3"><span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap {{ $product->type->badgeClasses() }}">{{ $product->type->label() }}</span></td>
-                            <td class="py-2 px-3 text-right font-data tabular-nums whitespace-nowrap {{ $product->isBelowReorderPoint() && bccomp((string) $product->reorder_point, '0', 2) > 0 ? 'text-red-600 dark:text-red-400 font-medium' : 'text-zinc-700 dark:text-zinc-300' }}">{{ $this->formatQuantity((string) $product->current_stock) }} {{ $product->unit_of_measure }}</td>
-                            <td class="py-2 px-3 text-right font-data tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{{ $this->formatQuantity((string) $product->reorder_point) }} {{ $product->unit_of_measure }}</td>
-                            @php($cost = $this->costs[$product->id] ?? null)
-                            @php($costValue = $cost['average'] ?? $cost['last'] ?? null)
+                        <div class="text-right">
+                            <p class="text-[10px] uppercase tracking-wide text-zinc-400 dark:text-zinc-500">{{ __('Selling Price') }}</p>
+                            <p class="font-data text-xs tabular-nums text-zinc-700 dark:text-zinc-300">{{ $product->selling_price !== null ? $this->formatRupiah((string) $product->selling_price) : '—' }}</p>
                             @can('costs.view')
-                                <td class="py-2 px-3 text-right whitespace-nowrap">
-                                    @if ($costValue !== null)
-                                        <span class="font-data tabular-nums text-zinc-800 dark:text-zinc-200">{{ $this->formatRupiah($costValue) }}</span>
-                                        @if ($cost['average'] === null)
-                                            <span class="block text-[10px] text-zinc-500 dark:text-zinc-400">{{ __('last lot, no stock') }}</span>
-                                        @endif
-                                    @else
-                                        <span class="text-zinc-400 dark:text-zinc-500">—</span>
-                                    @endif
-                                </td>
+                                @if ($product->selling_price !== null && $costValue !== null)
+                                    @php($margin = ProductCost::margin((string) $product->selling_price, $costValue))
+                                    <p @class(['font-data text-[10px] tabular-nums', 'text-red-600 dark:text-red-400 font-semibold' => bccomp($margin, '0', 1) < 0, 'text-zinc-500 dark:text-zinc-400' => bccomp($margin, '0', 1) >= 0])>{{ __('margin') }} {{ str_replace('.', ',', $margin) }}%</p>
+                                @endif
                             @endcan
-                            <td class="py-2 px-3 text-right whitespace-nowrap">
-                                <span class="font-data tabular-nums text-zinc-700 dark:text-zinc-300">{{ $product->selling_price !== null ? $this->formatRupiah((string) $product->selling_price) : '—' }}</span>
-                                @can('costs.view')
-                                    @if ($product->selling_price !== null && $costValue !== null)
-                                        @php($margin = ProductCost::margin((string) $product->selling_price, $costValue))
-                                        <span @class(['block font-data text-[10px] tabular-nums', 'text-red-600 dark:text-red-400 font-semibold' => bccomp($margin, '0', 1) < 0, 'text-zinc-500 dark:text-zinc-400' => bccomp($margin, '0', 1) >= 0])>{{ __('margin') }} {{ str_replace('.', ',', $margin) }}%</span>
-                                    @endif
-                                @endcan
-                            </td>
-                            <td class="py-2 px-3">
-                                <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ $product->is_active ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20' : 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-white/5 dark:text-zinc-500 dark:border-white/10' }}">{{ $product->is_active ? __('Active') : __('Inactive') }}</span>
-                            </td>
-                            <td class="py-2 px-3 text-right">
-                                @can('update', $product)
-                                    <flux:button size="sm" variant="ghost" icon="pencil-square" wire:click="openEdit({{ $product->id }})" :aria-label="__('Edit :name', ['name' => $product->product_name])" class="active:scale-[0.95]" />
-                                @endcan
-                            </td>
-                        </tr>
-                    @empty
-                        <tr><td colspan="{{ auth()->user()->can('costs.view') ? 9 : 8 }}" class="py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No products match your filters.') }}</td></tr>
-                    @endforelse
-                </tbody>
-            </table>
+                        </div>
+                    </div>
+                    <div class="flex items-center justify-between gap-2">
+                        <span class="inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium {{ $product->is_active ? 'bg-green-50 text-green-700 border-green-200 dark:bg-green-500/10 dark:text-green-400 dark:border-green-500/20' : 'bg-zinc-100 text-zinc-500 border-zinc-200 dark:bg-white/5 dark:text-zinc-500 dark:border-white/10' }}">{{ $product->is_active ? __('Active') : __('Inactive') }}</span>
+                        @can('update', $product)
+                            <flux:button size="sm" variant="ghost" icon="pencil-square" wire:click="openEdit({{ $product->id }})" :aria-label="__('Edit :name', ['name' => $product->product_name])" class="active:scale-[0.95]" />
+                        @endcan
+                    </div>
+                </div>
+            @empty
+                <div class="col-span-full py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No products match your filters.') }}</div>
+            @endforelse
         </div>
         <div class="mt-4">{{ $this->products->links() }}</div>
     </div>

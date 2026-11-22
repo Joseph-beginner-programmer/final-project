@@ -76,6 +76,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('sales.stock.view', function ($user) {
             return in_array($user->role, [UserRole::Sales, UserRole::Manager, UserRole::SystemAdmin], true);
         });
+        Gate::define('purchasing.stock.view', function ($user) {
+            return in_array($user->role, [UserRole::Purchasing, UserRole::Manager, UserRole::SystemAdmin], true);
+        });
         Gate::define('returns.post', function ($user) {
             return in_array($user->role, [UserRole::Purchasing, UserRole::Sales, UserRole::Manager, UserRole::SystemAdmin], true);
         });

@@ -1907,5 +1907,21 @@
     "Regards,": "Salam,",
     "Whoops!": "Ups!",
     "If you're having trouble clicking the \":actionText\" button, copy and paste the URL below\ninto your web browser:": "Jika tombol \":actionText\" tidak berfungsi, salin dan tempel URL di bawah ini\nke browser Anda:",
-    "All rights reserved.": "Hak cipta dilindungi."
+    "All rights reserved.": "Hak cipta dilindungi.",
+    "Sort by": "Urutkan Berdasarkan",
+    "Type, then code": "Jenis, Lalu Kode",
+    "Below reorder point first": "Di Bawah Titik Pemesanan Ulang Lebih Dulu",
+    "Highest stock first": "Stok Tertinggi Lebih Dulu",
+    "Lowest stock first": "Stok Terendah Lebih Dulu",
+    "Material Stock": "Stok Bahan",
+    "Finished Goods Stock": "Stok Barang Jadi",
+    "Raw materials and WIP available for production, items below their reorder point shown first.": "Bahan baku dan barang setengah jadi yang tersedia untuk produksi, item di bawah titik pemesanan ulang ditampilkan lebih dulu.",
+    "What's available to offer customers right now, updated as deliveries and production are recorded.": "Yang tersedia untuk ditawarkan ke pelanggan saat ini, diperbarui seiring pengiriman dan produksi dicatat.",
+    "Updates automatically as receipts, deliveries, and production are recorded — no manual refresh needed.": "Diperbarui otomatis seiring penerimaan, pengiriman, dan produksi dicatat — tidak perlu memuat ulang secara manual.",
+    "Available": "Tersedia",
+    "No materials match your filters.": "Tidak ada bahan yang sesuai dengan filter Anda.",
+    "No finished goods match your search.": "Tidak ada barang jadi yang sesuai dengan pencarian Anda.",
+    "Out of stock": "Stok habis",
+    "View full catalog": "Lihat Katalog Lengkap",
+    "Raw Material Stock": "Stok Bahan Baku"
 }
