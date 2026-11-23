@@ -283,13 +283,28 @@ new #[Title('Create Purchase Order')] class extends Component {
     #[Computed]
     public function pendingSupplierOptions(): array
     {
+        $productId = $this->pendingProductIndex !== null
+            ? (int) ($this->items[$this->pendingProductIndex]['product_id'] ?? 0)
+            : 0;
+
+        $prices = $productId !== 0
+            ? DB::table('product_supplier')
+                ->where('product_id', $productId)
+                ->whereIn('supplier_id', $this->pendingSupplierChoices)
+                ->pluck('price', 'supplier_id')
+            : collect();
+
+        $unit = $productId !== 0 ? \App\Models\Product::find($productId)?->unit_of_measure : null;
+
         return Supplier::whereIn('id', $this->pendingSupplierChoices)
-            ->orderBy('supplier_name')
             ->get()
+            ->sortBy(fn (Supplier $supplier) => $prices->get($supplier->id, PHP_INT_MAX))
+            ->values()
             ->map(fn (Supplier $supplier) => [
                 'id' => $supplier->id,
                 'title' => $supplier->supplier_name,
                 'subtitle' => $supplier->supplier_code,
+                'meta' => $prices->has($supplier->id) ? $this->formatRupiah((string) $prices[$supplier->id]).'/'.$unit : null,
             ])->all();
     }
 
@@ -651,7 +666,7 @@ new #[Title('Create Purchase Order')] class extends Component {
                             @elseif ($this->pendingSupplierChoices !== [])
                                 <div wire:key="supplier-pending" wire:transition class="rounded-md border border-amber-200 dark:border-amber-500/20 bg-amber-50 dark:bg-amber-500/5 px-4 py-3.5">
                                     <flux:field>
-                                        <flux:label>{{ __('This product is sold by more than one supplier — choose one') }}</flux:label>
+                                        <flux:label>{{ __('This product is sold by more than one supplier — choose one (cheapest first)') }}</flux:label>
                                         <x-picker
                                             model="supplierId"
                                             size="md"
@@ -677,10 +692,6 @@ new #[Title('Create Purchase Order')] class extends Component {
                                         />
                                         @error('supplierId') <flux:error class="mt-1" :message="$message" /> @enderror
                                     </flux:field>
-
-                                    @if ($requisitionIds === [])
-                                        <p class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{{ __('Already know who to order from? Pick them here — or add an item below and we\'ll find who sells it.') }}</p>
-                                    @endif
 
                                     <div wire:loading wire:target="supplierId" class="flex items-center gap-1.5 mt-1.5 text-xs text-accent">
                                         <flux:icon.loading variant="micro" class="size-3.5" />
