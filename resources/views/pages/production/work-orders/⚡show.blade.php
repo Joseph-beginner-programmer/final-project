@@ -580,6 +580,8 @@ new #[Title('Work Order Detail')] class extends Component {
                                     @if ($row['product']->type === \App\Enums\ProductType::RawMaterial)
                                         @can('create', \App\Models\PurchaseOrder::class)
                                             <a href="{{ route('purchasing.orders.create', ['product' => $row['product']->id, 'quantity' => \App\Support\Decimal::plain($row['to_order'])]) }}" wire:navigate class="ms-1.5 text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create PO') }}</a>
+                                        @elsecan('requisitions.create')
+                                            <a href="{{ route('purchasing.requisitions.create', ['items' => $row['product']->id.':'.\App\Support\Decimal::plain($row['to_order']), 'for' => $workOrder->wo_number]) }}" wire:navigate class="ms-1.5 text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create purchase request') }}</a>
                                         @endcan
                                     @else
                                         @can('create', \App\Models\WorkOrder::class)
@@ -616,6 +618,8 @@ new #[Title('Work Order Detail')] class extends Component {
                                 @if ($row['product']->type === \App\Enums\ProductType::RawMaterial)
                                     @can('create', \App\Models\PurchaseOrder::class)
                                         <a href="{{ route('purchasing.orders.create', ['product' => $row['product']->id, 'quantity' => \App\Support\Decimal::plain($row['to_order'])]) }}" wire:navigate class="text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create PO') }}</a>
+                                    @elsecan('requisitions.create')
+                                        <a href="{{ route('purchasing.requisitions.create', ['items' => $row['product']->id.':'.\App\Support\Decimal::plain($row['to_order']), 'for' => $workOrder->wo_number]) }}" wire:navigate class="text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create purchase request') }}</a>
                                     @endcan
                                 @else
                                     @can('create', \App\Models\WorkOrder::class)
