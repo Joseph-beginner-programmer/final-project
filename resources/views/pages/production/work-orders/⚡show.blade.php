@@ -576,10 +576,16 @@ new #[Title('Work Order Detail')] class extends Component {
                             </td>
                             <td class="py-2 px-3 whitespace-nowrap">
                                 <x-material-status :status="$row['status']" :shortage="$row['shortage']" :unit="$unitOfMeasure" />
-                                @if ($row['status'] === 'short' && $row['product']->type !== \App\Enums\ProductType::RawMaterial)
-                                    @can('create', \App\Models\WorkOrder::class)
-                                        <a href="{{ route('production.work-orders.create', ['product' => $row['product']->id, 'quantity' => \App\Support\Decimal::plain($row['to_order']), 'for' => $workOrder->wo_number]) }}" wire:navigate class="ms-1.5 text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create work order') }}</a>
-                                    @endcan
+                                @if ($row['status'] === 'short')
+                                    @if ($row['product']->type === \App\Enums\ProductType::RawMaterial)
+                                        @can('create', \App\Models\PurchaseOrder::class)
+                                            <a href="{{ route('purchasing.orders.create', ['product' => $row['product']->id, 'quantity' => \App\Support\Decimal::plain($row['to_order'])]) }}" wire:navigate class="ms-1.5 text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create PO') }}</a>
+                                        @endcan
+                                    @else
+                                        @can('create', \App\Models\WorkOrder::class)
+                                            <a href="{{ route('production.work-orders.create', ['product' => $row['product']->id, 'quantity' => \App\Support\Decimal::plain($row['to_order']), 'for' => $workOrder->wo_number]) }}" wire:navigate class="ms-1.5 text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create work order') }}</a>
+                                        @endcan
+                                    @endif
                                 @endif
                             </td>
                         </tr>
@@ -606,10 +612,16 @@ new #[Title('Work Order Detail')] class extends Component {
                     <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
                         <div class="flex items-center gap-1.5">
                             <x-material-status :status="$row['status']" :shortage="$row['shortage']" :unit="$unitOfMeasure" />
-                            @if ($row['status'] === 'short' && $row['product']->type !== \App\Enums\ProductType::RawMaterial)
-                                @can('create', \App\Models\WorkOrder::class)
-                                    <a href="{{ route('production.work-orders.create', ['product' => $row['product']->id, 'quantity' => \App\Support\Decimal::plain($row['to_order']), 'for' => $workOrder->wo_number]) }}" wire:navigate class="text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create work order') }}</a>
-                                @endcan
+                            @if ($row['status'] === 'short')
+                                @if ($row['product']->type === \App\Enums\ProductType::RawMaterial)
+                                    @can('create', \App\Models\PurchaseOrder::class)
+                                        <a href="{{ route('purchasing.orders.create', ['product' => $row['product']->id, 'quantity' => \App\Support\Decimal::plain($row['to_order'])]) }}" wire:navigate class="text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create PO') }}</a>
+                                    @endcan
+                                @else
+                                    @can('create', \App\Models\WorkOrder::class)
+                                        <a href="{{ route('production.work-orders.create', ['product' => $row['product']->id, 'quantity' => \App\Support\Decimal::plain($row['to_order']), 'for' => $workOrder->wo_number]) }}" wire:navigate class="text-[11px] font-medium text-accent hover:underline underline-offset-2">{{ __('Create work order') }}</a>
+                                    @endcan
+                                @endif
                             @endif
                         </div>
                         <div class="flex items-center gap-3 font-data tabular-nums">

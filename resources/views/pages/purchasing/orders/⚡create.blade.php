@@ -100,6 +100,25 @@ new #[Title('Create Purchase Order')] class extends Component {
                         'unit_price' => $product->pivot->price !== null ? bcadd((string) $product->pivot->price, '0', 0) : '',
                     ];
                 }
+            } elseif ($prefillProductId) {
+                // Item-first deep link with an exact quantity already known (e.g. a
+                // work order's material shortfall) - let the normal item-first flow
+                // find/narrow the supplier, same as picking the product by hand.
+                $product = \App\Models\Product::purchasable()->where('is_active', true)->find($prefillProductId);
+
+                if ($product) {
+                    $quantity = request()->query('quantity');
+
+                    $this->items[] = [
+                        'product_id' => (string) $product->id,
+                        'quantity_ordered' => (is_string($quantity) && is_numeric($quantity) && bccomp($quantity, '0', 2) > 0)
+                            ? \App\Support\Decimal::plain(bcadd($quantity, '0', 2))
+                            : '',
+                        'unit_price' => '',
+                    ];
+
+                    $this->resolveSupplierForFirstItem(0, $product->id);
+                }
             }
 
             if ($this->items === []) {
