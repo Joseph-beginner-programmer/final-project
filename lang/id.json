@@ -1929,5 +1929,9 @@
     "Create purchase request": "Buat permintaan pembelian",
     "Suggested:": "Saran:",
     "sells all :count": "menjual semua :count",
-    "sells :covered of :total": "menjual :covered dari :total"
+    "sells :covered of :total": "menjual :covered dari :total",
+    "Switch to:": "Ganti ke:",
+    "No supplier registered for this material yet": "Belum ada pemasok terdaftar untuk bahan ini",
+    "Add one": "Tambahkan",
+    "sells this material": "menjual bahan ini"
 }

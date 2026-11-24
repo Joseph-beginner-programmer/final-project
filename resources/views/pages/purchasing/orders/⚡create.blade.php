@@ -66,6 +66,17 @@ new #[Title('Create Purchase Order')] class extends Component {
             if ($prefillSupplierId && Supplier::find($prefillSupplierId)) {
                 $this->supplierId = (string) $prefillSupplierId;
                 $this->fillItemsFromRequestedLines();
+            } elseif ($this->requestedLines !== []) {
+                // No supplier chosen for us - auto-fill with whichever supplier
+                // covers the most of these materials, same as picking a product
+                // by hand with no supplier yet would resolve it. Never locked
+                // in: the user can still switch supplier before saving.
+                $bestSupplierId = $this->bestSupplierForRequestedLines();
+
+                if ($bestSupplierId !== null) {
+                    $this->supplierId = (string) $bestSupplierId;
+                    $this->fillItemsFromRequestedLines();
+                }
             }
         }
 
@@ -122,7 +133,7 @@ new #[Title('Create Purchase Order')] class extends Component {
     #[Computed]
     public function sourceRequisitions(): Collection
     {
-        return PurchaseRequisition::whereIn('id', $this->requisitionIds)->with(['items.product', 'items.purchaseOrder'])->orderBy('needed_by')->get();
+        return PurchaseRequisition::whereIn('id', $this->requisitionIds)->with(['items.product.suppliers', 'items.purchaseOrder'])->orderBy('needed_by')->get();
     }
 
     #[Computed]
@@ -148,16 +159,37 @@ new #[Title('Create Purchase Order')] class extends Component {
                 'needed_by' => $rows->pluck('needed_by')->sort()->first(),
                 'added' => in_array($rows->first()['product']->id, $addedProductIds, true),
                 'suppliedByThisSupplier' => $this->supplierId ? in_array($rows->first()['product']->id, $suppliedProductIds, true) : null,
+                'hasAnySupplier' => $rows->first()['product']->suppliers->contains(fn (Supplier $supplier) => $supplier->is_active),
             ])
             ->sortBy(fn (array $row) => $row['product']->product_name)
             ->values();
     }
 
     /**
-     * Suppliers who sell more than one of the still-requested materials,
-     * ranked by how many they cover - a shortcut to the supplier that would
-     * let the user clear the most of this list in one PO, without ever
-     * picking across suppliers for them (see addRequestedLine/fillItems...).
+     * The supplier selling the most of the still-requested materials - used
+     * to auto-fill a supplier the moment a known mapping exists, instead of
+     * making the user pick one by hand first. Never locked in: just a
+     * starting point the user can change before saving.
+     */
+    protected function bestSupplierForRequestedLines(): ?int
+    {
+        $productIds = array_keys($this->requestedLines);
+
+        $best = Supplier::where('is_active', true)
+            ->whereHas('products', fn ($query) => $query->whereIn('products.id', $productIds))
+            ->withCount(['products as covered' => fn ($query) => $query->whereIn('products.id', $productIds)])
+            ->orderByDesc('covered')
+            ->orderBy('id')
+            ->first();
+
+        return $best?->id;
+    }
+
+    /**
+     * Other suppliers who sell more than one of the still-requested
+     * materials, excluding whichever is already applied - a way to switch
+     * to a different grouping than the one auto-picked, without ever
+     * mixing suppliers on one PO for the user.
      */
     #[Computed]
     public function suggestedSuppliers(): Collection
@@ -166,20 +198,33 @@ new #[Title('Create Purchase Order')] class extends Component {
             return collect();
         }
 
-        $productIds = array_keys($this->requestedLines);
-        $total = count($productIds);
+        // Base this on what's still pending, not the original full list - once
+        // some lines are already added (to a different supplier, earlier in
+        // this session), a supplier covering what's left is just as relevant
+        // even if it wouldn't have cleared the bar against the original total.
+        $addedProductIds = collect($this->items)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->all();
+        $pendingProductIds = array_diff(array_keys($this->requestedLines), $addedProductIds);
+
+        if ($pendingProductIds === []) {
+            return collect();
+        }
+
+        $total = count($pendingProductIds);
 
         return Supplier::where('is_active', true)
-            ->whereHas('products', fn ($query) => $query->whereIn('products.id', $productIds))
-            ->with(['products' => fn ($query) => $query->whereIn('products.id', $productIds)])
+            ->whereHas('products', fn ($query) => $query->whereIn('products.id', $pendingProductIds))
+            ->with(['products' => fn ($query) => $query->whereIn('products.id', $pendingProductIds)])
             ->get()
+            ->reject(fn (Supplier $supplier) => (string) $supplier->id === $this->supplierId)
             ->map(fn (Supplier $supplier) => [
                 'id' => $supplier->id,
                 'name' => $supplier->supplier_name,
                 'covered' => $supplier->products->count(),
                 'total' => $total,
             ])
-            ->filter(fn (array $row) => $row['covered'] >= 2)
+            // Worth surfacing either because it covers several lines at once,
+            // or because it's literally the only way to clear what's left.
+            ->filter(fn (array $row) => $row['covered'] >= 2 || $row['covered'] === $row['total'])
             ->sortByDesc('covered')
             ->values();
     }
@@ -646,15 +691,19 @@ new #[Title('Create Purchase Order')] class extends Component {
             <p class="font-medium text-zinc-900 dark:text-white">{{ __('From purchase requests') }}</p>
             <p class="mt-1 text-zinc-500 dark:text-zinc-400">{{ $supplierId ? __('Add each material you want on this PO. Materials this supplier doesn\'t sell stay on the request, open for another supplier.') : __('Choose a supplier, then add the requested materials it sells one by one.') }}</p>
 
-            @if (! $supplierId && $this->suggestedSuppliers->isNotEmpty())
+            @if ($this->suggestedSuppliers->isNotEmpty())
                 <div class="mt-2.5 flex flex-wrap items-center gap-1.5">
-                    <span class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('Suggested:') }}</span>
+                    <span class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ $supplierId ? __('Switch to:') : __('Suggested:') }}</span>
                     @foreach ($this->suggestedSuppliers as $suggestion)
                         <button type="button" wire:click="$set('supplierId', '{{ $suggestion['id'] }}')" wire:loading.attr="disabled"
                             class="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-white dark:bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-60">
                             {{ $suggestion['name'] }}
                             <span class="font-normal text-zinc-500 dark:text-zinc-400">
-                                {{ $suggestion['covered'] === $suggestion['total'] ? __('sells all :count', ['count' => $suggestion['total']]) : __('sells :covered of :total', ['covered' => $suggestion['covered'], 'total' => $suggestion['total']]) }}
+                                {{ match (true) {
+                                    $suggestion['total'] === 1 => __('sells this material'),
+                                    $suggestion['covered'] === $suggestion['total'] => __('sells all :count', ['count' => $suggestion['total']]),
+                                    default => __('sells :covered of :total', ['covered' => $suggestion['covered'], 'total' => $suggestion['total']]),
+                                } }}
                             </span>
                         </button>
                     @endforeach
@@ -672,6 +721,13 @@ new #[Title('Create Purchase Order')] class extends Component {
                         @if ($line['added'])
                             <span class="inline-flex shrink-0 items-center gap-1 font-medium text-green-700 dark:text-green-400">
                                 <flux:icon.check variant="micro" class="size-3.5" />{{ __('Added') }}
+                            </span>
+                        @elseif (! $line['hasAnySupplier'])
+                            <span class="inline-flex shrink-0 items-center gap-1 text-red-700 dark:text-red-400">
+                                <flux:icon.exclamation-triangle variant="micro" class="size-3.5" />{{ __('No supplier registered for this material yet') }}
+                                @can('viewAny', \App\Models\Supplier::class)
+                                    <a href="{{ route('purchasing.suppliers.list') }}" wire:navigate class="font-medium text-accent hover:underline underline-offset-2">{{ __('Add one') }}</a>
+                                @endcan
                             </span>
                         @elseif (! $supplierId)
                             <span class="shrink-0 text-zinc-400 dark:text-zinc-500">{{ __('Choose a supplier first') }}</span>

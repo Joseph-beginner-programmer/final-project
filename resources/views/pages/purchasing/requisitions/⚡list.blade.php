@@ -69,10 +69,10 @@ new #[Title('Purchase Requests')] class extends Component {
             return;
         }
 
-        $requisitions = PurchaseRequisition::whereIn('id', $ids)->with('items.product.suppliers')->get();
-        $supplierId = PurchaseRequisition::singleCommonSupplierIdForMany($requisitions);
-
-        $this->redirectRoute('purchasing.orders.create', array_filter(['requisitions' => implode(',', $ids), 'supplier' => $supplierId]), navigate: true);
+        // Which supplier(s) these need is resolved on the Create PO page itself
+        // (it auto-fills whichever supplier covers the most of them), so this
+        // redirect doesn't need to work that out first.
+        $this->redirectRoute('purchasing.orders.create', ['requisitions' => implode(',', $ids)], navigate: true);
     }
 
     public function quantity(string $value): string
