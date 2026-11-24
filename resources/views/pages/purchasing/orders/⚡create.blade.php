@@ -65,15 +65,7 @@ new #[Title('Create Purchase Order')] class extends Component {
             $prefillSupplierId = (int) request()->query('supplier', 0);
             if ($prefillSupplierId && Supplier::find($prefillSupplierId)) {
                 $this->supplierId = (string) $prefillSupplierId;
-                foreach ($this->availableProducts as $product) {
-                    if (isset($this->requestedLines[$product->id])) {
-                        $this->items[] = [
-                            'product_id' => (string) $product->id,
-                            'quantity_ordered' => \App\Support\Decimal::plain($this->requestedLines[$product->id]),
-                            'unit_price' => $product->pivot->price !== null ? bcadd((string) $product->pivot->price, '0', 0) : '',
-                        ];
-                    }
-                }
+                $this->fillItemsFromRequestedLines();
             }
         }
 
@@ -161,6 +153,52 @@ new #[Title('Create Purchase Order')] class extends Component {
             ->values();
     }
 
+    /**
+     * Suppliers who sell more than one of the still-requested materials,
+     * ranked by how many they cover - a shortcut to the supplier that would
+     * let the user clear the most of this list in one PO, without ever
+     * picking across suppliers for them (see addRequestedLine/fillItems...).
+     */
+    #[Computed]
+    public function suggestedSuppliers(): Collection
+    {
+        if ($this->requestedLines === []) {
+            return collect();
+        }
+
+        $productIds = array_keys($this->requestedLines);
+        $total = count($productIds);
+
+        return Supplier::where('is_active', true)
+            ->whereHas('products', fn ($query) => $query->whereIn('products.id', $productIds))
+            ->with(['products' => fn ($query) => $query->whereIn('products.id', $productIds)])
+            ->get()
+            ->map(fn (Supplier $supplier) => [
+                'id' => $supplier->id,
+                'name' => $supplier->supplier_name,
+                'covered' => $supplier->products->count(),
+                'total' => $total,
+            ])
+            ->filter(fn (array $row) => $row['covered'] >= 2)
+            ->sortByDesc('covered')
+            ->values();
+    }
+
+    protected function fillItemsFromRequestedLines(): void
+    {
+        $this->items = [];
+
+        foreach ($this->availableProducts as $product) {
+            if (isset($this->requestedLines[$product->id])) {
+                $this->items[] = [
+                    'product_id' => (string) $product->id,
+                    'quantity_ordered' => \App\Support\Decimal::plain($this->requestedLines[$product->id]),
+                    'unit_price' => $product->pivot->price !== null ? bcadd((string) $product->pivot->price, '0', 0) : '',
+                ];
+            }
+        }
+    }
+
     public function addRequestedLine(int $productId): void
     {
         if (! isset($this->requestedLines[$productId])) {
@@ -221,7 +259,12 @@ new #[Title('Create Purchase Order')] class extends Component {
     {
         if ($this->requisitionIds !== []) {
             unset($this->selectedSupplier, $this->availableProducts, $this->pendingRequestedLines);
-            $this->items = [];
+
+            if ($this->supplierId !== '') {
+                $this->fillItemsFromRequestedLines();
+            } else {
+                $this->items = [];
+            }
 
             return;
         }
@@ -602,6 +645,22 @@ new #[Title('Create Purchase Order')] class extends Component {
         <div class="mt-5 rounded-lg border border-accent/30 bg-accent/5 px-4 py-3 text-xs text-zinc-700 dark:text-zinc-300">
             <p class="font-medium text-zinc-900 dark:text-white">{{ __('From purchase requests') }}</p>
             <p class="mt-1 text-zinc-500 dark:text-zinc-400">{{ $supplierId ? __('Add each material you want on this PO. Materials this supplier doesn\'t sell stay on the request, open for another supplier.') : __('Choose a supplier, then add the requested materials it sells one by one.') }}</p>
+
+            @if (! $supplierId && $this->suggestedSuppliers->isNotEmpty())
+                <div class="mt-2.5 flex flex-wrap items-center gap-1.5">
+                    <span class="text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('Suggested:') }}</span>
+                    @foreach ($this->suggestedSuppliers as $suggestion)
+                        <button type="button" wire:click="$set('supplierId', '{{ $suggestion['id'] }}')" wire:loading.attr="disabled"
+                            class="inline-flex items-center gap-1 rounded-full border border-accent/30 bg-white dark:bg-zinc-900 px-2.5 py-1 text-[11px] font-medium text-accent hover:bg-accent/10 transition-colors cursor-pointer disabled:opacity-60">
+                            {{ $suggestion['name'] }}
+                            <span class="font-normal text-zinc-500 dark:text-zinc-400">
+                                {{ $suggestion['covered'] === $suggestion['total'] ? __('sells all :count', ['count' => $suggestion['total']]) : __('sells :covered of :total', ['covered' => $suggestion['covered'], 'total' => $suggestion['total']]) }}
+                            </span>
+                        </button>
+                    @endforeach
+                </div>
+            @endif
+
             <ul class="mt-2 divide-y divide-accent/10">
                 @foreach ($this->pendingRequestedLines as $line)
                     <li wire:key="pending-line-{{ $line['product']->id }}" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">

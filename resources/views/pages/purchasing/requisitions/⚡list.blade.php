@@ -69,7 +69,10 @@ new #[Title('Purchase Requests')] class extends Component {
             return;
         }
 
-        $this->redirectRoute('purchasing.orders.create', ['requisitions' => implode(',', $ids)], navigate: true);
+        $requisitions = PurchaseRequisition::whereIn('id', $ids)->with('items.product.suppliers')->get();
+        $supplierId = PurchaseRequisition::singleCommonSupplierIdForMany($requisitions);
+
+        $this->redirectRoute('purchasing.orders.create', array_filter(['requisitions' => implode(',', $ids), 'supplier' => $supplierId]), navigate: true);
     }
 
     public function quantity(string $value): string

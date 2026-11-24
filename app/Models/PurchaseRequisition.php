@@ -66,7 +66,20 @@ class PurchaseRequisition extends Model
 
     public function singleCommonSupplierId(): ?int
     {
-        $openItems = $this->items->reject(fn (PurchaseRequisitionItem $item) => $item->isFulfilled());
+        return static::singleCommonSupplierIdForMany(collect([$this]));
+    }
+
+    /**
+     * The one supplier that sells every still-open item across all of the
+     * given requisitions, if there is exactly one - null if the items need
+     * more than one supplier to cover, or there are no open items at all.
+     *
+     * @param  \Illuminate\Support\Collection<int, self>  $requisitions
+     */
+    public static function singleCommonSupplierIdForMany(\Illuminate\Support\Collection $requisitions): ?int
+    {
+        $openItems = $requisitions->flatMap(fn (self $requisition) => $requisition->items)
+            ->reject(fn (PurchaseRequisitionItem $item) => $item->isFulfilled());
 
         if ($openItems->isEmpty()) {
             return null;
