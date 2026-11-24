@@ -34,14 +34,12 @@ class PurchaseOrderPolicy
     public function approve(User $user, PurchaseOrder $po): bool
     {
         return $user->can('purchasing.approve')
-            && $po->created_by !== $user->id
             && $po->status === PurchaseOrderStatus::PendingApproval;
     }
 
     public function reject(User $user, PurchaseOrder $po): bool
     {
         return $user->can('purchasing.approve')
-            && $po->created_by !== $user->id
             && $po->status === PurchaseOrderStatus::PendingApproval;
     }
 
