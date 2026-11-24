@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\InventoryLot;
 use App\Models\PurchaseOrder;
 use App\Support\Kpi\PurchasingKpis;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -71,11 +72,34 @@ new #[Title('Raw Material Stock')] class extends Component {
         );
     }
 
+    /**
+     * Current, undrawn lots for the materials on this page, oldest first -
+     * the order they'll actually be drawn in (FIFO) the next time stock
+     * moves out.
+     */
+    #[Computed]
+    public function lots(): Collection
+    {
+        $productIds = collect($this->materials->items())->map(fn (array $row) => $row['product']->id);
+
+        return InventoryLot::whereIn('product_id', $productIds)
+            ->where('quantity_remaining', '>', 0)
+            ->orderBy('received_at')
+            ->orderBy('id')
+            ->get()
+            ->groupBy('product_id');
+    }
+
     public function formatQty(string|float $value): string
     {
         $formatted = number_format((float) $value, 2, ',', '.');
 
         return str_ends_with($formatted, ',00') ? substr($formatted, 0, -3) : rtrim($formatted, '0');
+    }
+
+    public function formatRupiah(string|float $amount): string
+    {
+        return 'Rp '.number_format((float) $amount, 0, ',', '.');
     }
 }; ?>
 
@@ -144,11 +168,18 @@ new #[Title('Raw Material Stock')] class extends Component {
                     </div>
                     <div class="flex items-center justify-between gap-2">
                         <span class="rounded-full border px-2 py-0.5 text-[11px] font-medium {{ $meta['badge'] }}">{{ $meta['label'] }}</span>
-                        @if ($row['status'] === 'below')
-                            @can('create', PurchaseOrder::class)
-                                <a href="{{ route('purchasing.orders.create', $row['single_supplier_id'] ? ['supplier' => $row['single_supplier_id'], 'product' => $p->id] : []) }}" wire:navigate class="shrink-0 text-xs font-medium text-accent hover:underline underline-offset-2">{{ __('Create PO') }}</a>
-                            @endcan
-                        @endif
+                        <div class="flex items-center gap-2">
+                            @if ($row['status'] === 'below')
+                                @can('create', PurchaseOrder::class)
+                                    <a href="{{ route('purchasing.orders.create', $row['single_supplier_id'] ? ['supplier' => $row['single_supplier_id'], 'product' => $p->id] : []) }}" wire:navigate class="shrink-0 text-xs font-medium text-accent hover:underline underline-offset-2">{{ __('Create PO') }}</a>
+                                @endcan
+                            @endif
+                            @if (($this->lots[$p->id] ?? collect())->isNotEmpty())
+                                <flux:modal.trigger name="lots-{{ $p->id }}">
+                                    <button type="button" class="shrink-0 text-[11px] font-medium text-accent hover:underline underline-offset-2 cursor-pointer">{{ __('View lots') }} ({{ $this->lots[$p->id]->count() }})</button>
+                                </flux:modal.trigger>
+                            @endif
+                        </div>
                     </div>
                 </div>
             @empty
@@ -157,4 +188,33 @@ new #[Title('Raw Material Stock')] class extends Component {
         </div>
         <div class="mt-4">{{ $this->materials->links() }}</div>
     </div>
+
+    @foreach ($this->materials as $row)
+        @php($p = $row['product'])
+        @continue(($this->lots[$p->id] ?? collect())->isEmpty())
+        <flux:modal name="lots-{{ $p->id }}" class="max-w-lg">
+            <div class="space-y-4">
+                <div>
+                    <flux:heading size="lg">{{ __('Lots') }} · {{ $p->product_name }}</flux:heading>
+                    <flux:subheading>{{ __('Oldest first — drawn in this order (FIFO) the next time stock moves out.') }}</flux:subheading>
+                </div>
+                <div class="rounded-md border border-zinc-200 dark:border-white/10 divide-y divide-zinc-100 dark:divide-white/5">
+                    @foreach ($this->lots[$p->id] as $lot)
+                        <div class="flex items-center justify-between gap-3 px-3 py-2.5 text-xs">
+                            <div>
+                                <p class="font-data text-zinc-800 dark:text-zinc-200">{{ $lot->lot_number }}</p>
+                                <p class="text-zinc-500 dark:text-zinc-400">{{ $lot->received_at->translatedFormat('d M Y') }}</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatQty($lot->quantity_remaining) }} {{ $p->unit_of_measure }}</p>
+                                @can('costs.view')
+                                    <p class="font-data text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">{{ $this->formatRupiah($lot->unit_cost) }}/{{ $p->unit_of_measure }}</p>
+                                @endcan
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </flux:modal>
+    @endforeach
 </section>

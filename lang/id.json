@@ -1934,5 +1934,8 @@
     "No supplier registered for this material yet": "Belum ada pemasok terdaftar untuk bahan ini",
     "Add one": "Tambahkan",
     "sells this material": "menjual bahan ini",
-    "Overdue only": "Hanya yang jatuh tempo terlewat"
+    "Overdue only": "Hanya yang jatuh tempo terlewat",
+    "View lots": "Lihat lot",
+    "Lots": "Lot",
+    "Oldest first — drawn in this order (FIFO) the next time stock moves out.": "Terlama lebih dulu — diambil dalam urutan ini (FIFO) saat stok berikutnya keluar."
 }
