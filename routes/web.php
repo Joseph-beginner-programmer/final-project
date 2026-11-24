@@ -59,6 +59,9 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/purchasing/stock', 'pages::purchasing.stock')
         ->name('purchasing.stock.list');
 
+    Route::livewire('/management/stock', 'pages::management.stock')
+        ->name('management.stock.list');
+
     Route::livewire('/warehouse/inbound/item-receipts', 'pages::warehouse.inbound.item-receipts.list')
         ->name('warehouse.inbound.item-receipts.list');
 

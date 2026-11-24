@@ -139,6 +139,10 @@
                                 :current="request()->routeIs('management.employees.*')" wire:navigate>
                                 {{ __('Employees') }}
                             </flux:sidebar.item>
+                            <flux:sidebar.item icon="archive-box" :href="route('management.stock.list')"
+                                :current="request()->routeIs('management.stock.*')" wire:navigate>
+                                {{ __('Stock') }}
+                            </flux:sidebar.item>
                             <flux:sidebar.item icon="cube" :href="route('management.products.list')"
                                 :current="request()->routeIs('management.products.*')" wire:navigate>
                                 {{ __('Products') }}
