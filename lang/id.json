@@ -1933,5 +1933,6 @@
     "Switch to:": "Ganti ke:",
     "No supplier registered for this material yet": "Belum ada pemasok terdaftar untuk bahan ini",
     "Add one": "Tambahkan",
-    "sells this material": "menjual bahan ini"
+    "sells this material": "menjual bahan ini",
+    "Overdue only": "Hanya yang jatuh tempo terlewat"
 }

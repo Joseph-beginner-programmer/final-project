@@ -24,6 +24,9 @@ new #[Title('Purchase Invoices')] class extends Component {
     #[Url]
     public string $status = '';
 
+    #[Url]
+    public bool $overdueOnly = false;
+
     public function mount(): void
     {
         Gate::authorize('purchasing.invoice');
@@ -42,6 +45,18 @@ new #[Title('Purchase Invoices')] class extends Component {
 
     public function updatingStatus(): void
     {
+        $this->resetPage();
+    }
+
+    public function updatingOverdueOnly(): void
+    {
+        $this->resetPage();
+    }
+
+    public function showOverdue(): void
+    {
+        $this->tab = 'invoices';
+        $this->overdueOnly = true;
         $this->resetPage();
     }
 
@@ -76,7 +91,12 @@ new #[Title('Purchase Invoices')] class extends Component {
         $term = $this->term();
 
         return PurchaseInvoice::query()
-            ->when($this->status !== '', fn (Builder $q) => $q->where('status', $this->status))
+            ->when(
+                $this->overdueOnly,
+                fn (Builder $q) => $q->whereIn('status', [PurchaseInvoiceStatus::Unpaid->value, PurchaseInvoiceStatus::PartiallyPaid->value])
+                    ->whereDate('due_date', '<', now()->toDateString()),
+                fn (Builder $q) => $q->when($this->status !== '', fn (Builder $q) => $q->where('status', $this->status)),
+            )
             ->when($term !== '', fn (Builder $q) => $q->where(fn (Builder $q) => $q
                 ->where('internal_number', 'like', "%{$term}%")
                 ->orWhere('invoice_number', 'like', "%{$term}%")
@@ -127,7 +147,7 @@ new #[Title('Purchase Invoices')] class extends Component {
             <p class="text-[11px] text-zinc-500 dark:text-zinc-400">
                 {{ __(':count unpaid invoices', ['count' => $this->outstanding['count']]) }}
                 @if ($this->outstanding['overdue'] > 0)
-                    · <span class="font-medium text-red-700 dark:text-red-400">{{ __(':count overdue', ['count' => $this->outstanding['overdue']]) }}</span>
+                    · <button type="button" wire:click="showOverdue" class="font-medium text-red-700 dark:text-red-400 hover:underline underline-offset-2 cursor-pointer">{{ __(':count overdue', ['count' => $this->outstanding['overdue']]) }}</button>
                 @endif
             </p>
         </div>
@@ -153,18 +173,21 @@ new #[Title('Purchase Invoices')] class extends Component {
                 :placeholder="$tab === 'pending' ? __('Search receipt, PO or supplier...') : __('Search invoice number or supplier...')" />
         </div>
         @if ($tab === 'invoices')
-            <div class="w-48">
-                <flux:select size="sm" wire:model.live="status">
-                    <option value="">{{ __('All statuses') }}</option>
-                    @foreach (PurchaseInvoiceStatus::cases() as $s)
-                        <option value="{{ $s->value }}">{{ $s->label() }}</option>
-                    @endforeach
-                </flux:select>
-            </div>
+            @unless ($overdueOnly)
+                <div class="w-48">
+                    <flux:select size="sm" wire:model.live="status">
+                        <option value="">{{ __('All statuses') }}</option>
+                        @foreach (PurchaseInvoiceStatus::cases() as $s)
+                            <option value="{{ $s->value }}">{{ $s->label() }}</option>
+                        @endforeach
+                    </flux:select>
+                </div>
+            @endunless
+            <flux:switch wire:model.live="overdueOnly" :label="__('Overdue only')" align="left" />
         @endif
     </div>
 
-    <div wire:loading.class="opacity-50" wire:target="search,tab,status" class="mt-4 transition-opacity">
+    <div wire:loading.class="opacity-50" wire:target="search,tab,status,overdueOnly,showOverdue" class="mt-4 transition-opacity">
         @if ($tab === 'pending')
             <div class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 divide-y divide-zinc-100 dark:divide-white/5 overflow-hidden">
                 @forelse ($this->pending as $batch)
