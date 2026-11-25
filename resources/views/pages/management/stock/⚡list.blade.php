@@ -1,10 +1,8 @@
 <?php
 
 use App\Enums\ProductType;
-use App\Models\InventoryLot;
 use App\Models\Product;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -76,30 +74,9 @@ new #[Title('Stock')] class extends Component {
         return $this->filtered()->selectRaw('type, count(*) as count')->groupBy('type')->pluck('count', 'type')->all();
     }
 
-    /**
-     * Current, undrawn lots for the products on this page, oldest first -
-     * the order they'll actually be drawn in (FIFO) the next time stock
-     * moves out.
-     */
-    #[Computed]
-    public function lots(): Collection
-    {
-        return InventoryLot::whereIn('product_id', $this->products->pluck('id'))
-            ->where('quantity_remaining', '>', 0)
-            ->orderBy('received_at')
-            ->orderBy('id')
-            ->get()
-            ->groupBy('product_id');
-    }
-
     public function formatQuantity(string $quantity): string
     {
         return str_contains($quantity, '.') ? rtrim(rtrim($quantity, '0'), '.') : $quantity;
-    }
-
-    public function formatRupiah(string|float $amount): string
-    {
-        return 'Rp '.number_format((float) $amount, 0, ',', '.');
     }
 }; ?>
 
@@ -162,7 +139,8 @@ new #[Title('Stock')] class extends Component {
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
             @forelse ($this->products as $product)
                 @php($low = $product->isBelowReorderPoint() && bccomp((string) $product->reorder_point, '0', 2) > 0)
-                <div wire:key="product-{{ $product->id }}" class="rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 flex flex-col gap-3">
+                <a wire:key="product-{{ $product->id }}" href="{{ route('management.stock.show', $product) }}" wire:navigate
+                    class="block rounded-xl bg-white dark:bg-zinc-900 shadow-lg shadow-zinc-900/10 dark:shadow-black/40 p-4 flex flex-col gap-3 transition-shadow hover:shadow-xl hover:shadow-zinc-900/15 dark:hover:shadow-black/60 cursor-pointer">
                     <div class="flex items-start justify-between gap-2">
                         <div class="min-w-0">
                             <p class="font-data text-[11px] text-accent">{{ $product->product_code }}</p>
@@ -180,7 +158,7 @@ new #[Title('Stock')] class extends Component {
                             <p class="font-data text-xs tabular-nums text-zinc-500 dark:text-zinc-400 whitespace-nowrap">{{ $this->formatQuantity((string) $product->reorder_point) }} {{ $product->unit_of_measure }}</p>
                         </div>
                     </div>
-                    <div class="flex items-center justify-between gap-2">
+                    <div>
                         @if ($low)
                             <span class="inline-flex items-center gap-1 rounded-full border border-red-200 dark:border-red-500/20 bg-red-50 dark:bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-700 dark:text-red-400">
                                 <flux:icon.exclamation-triangle variant="micro" class="size-3" />{{ __('Below reorder point') }}
@@ -188,45 +166,12 @@ new #[Title('Stock')] class extends Component {
                         @else
                             <span class="inline-flex items-center rounded-full border border-green-200 dark:border-green-500/20 bg-green-50 dark:bg-green-500/10 px-2 py-0.5 text-[11px] font-medium text-green-700 dark:text-green-400">{{ __('OK') }}</span>
                         @endif
-                        @if (($this->lots[$product->id] ?? collect())->isNotEmpty())
-                            <flux:modal.trigger name="lots-{{ $product->id }}">
-                                <button type="button" class="shrink-0 text-[11px] font-medium text-accent hover:underline underline-offset-2 cursor-pointer">{{ __('View lots') }} ({{ $this->lots[$product->id]->count() }})</button>
-                            </flux:modal.trigger>
-                        @endif
                     </div>
-                </div>
+                </a>
             @empty
                 <div class="col-span-full py-12 text-center text-sm text-zinc-500 dark:text-zinc-400">{{ __('No products match your filters.') }}</div>
             @endforelse
         </div>
         <div class="mt-4">{{ $this->products->links() }}</div>
     </div>
-
-    @foreach ($this->products as $product)
-        @continue(($this->lots[$product->id] ?? collect())->isEmpty())
-        <flux:modal name="lots-{{ $product->id }}" class="max-w-lg">
-            <div class="space-y-4">
-                <div>
-                    <flux:heading size="lg">{{ __('Lots') }} · {{ $product->product_name }}</flux:heading>
-                    <flux:subheading>{{ __('Oldest first — drawn in this order (FIFO) the next time stock moves out.') }}</flux:subheading>
-                </div>
-                <div class="rounded-md border border-zinc-200 dark:border-white/10 divide-y divide-zinc-100 dark:divide-white/5">
-                    @foreach ($this->lots[$product->id] as $lot)
-                        <div class="flex items-center justify-between gap-3 px-3 py-2.5 text-xs">
-                            <div>
-                                <p class="font-data text-zinc-800 dark:text-zinc-200">{{ $lot->lot_number }}</p>
-                                <p class="text-zinc-500 dark:text-zinc-400">{{ $lot->received_at->translatedFormat('d M Y') }}</p>
-                            </div>
-                            <div class="text-right">
-                                <p class="font-data font-medium tabular-nums text-zinc-900 dark:text-white">{{ $this->formatQuantity((string) $lot->quantity_remaining) }} {{ $product->unit_of_measure }}</p>
-                                @can('costs.view')
-                                    <p class="font-data text-[11px] tabular-nums text-zinc-500 dark:text-zinc-400">{{ $this->formatRupiah($lot->unit_cost) }}/{{ $product->unit_of_measure }}</p>
-                                @endcan
-                            </div>
-                        </div>
-                    @endforeach
-                </div>
-            </div>
-        </flux:modal>
-    @endforeach
 </section>
