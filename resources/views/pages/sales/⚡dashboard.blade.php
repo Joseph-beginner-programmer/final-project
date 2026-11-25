@@ -61,6 +61,12 @@ new #[Title('Sales Dashboard')] class extends Component {
     }
 
     #[Computed]
+    public function receivables(): array
+    {
+        return $this->kpis->receivablesAging();
+    }
+
+    #[Computed]
     public function oldestOpenOrders(): Collection
     {
         return SalesKpis::oldestOpenOrders();
@@ -162,6 +168,9 @@ new #[Title('Sales Dashboard')] class extends Component {
         @php($monthLabel = $this->kpis->start->translatedFormat('F Y'))
         @php($open = $this->openOrders)
         @php($byStatus = $open['by_status']->keyBy(fn ($row) => $row['status']->value))
+        @php($ar = $this->receivables)
+        @php($arShare = $ar['total'] > 0 ? $ar['overdue'] / $ar['total'] * 100 : 0)
+        @php($arCircumference = 2 * M_PI * 26)
 
         <div class="mt-6 grid grid-cols-1 lg:grid-cols-12 gap-4 motion-safe:animate-fade-slide-up" style="animation-delay: 40ms;">
             <div class="{{ $card }} lg:col-span-7 flex flex-col" wire:key="revenue-{{ $key }}">
@@ -216,6 +225,29 @@ new #[Title('Sales Dashboard')] class extends Component {
                         <p class="mt-1.5 font-display text-2xl font-semibold text-zinc-900 dark:text-white">{{ $this->formatQuantity($byStatus['partially_delivered']['count'] ?? 0) }}</p>
                         <p class="{{ $tileNote }}">{{ __('Some lines already shipped.') }}</p>
                     </div>
+                </div>
+
+                <div class="{{ $card }}">
+                    <div class="flex items-baseline justify-between gap-3">
+                        <p class="{{ $panelLabel }}">{{ __('Overdue receivables') }}</p>
+                        <a href="{{ route('accounting.sales-invoices.list') }}" wire:navigate class="{{ $panelLink }}">{{ __('Invoices') }}</a>
+                    </div>
+                    <div class="mt-3 flex items-center gap-3">
+                        <div class="relative size-14 shrink-0" role="img" aria-label="{{ __(':share of receivables overdue', ['share' => $this->formatPercent($arShare, 0)]) }}">
+                            <svg viewBox="0 0 64 64" class="size-14 -rotate-90">
+                                <circle cx="32" cy="32" r="26" fill="none" stroke-width="7" style="stroke: var(--viz-grid)"></circle>
+                                @if ($arShare > 0)
+                                    <circle cx="32" cy="32" r="26" fill="none" stroke-width="7" stroke-linecap="round" stroke-dasharray="{{ $arCircumference }}" stroke-dashoffset="{{ $arCircumference * (1 - min(100, $arShare) / 100) }}" style="stroke: var(--div-over)"></circle>
+                                @endif
+                            </svg>
+                            <span class="absolute inset-0 flex items-center justify-center font-data text-[11px] font-semibold tabular-nums text-zinc-900 dark:text-white">{{ $this->formatPercent($arShare, 0) }}</span>
+                        </div>
+                        <div class="min-w-0">
+                            <p class="whitespace-nowrap font-display text-xl font-semibold tabular-nums {{ $ar['overdue'] > 0 ? 'text-red-700 dark:text-red-400' : 'text-zinc-900 dark:text-white' }}" title="{{ $this->formatRupiah($ar['overdue']) }}">{{ $this->formatCompact($ar['overdue']) }}</p>
+                            <p class="mt-0.5 text-[11px] leading-snug text-zinc-500 dark:text-zinc-400">{{ trans_choice(':count invoice past due|:count invoices past due', $ar['overdue_count'], ['count' => $ar['overdue_count']]) }}</p>
+                        </div>
+                    </div>
+                    <p class="mt-2.5 text-[11px] text-zinc-500 dark:text-zinc-400">{{ __('of :total owed', ['total' => $this->formatCompact($ar['total'])]) }}</p>
                 </div>
             </div>
         </div>
