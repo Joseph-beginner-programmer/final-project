@@ -37,4 +37,9 @@ class SalesDeliveryPolicy
     {
         return $this->update($user, $delivery);
     }
+
+    public function export(User $user, SalesDelivery $delivery): bool
+    {
+        return $user->can('warehouse.deliver') && $delivery->status === DocumentStatus::Posted;
+    }
 }

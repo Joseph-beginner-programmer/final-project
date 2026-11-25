@@ -315,6 +315,9 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/warehouse/outbound/sales-deliveries/{salesDelivery}', 'pages::warehouse.outbound.sales-deliveries.show')
         ->name('warehouse.outbound.sales-deliveries.show');
 
+    Route::get('/warehouse/outbound/sales-deliveries/{salesDelivery}/pdf', \App\Http\Controllers\Warehouse\DownloadSalesDeliveryPdfController::class)
+        ->name('warehouse.outbound.sales-deliveries.pdf');
+
     Route::livewire('/management/products', 'pages::management.products.list')
         ->name('management.products.list');
 

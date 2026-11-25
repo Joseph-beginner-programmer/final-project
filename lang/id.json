@@ -1935,6 +1935,11 @@
     "Add one": "Tambahkan",
     "sells this material": "menjual bahan ini",
     "Overdue only": "Hanya yang jatuh tempo terlewat",
+    "DELIVERY NOTE": "SURAT JALAN",
+    "Customer Code": "Kode Pelanggan",
+    "The following goods have been delivered:": "Barang berikut telah dikirim:",
+    "Driver": "Sopir",
+    "Print delivery note": "Cetak surat jalan",
     "View lots": "Lihat lot",
     "Lots": "Lot",
     "Oldest first — drawn in this order (FIFO) the next time stock moves out.": "Terlama lebih dulu — diambil dalam urutan ini (FIFO) saat stok berikutnya keluar."

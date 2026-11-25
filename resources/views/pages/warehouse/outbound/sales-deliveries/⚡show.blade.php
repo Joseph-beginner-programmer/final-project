@@ -148,6 +148,9 @@ new #[Title('Sales Delivery')] class extends Component {
                     <flux:button variant="ghost" icon="x-mark" class="active:scale-[0.95]">{{ __('Cancel') }}</flux:button>
                 </flux:modal.trigger>
             @endcan
+            @can('export', $delivery)
+                <flux:button variant="filled" icon="printer" :href="route('warehouse.outbound.sales-deliveries.pdf', $delivery)" class="active:scale-[0.95]">{{ __('Print delivery note') }}</flux:button>
+            @endcan
             @can('post', $delivery)
                 <flux:modal.trigger name="post-delivery">
                     <flux:button variant="primary" icon="truck" class="active:scale-[0.95]">{{ __('Post') }}</flux:button>
