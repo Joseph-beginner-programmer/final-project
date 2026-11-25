@@ -194,6 +194,9 @@ Route::middleware(['auth'])->group(function () {
     Route::livewire('/accounting/sales-invoices/{salesInvoice}', 'pages::accounting.sales-invoices.show')
         ->name('accounting.sales-invoices.show');
 
+    Route::get('/accounting/sales-invoices/{salesInvoice}/pdf', \App\Http\Controllers\Accounting\DownloadSalesInvoicePdfController::class)
+        ->name('accounting.sales-invoices.pdf');
+
     Route::livewire('/accounting/reports/ledger', 'pages::accounting.reports.ledger')
         ->name('accounting.reports.ledger');
 

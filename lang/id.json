@@ -1940,6 +1940,10 @@
     "The following goods have been delivered:": "Barang berikut telah dikirim:",
     "Driver": "Sopir",
     "Print delivery note": "Cetak surat jalan",
+    "SALES INVOICE": "FAKTUR PENJUALAN",
+    "Goods amount": "Jumlah barang",
+    "Balance due": "Sisa tagihan",
+    "Print invoice": "Cetak faktur",
     "View lots": "Lihat lot",
     "Lots": "Lot",
     "Oldest first — drawn in this order (FIFO) the next time stock moves out.": "Terlama lebih dulu — diambil dalam urutan ini (FIFO) saat stok berikutnya keluar."

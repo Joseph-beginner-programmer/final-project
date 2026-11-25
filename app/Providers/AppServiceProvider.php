@@ -172,6 +172,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('sales.invoice.view', function ($user) {
             return in_array($user->role, [UserRole::Accounting, UserRole::Manager, UserRole::SystemAdmin, UserRole::Sales], true);
         });
+        Gate::define('sales.invoice.export', function ($user, \App\Models\SalesInvoice $invoice) {
+            return $user->can('sales.invoice.view') && $invoice->status->isPosted();
+        });
         Gate::define('users.manage', function ($user) {
             return in_array($user->role, [UserRole::SystemAdmin, UserRole::Manager], true);
         });

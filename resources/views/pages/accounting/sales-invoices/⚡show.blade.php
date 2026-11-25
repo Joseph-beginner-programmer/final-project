@@ -289,8 +289,11 @@ new #[Title('Sales Invoice')] class extends Component {
             <div class="w-10 h-0.5 mt-2 rounded-full bg-accent"></div>
             <p class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">{{ $inv->customer->customer_name }} · {{ $inv->salesOrder->so_number }} → {{ $inv->salesDelivery->delivery_number }} ({{ __('delivered :date', ['date' => $inv->salesDelivery->delivered_at?->translatedFormat('d M Y')]) }})</p>
         </div>
-        @if ($canManage)
-            <div class="flex flex-wrap items-center gap-2">
+        <div class="flex flex-wrap items-center gap-2">
+            @can('sales.invoice.export', $inv)
+                <flux:button size="sm" variant="filled" icon="printer" :href="route('accounting.sales-invoices.pdf', $inv)" class="active:scale-[0.95]">{{ __('Print invoice') }}</flux:button>
+            @endcan
+            @if ($canManage)
                 @if ($isDraft)
                     <flux:button size="sm" variant="filled" icon="pencil-square" :href="route('accounting.sales-invoices.edit', $inv)" wire:navigate class="active:scale-[0.95]">{{ __('Edit') }}</flux:button>
                     <flux:modal.trigger name="post-invoice"><flux:button size="sm" variant="primary" icon="check" class="active:scale-[0.95]">{{ __('Post') }}</flux:button></flux:modal.trigger>
@@ -301,8 +304,8 @@ new #[Title('Sales Invoice')] class extends Component {
                 @if ($status !== SalesInvoiceStatus::Cancelled && ! $hasPayments)
                     <flux:modal.trigger name="cancel-invoice"><flux:button size="sm" variant="ghost" icon="x-mark" class="text-zinc-500 hover:text-red-600 active:scale-[0.95]">{{ __('Cancel invoice') }}</flux:button></flux:modal.trigger>
                 @endif
-            </div>
-        @endif
+            @endif
+        </div>
     </div>
 
     <div class="mt-6 grid grid-cols-2 lg:grid-cols-4 rounded-xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-zinc-900 divide-x divide-y lg:divide-y-0 divide-zinc-100 dark:divide-white/5">
